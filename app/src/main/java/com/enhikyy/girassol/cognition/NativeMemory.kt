@@ -17,6 +17,12 @@ internal object NativeMemory {
         bank.episodes.forEach { e-> e.embedding.forEach(input::putFloat); input.putFloat((tick-e.tick).coerceAtLeast(0).toFloat()); input.putFloat(e.importance.toFloat()) }
         val output=ByteBuffer.allocateDirect(size*8).order(ByteOrder.nativeOrder())
         val found=rank(input,count,size,output); check(found in 0..size) { "Falha na recuperação de memórias" }
+        // Native cosine search defines the candidate pool; persistent MemRL utility re-ranks it.
         return List(found) { i-> Hit(bank.episodes[output.getInt(i*8)],output.getFloat(i*8+4)) }
+            .sortedWith(
+                compareByDescending<Hit> { hit -> bank.utilityAdjustedScore(hit.episode.eventId, hit.score.toDouble()) }
+                    .thenByDescending { it.episode.importance }
+                    .thenBy { it.episode.eventId }
+            )
     }
 }
