@@ -49,6 +49,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val words = base.words.toMutableList()
         val dialogues = base.dialogues.toMutableList()
         val artifacts = base.artifacts.toMutableList()
+        val genealogy = base.genealogy.toMutableList()
         val rooms = base.rooms.toMutableList()
         val counts = base.actionCounts.toMutableMap()
         val trails = base.trail.toMutableList()
@@ -106,7 +107,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                             }
                             dialogues += Dialogue(tick, a.name, partner.name, "${w.native} ${topicWord.native}.", gloss)
                             val ti = ties.indexOfFirst { it.from == a.id && it.to == partner.id }
-                            if (ti >= 0) ties[ti] = ties[ti].copy(affinity = (ties[ti].affinity + .015).coerceAtMost(1.0))
+                            if (ti >= 0) ties[ti] = ties[ti].copy(affinity = (ties[ti].affinity + .015).coerceAtMost(1.0))\n                            if (rulesVersion >= 6) createDescendant(state.seed,tick,a,partner,agents,balances,ties,words,genealogy)
                         }
                     }
                     Activity.STUDY -> { needs = needs.copy(curiosity = (needs.curiosity + .15).coerceAtMost(1.0)); a = a.copy(skill = a.skill.practice(tick)) }
@@ -148,7 +149,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             agents[index] = a
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val next = base.copy(spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList())
+        val next = base.copy(spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
         val raw = CanonicalEvent(version = if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
@@ -165,6 +166,83 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val result = shadow.step(event.neural,event.cognition,event.spatial)
         require(result.event == event) { "Replay divergente" }
         state = result.state; eventId = event.eventId; previousHash = event.hash
+    }
+
+    /**
+     * A descendant is created only after reciprocal social trust is established.
+     * Pair order, inherited loci, name and location all derive from the canonical
+     * world seed and event tick, so replay reproduces the exact family record.
+     */
+    private fun createDescendant(
+        seed: Long,
+        tick: Long,
+        current: Citizen,
+        partner: Citizen,
+        agents: MutableList<Citizen>,
+        balances: MutableMap<String, Int>,
+        ties: MutableList<SocialTie>,
+        words: MutableList<Word>,
+        genealogy: MutableList<GenealogyRecord>
+    ) {
+        if (current.id >= partner.id) return
+        val firstTie = ties.firstOrNull { it.from == current.id && it.to == partner.id } ?: return
+        val secondTie = ties.firstOrNull { it.from == partner.id && it.to == current.id } ?: return
+        if (minOf(firstTie.affinity, secondTie.affinity) < .90) return
+        if (genealogy.any { it.parentOne == current.id && it.parentTwo == partner.id && tick - it.tick < 1440 }) return
+
+        val generation = Math.addExact(maxOf(current.genome.generation, partner.genome.generation), 1)
+        val childId = "child_${tick}_${current.id}_${partner.id}"
+        if (agents.any { it.id == childId }) return
+        val rng = Canonical.stream(seed, childId, tick, "inheritance")
+
+        fun inherit(one: Locus, two: Locus): Locus = Locus(
+            maternal = one.express(),
+            paternal = two.express(),
+            dominanceA = rng.nextDouble(),
+            dominanceB = rng.nextDouble()
+        )
+        val genome = Genome(
+            curiosity = inherit(current.genome.curiosity, partner.genome.curiosity),
+            sociability = inherit(current.genome.sociability, partner.genome.sociability),
+            generation = generation
+        )
+        val red = (((current.color shr 16) and 255) + ((partner.color shr 16) and 255)) / 2
+        val green = (((current.color shr 8) and 255) + ((partner.color shr 8) and 255)) / 2
+        val blue = ((current.color and 255) + (partner.color and 255)) / 2
+        val color = 0xff000000L or (red shl 16) or (green shl 8) or blue
+        val syllables = listOf("va", "ri", "na", "sol", "ka", "tha", "lu", "mi", "ae", "ron")
+        val lineage = "${current.lineage}·${partner.lineage}".take(48)
+        val child = Citizen(
+            id = childId,
+            name = "Descendente ${genealogy.size + 1}",
+            lineage = lineage,
+            color = color,
+            genome = genome,
+            x = (current.x + partner.x) / 2.0 + (rng.nextDouble() - .5) * .18,
+            z = (current.z + partner.z) / 2.0 + (rng.nextDouble() - .5) * .18,
+            needs = Needs(energy = .85, hydration = .85, glucose = .85, social = .65, curiosity = .7),
+            activity = Activity.SLEEP
+        )
+
+        val existing = agents.toList()
+        agents += child
+        balances["$childId/coins"] = 0
+        existing.forEach { citizen ->
+            val affinity = if (citizen.id == current.id || citizen.id == partner.id) .72 else .42
+            ties += SocialTie(citizen.id, childId, affinity)
+            ties += SocialTie(childId, citizen.id, affinity)
+        }
+        Activity.entries.forEach { activity ->
+            val left = words.first { it.lineage == current.lineage && it.concept == activity }.native
+            val right = words.first { it.lineage == partner.lineage && it.concept == activity }.native
+            val symbol = buildString {
+                append(left.first())
+                append(right.first())
+                repeat(2) { append(syllables[rng.nextInt(syllables.size)]) }
+            }
+            words += Word(lineage, activity, symbol)
+        }
+        genealogy += GenealogyRecord(current.id, partner.id, childId, tick, Canonical.genomeHash(genome))
     }
 
     private fun choose(a: Citizen, tick: Long, world: WorldState): Activity {
@@ -232,7 +310,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")
             if(s.knowledge.any { !it.valid(s.tick) || s.agents.none { a->a.id==it.researcher } || s.agents.none { a->a.id==it.verifier } } || s.knowledge.map { it.id }.distinct().size!=s.knowledge.size) add("Proveniência de conhecimento inválida")
             if(s.evolution?.valid(s.seed,s.tick)==false) add("Política evolutiva inválida")
-            if(s.minds.keys.any { id->s.agents.none { it.id==id } } || s.minds.values.any { !it.valid(s.tick) }) add("Estado cognitivo inválido")
+            if(s.minds.keys.any { id->s.agents.none { it.id==id } } || s.minds.values.any { !it.valid(s.tick) }) add("Estado cognitivo inválido")\n            if(s.genealogy.map { it.child }.distinct().size!=s.genealogy.size || s.genealogy.any { !it.valid(s.tick,s.agents) }) add("Genealogia inválida")
             if (s.balances.values.any { it < 0 }) add("Estoque negativo")
             val totals = s.balances.entries.groupBy { it.key.substringAfter('/') }.mapValues { (_,v) -> v.sumOf { it.value.toLong() } }
             if (totals != s.initialTotals.mapValues { it.value.toLong() }) add("Conservação violada")
