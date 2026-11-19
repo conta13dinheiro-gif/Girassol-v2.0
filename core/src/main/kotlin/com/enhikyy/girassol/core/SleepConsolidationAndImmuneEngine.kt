@@ -206,7 +206,12 @@ object HippocampalSleepConsolidator {
         val retainedIds = retained.map { it.eventId }.distinct().sorted()
         val prunedIds = bank.episodes.filter { key(it) !in keepKeys }
             .map { it.eventId }.distinct().sorted()
-        val next = bank.copy(episodes = retained)
+        val retainedEventIds = retained.map { it.eventId }.toSet()
+        val next = bank.copy(
+            episodes = retained,
+            utilities = bank.utilities.filter { it.eventId in retainedEventIds },
+            pendingRecallEventIds = bank.pendingRecallEventIds.filter { it in retainedEventIds }
+        )
         check(next.valid(currentTick)) { "Consolidation produced an invalid memory bank" }
         return MemoryConsolidationResult(
             next,
