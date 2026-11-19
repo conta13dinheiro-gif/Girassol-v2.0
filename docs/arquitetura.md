@@ -84,7 +84,7 @@ HNSW utiliza a opção upstream `HNSWLIB_USE_PREFETCH=0`. O caminho SSE de looka
 
 ## Validação e limites
 
-`.github/workflows/android-ci.yml` executa automaticamente em push/PR: toolchain Android/JDK/NDK fixada, compilação Filament1.56.0 por SHA256, `scripts/test-native.sh` (ASan/UBSan), `testDebugUnitTest`, `lintDebug`, `assembleDebug` e `assembleRelease`, com publicação dos APKs ARM64 em artefatos separados. A aprovação do workflow é a condição para afirmar sucesso da compilação; a existência do workflow ou de testes adicionados não é evidência de aprovação. O workflow manual `.github/workflows/android.yml` continua disponível. Não se inicia emulador.
+`.github/workflows/android-ci.yml` executa automaticamente em push/PR: toolchain Android/JDK/NDK fixada, compilação Filament1.56.0 por SHA256, `scripts/test-native.sh` (ASan/UBSan), `test` (suítes JVM de todos os módulos), `testDebugUnitTest`, `lintDebug`, `assembleDebug` e `assembleRelease`, com publicação dos APKs ARM64 em artefatos separados. A aprovação do workflow é a condição para afirmar sucesso da compilação; a existência do workflow ou de testes adicionados não é evidência de aprovação. O workflow manual `.github/workflows/android.yml` continua disponível. Não se inicia emulador.
 
 O host pode executar código de produção Kotlin/JNI para testar aprendizagem e Shadow-Replay sem Android. Isso não valida GPU, framework SQLite Android, SAF, AAudio/foco ou comportamento de aparelho. Instrumentação compilada não equivale a instrumentação executada. A meta60FPS não é uma medição. Os resultados exatos e hashes dos inputs/artefatos são mantidos no registro de validação do workspace, separado do repositório.
 
@@ -95,3 +95,8 @@ O host pode executar código de produção Kotlin/JNI para testar aprendizagem e
 
 - `GirassolRecordCodec` implementa .grs versão1 com header validado, SHA-256, Float32, INT8 delta-varint e ternário de2bits. `AdaptiveQuantizerEngine` seleciona por RMSE/bytes. O codec é puro e testado; migração da persistência SQLite/HNSW antiga e compressão Zstd não foram conectadas, portanto nenhum histórico é reescrito.
 - A navegação Compose organiza cinco áreas: Biosfera, Gênesis/Cidadãos, Pedidos/Biblioteca (intenções reais do diário), Hugging Face/Plugins (pesquisa atual) e Marcos/Laboratório/Sistema. A visualização da genealogia está na área Gênesis; o inbox exibe os pedidos de currículo que já existem no armazenamento.
+
+
+## Ingestão de documentos via Storage Access Framework
+
+O picker SAF permite selecionar TXT, Markdown, CSV, JSON e EPUB. A leitura ocorre no executor de pesquisa; EPUB é extraído de entradas XHTML/HTML com limite de expansão, e o texto é dividido em trechos compatíveis com o parser de datasets. Cada lote local é associado ao cidadão/ciclo, recebe SHA-256 e passa por `ResearchTables.acquire`, reutilizando o diário encadeado e a quarentena de duas revisões. A importação respeita o limite atual de2MiB por aquisição e até100 trechos; não reescreve snapshots nem eventos do mundo. PDF e áudio ainda não são aceitos, pois os extratores nativos pdftext/MediaExtractor+FFT da especificação ainda não foram implementados.

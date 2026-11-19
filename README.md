@@ -10,7 +10,7 @@ Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. 
 
 ## Compilação manual
 
-O workflow `.github/workflows/android-ci.yml` executa automaticamente em push, pull request e acionamento manual. Instala JDK17, SDK35, NDK27 e CMake3.22.1; compila os materiais Filament1.56.0; executa `scripts/test-native.sh`, `testDebugUnitTest` e `lintDebug`; compila Debug/Release ARM64 e publica artefatos separados `Girassol-debug` e `Girassol-release`. O workflow `.github/workflows/android.yml` continua disponível para compilação manual. Nenhum emulador é iniciado. O release gerado pelo CI não tem assinatura de distribuição configurada.
+O workflow `.github/workflows/android-ci.yml` executa automaticamente em push, pull request e acionamento manual. Instala JDK17, SDK35, NDK27 e CMake3.22.1; compila os materiais Filament1.56.0; executa `scripts/test-native.sh`, `test` (suítes JVM de core/research/app), `testDebugUnitTest` e `lintDebug`; compila Debug/Release ARM64 e publica artefatos separados `Girassol-debug` e `Girassol-release`. O workflow `.github/workflows/android.yml` continua disponível para compilação manual. Nenhum emulador é iniciado. O release gerado pelo CI não tem assinatura de distribuição configurada.
 
 Toolchain: JDK17, SDK35, Build Tools35.0.0, NDK27.0.12077973, CMake3.22.1, Gradle8.11.1 e Kotlin2.1.10. O workflow baixa o matc oficial1.56.0 por SHA256 e compila todos os materiais antes do APK. Para compilação local futura:
 
@@ -70,7 +70,7 @@ O HNSW nativo recupera candidatos por produto interno e ordena por similaridade,
 
 Pesquisa autônoma PT/EN, currículo de dez domínios, busca/curadoria no Hub, streaming de trechos, quarentena com duas avaliações GGUF, replay nativo e estudo físico na biblioteca. Diário comprimido encadeado por SHA256, embeddings GGUF completos e busca HNSW por modelo, cache textual direto JSON/JSONL/CSV com Range/mmap, cota/LRU/fixação e cancelamento por memória/temperatura. Controles em Sistema → Biblioteca.
 
-Os pedidos dos habitantes aparecem em uma aba própria, lendo as mesmas intenções persistidas no diário epistêmico. Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: ingestão local nativa de PDF/EPUB/áudio e decoder direto Parquet continuam pendentes; treino LoRA real também não existe. Avaliações do modelo não comprovam verdade factual.
+Os pedidos dos habitantes aparecem em uma aba própria, lendo as mesmas intenções persistidas no diário epistêmico. O picker SAF aceita TXT, Markdown, CSV, JSON e EPUB; extrai o texto, cria lotes verificados por SHA-256 e os grava na quarentena do journal imutável. PDF e áudio ainda não têm extratores integrados. Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: ingestão local nativa de PDF/EPUB/áudio e decoder direto Parquet continuam pendentes; treino LoRA real também não existe. Avaliações do modelo não comprovam verdade factual.
 
 ## GGUF e LoRA
 
