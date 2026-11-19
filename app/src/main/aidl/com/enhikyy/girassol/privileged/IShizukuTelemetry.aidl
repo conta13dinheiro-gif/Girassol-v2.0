@@ -2,5 +2,5 @@ package com.enhikyy.girassol.privileged;
 
 interface IShizukuTelemetry {
     String readTelemetry();
-    void destroy();
+    void destroy() = 16777114;
 }
