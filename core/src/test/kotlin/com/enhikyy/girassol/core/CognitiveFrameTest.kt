@@ -106,7 +106,7 @@ class CognitiveFrameTest {
         assertTrue(valid.applicable(world))
         assertFalse(valid.copy(innerSpeech=mapOf("unknown-citizen" to "Pensamento privado.")).applicable(world))
         assertFalse(valid.copy(innerSpeech=mapOf(world.agents.first().id to "x".repeat(241))).applicable(world))
-        assertFalse(valid.copy(innerSpeech=mapOf(world.agents.first().id to "texto\\u0001inválido")).applicable(world))
+        assertFalse(valid.copy(innerSpeech=mapOf(world.agents.first().id to String(charArrayOf('t','e','x','t','o',1.toChar(),'i','n','v','á','l','i','d','o')))).applicable(world))
         assertTrue(valid.snapshot().innerSpeech == valid.innerSpeech)
     }
 
