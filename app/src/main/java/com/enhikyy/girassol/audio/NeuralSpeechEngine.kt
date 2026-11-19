@@ -353,14 +353,6 @@ object NeuralSpeechEngine {
         return parts.joinToString("/")
     }
 
-    private fun normalizeZipPath(path: String): String {
-        val clean = path.replace('\\\\', '/')
-        require(clean.isNotBlank() && !clean.startsWith('/') && !clean.contains(':'))
-        val parts = clean.split('/').filter { it.isNotEmpty() && it != "." }
-        require(parts.isNotEmpty() && parts.none { it == ".." } && parts.size <= 12)
-        return parts.joinToString("/")
-    }
-
     private class BoundedInputStream(input: InputStream, private val maximum: Long) : FilterInputStream(input) {
         private var consumed = 0L
         @Throws(IOException::class)
