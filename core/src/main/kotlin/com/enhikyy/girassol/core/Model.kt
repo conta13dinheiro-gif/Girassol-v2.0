@@ -14,6 +14,7 @@ object Canonical {
     private val json = Json { encodeDefaults = true; allowStructuredMapKeys = false }
     fun state(value: WorldState): String = json.encodeToString(value)
     fun state(value: String): WorldState = json.decodeFromString(value)
+    fun genomeHash(value: Genome): String = hash(json.encodeToString(value))
     fun event(value: CanonicalEvent): String = json.encodeToString(value)
     fun event(value: String): CanonicalEvent = json.decodeFromString(value)
     fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
@@ -51,7 +52,7 @@ class DeterministicRng(private var state: Long) {
 }
 @Serializable data class Genome(val curiosity: Locus, val sociability: Locus, val generation: Int = 1)
 @Serializable data class Memory(val tick: Long, val eventId: Long, val action: Activity, val reward: Double, val semantic: Boolean = false)
-@Serializable data class Skill(val mastery: Double = .2, val successes: Int = 0, val lastPractice: Long = 0) {
+@Serializable data class GenealogyRecord(val parentOne: String, val parentTwo: String, val child: String, val tick: Long, val genomeHash: String) {\n    fun valid(worldTick: Long, agents: List<Citizen>): Boolean {\n        if (parentOne >= parentTwo || child.isBlank() || tick !in 1..worldTick || !genomeHash.matches(Regex("[a-f0-9]{64}"))) return false\n        val first=agents.firstOrNull { it.id==parentOne } ?: return false\n        val second=agents.firstOrNull { it.id==parentTwo } ?: return false\n        val offspring=agents.firstOrNull { it.id==child } ?: return false\n        return offspring.genome.generation==maxOf(first.genome.generation,second.genome.generation)+1 && Canonical.genomeHash(offspring.genome)==genomeHash\n    }\n}\n@Serializable data class Skill(val mastery: Double = .2, val successes: Int = 0, val lastPractice: Long = 0) {
     fun practice(tick: Long): Skill {
         val posterior = mastery * .9 / (mastery * .9 + (1 - mastery) * .2)
         return Skill((posterior + (1 - posterior) * .08).coerceIn(0.0, 1.0), successes + 1, tick)
@@ -78,7 +79,7 @@ class DeterministicRng(private var state: Long) {
     @EncodeDefault(EncodeDefault.Mode.NEVER) val minds: Map<String,MindState> = emptyMap(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val knowledge: List<KnowledgeLesson> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: Map<String,SpatialPose> = emptyMap())
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: Map<String,SpatialPose> = emptyMap(),\n    @EncodeDefault(EncodeDefault.Mode.NEVER) val genealogy: List<GenealogyRecord> = emptyList())
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CanonicalEvent(val version: Int = 1, val eventId: Long, val tick: Long,
     val actions: List<ActionRecord>, val stateHash: String, val previousHash: String, val hash: String = "",
