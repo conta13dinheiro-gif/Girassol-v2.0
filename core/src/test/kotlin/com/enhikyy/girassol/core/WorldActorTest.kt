@@ -250,4 +250,59 @@ class WorldActorTest {
         assertEquals(Canonical.state(actorA.state), Canonical.state(restored.state))
     }
 
+    @Test fun rulesSevenPersistsAnokhinIgnitionKuramotoRitualAndReplays() {
+        val origin = WorldActor.genesis()
+        val agora = Room("annex_test_agora", "Ágora cívica", 5.5, 5.0, 12.0, 12.0, 6)
+        val world = origin.copy(rooms = origin.rooms + agora)
+        val actor = WorldActor(Checkpoint(world, 0, WorldActor.GENESIS_HASH), 7)
+        val minds = world.agents.associate { citizen ->
+            val initial = MindState.initial(world, citizen)
+            citizen.id to initial.copy(
+                psyche = initial.psyche.copy(
+                    expectedSensory = List(16) { .5 },
+                    lastPredictionError = .85,
+                    ignitionIndex = .95,
+                    initialized = true
+                )
+            )
+        }
+        val cognitive = CognitiveFrame(
+            sourceTick = world.tick,
+            sourceHash = Canonical.hash(Canonical.state(world)),
+            minds = minds,
+            decisions = world.agents.associate { it.id to Activity.TALK },
+            socialSynchrony = .97
+        )
+        assertTrue(cognitive.applicable(world))
+        val intentions = actor.intentions(cognition = cognitive)
+        val poses = world.agents.associate { citizen ->
+            val point = SpatialPoint(citizen.x, 0.0, citizen.z)
+            citizen.id to SpatialPose(
+                position = point, verticalVelocity = 0.0, surface = 0.0,
+                distance = 0.0, heading = 0.0, reached = false,
+                route = listOf(point)
+            )
+        }
+        val spatial = SpatialFrame(
+            sourceTick = world.tick,
+            sourceHash = Canonical.hash(Canonical.state(world)),
+            seed = world.seed,
+            intentions = intentions,
+            poses = poses
+        )
+        val transition = actor.step(cognition = cognitive, spatial = spatial)
+        assertEquals(7, transition.event.version)
+        assertTrue(transition.event.valid())
+        assertEquals(.97, transition.state.socialSynchrony, 1e-9)
+        assertTrue(transition.state.artifacts.any { it.title == "Ignição global GNW" })
+        assertTrue(transition.state.artifacts.any { it.title == "Ritual de fase na Ágora" })
+        assertTrue(transition.state.dialogues.any { it.portuguese.contains("ritual") })
+        assertTrue(transition.state.minds.values.all { it.psyche.valid() })
+
+        val reader = WorldActor(Checkpoint(world, 0, WorldActor.GENESIS_HASH), 7)
+        reader.replay(transition.event)
+        assertEquals(actor.checkpoint(), reader.checkpoint())
+        assertEquals(Canonical.state(actor.state), Canonical.state(reader.state))
+    }
+
 }
