@@ -16,7 +16,7 @@ float Synth::random() noexcept {
 }
 bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept {
     if (!out || frames<0 || frames>1048576 || sr<8000 || sr>192000) return false;
-    p={unit(p.volume),unit(p.left_steps),unit(p.right_steps),unit(p.mastery),unit(p.social),unit(p.weather),unit(p.tension),unit(p.milestone)};
+    p={unit(p.volume),unit(p.left_steps),unit(p.right_steps),unit(p.mastery),unit(p.social),unit(p.weather),unit(p.tension),unit(p.milestone),std::isfinite(p.pitch)?std::clamp(p.pitch,.5f,2.0f):1.0f};
     if(p.milestone>last_milestone_) celebration_=1;
     last_milestone_=p.milestone;
     const double dt=1.0/sr;
@@ -31,7 +31,7 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         timer_+=dt;
         const double interval=1.85-.45*mastery_;
         if (timer_>=interval) { timer_-=interval; note_index_=(note_index_+1)%notes.size(); }
-        phase(hum_,60,dt); phase(note_,notes[note_index_],dt); phase(sub_,notes[note_index_]*.5,dt);
+        phase(hum_,60,dt); phase(note_,notes[note_index_]*p.pitch,dt); phase(sub_,notes[note_index_]*.5*p.pitch,dt);
         phase(step_,1.7,dt);
         noise_+=filter*(random()-noise_);
         const float air=noise_*(.010f+.016f*weather_);
@@ -46,7 +46,7 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         // Trautonium-inspired mixture of independently phased subharmonic divisions.
         float undertone=0;
         for (std::size_t k=0;k<undertones_.size();++k) {
-            phase(undertones_[k],notes[note_index_]/static_cast<double>(k+2),dt);
+            phase(undertones_[k],notes[note_index_]/static_cast<double>(k+2)*p.pitch,dt);
             // Finite Fourier series avoids the discontinuities of an unfiltered sawtooth.
             for (int partial=1;partial<=4;++partial)
                 undertone+=static_cast<float>(std::sin(undertones_[k]*partial)/partial)*(.002f+.003f*tension_);
