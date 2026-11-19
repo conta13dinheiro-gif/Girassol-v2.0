@@ -30,6 +30,7 @@ class AmbientAudio(context: Context, private val lifecycle: Lifecycle) : Default
     private var seed: Long?=null
     private var scene=AcousticScene()
     private var previousWorld: WorldState?=null
+    private var synchrony=0f
     private var focusHeld=false
     private var focusRequested=false
     private var focusBlocked=false
@@ -84,7 +85,7 @@ class AmbientAudio(context: Context, private val lifecycle: Lifecycle) : Default
     }
     fun update(world: WorldState?, isRunning: Boolean) {
         if (closed) return
-        seed=world?.seed; running=isRunning
+        seed=world?.seed; synchrony=world?.socialSynchrony?.toFloat()?.coerceIn(0f,1f) ?: 0f; running=isRunning
         scene=world?.let { AcousticScene.from(it,previousWorld) } ?: AcousticScene()
         previousWorld=world
         reconcile()
@@ -121,7 +122,7 @@ class AmbientAudio(context: Context, private val lifecycle: Lifecycle) : Default
         val worldSeed=seed!!
         AudioOutput.submit(outputLease) {
             val result=if (!NativeAudio.available) -1 else {
-                NativeAudio.update(volume,observation.left,observation.right,observation.mastery,observation.social,observation.weather,observation.tension,observation.milestone,PluginRegistry.audioRootMultiplier(),PluginRegistry.audioRatios())
+                NativeAudio.update(volume,observation.left,observation.right,observation.mastery,observation.social,observation.weather,observation.tension,observation.milestone,PluginRegistry.audioRootMultiplier(),PluginRegistry.audioRatios(),synchrony)
                 if (start) NativeAudio.start(worldSeed) else NativeAudio.update(volume,observation.left,observation.right,observation.mastery,observation.social,observation.weather,observation.tension,observation.milestone,PluginRegistry.audioRootMultiplier(),PluginRegistry.audioRatios())
             }
             main.post {
