@@ -129,8 +129,15 @@ import kotlin.math.*
                 lessons[action]=Reflection(action,n.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),value,world.tick,events.last().eventId)
             }
             // Forget only experiences already distilled; preserve consequential negative outcomes longer.
-            next=next.copy(reflections=lessons.values.sortedBy { it.action.ordinal },reflectedTick=world.tick,
-                episodes=next.episodes.filter { it.importance*exp(-(world.tick-it.tick)/2880.0)>=.04 })
+            val retainedEpisodes=next.episodes.filter { it.importance*exp(-(world.tick-it.tick)/2880.0)>=.04 }
+            val retainedIds=retainedEpisodes.map { it.eventId }.toSet()
+            next=next.copy(
+                reflections=lessons.values.sortedBy { it.action.ordinal },
+                reflectedTick=world.tick,
+                episodes=retainedEpisodes,
+                utilities=next.utilities.filter { it.eventId in retainedIds },
+                pendingRecallEventIds=next.pendingRecallEventIds.filter { it in retainedIds }
+            )
         }
         if (due || next.episodes.size > HippocampalSleepConsolidator.MAX_NODES_PER_AGENT) {
             next = HippocampalSleepConsolidator.consolidate(next, world.tick).bank
