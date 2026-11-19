@@ -160,4 +160,19 @@ class WorldActorTest {
         assertEquals(a.checkpoint(), b.checkpoint())
     }
 
+    @Test fun modularDistrictGrowthContinuesBeyondTenAndSixtyFourRooms() {
+        var rooms = WorldActor.genesis().rooms
+        repeat(256) {
+            val next = ProceduralDistricts.nextAnnex(rooms)
+            assertTrue(rooms.none { prior ->
+                val separatedX = kotlin.math.abs(prior.x - next.x) >= (prior.width + next.width) / 2.0
+                val separatedZ = kotlin.math.abs(prior.z - next.z) >= (prior.depth + next.depth) / 2.0
+                separatedX || separatedZ
+            })
+            assertTrue(rooms.none { it.id == next.id })
+            rooms = rooms + next
+        }
+        assertEquals(262, rooms.size)
+    }
+
 }
