@@ -11,23 +11,48 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.enhikyy.girassol.research.ResearchHub
+import com.enhikyy.girassol.runtime.BiosphereService
 import com.enhikyy.girassol.ui.theme.Solar
 
 /** Displays the research requests actually written to the local epistemic journal. */
 @Composable
 internal fun ResearchRequests(modifier: Modifier = Modifier) {
     val state by ResearchHub.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                BiosphereService.importDocument(context, uri)
+            }.onFailure {
+                android.widget.Toast.makeText(
+                    context,
+                    it.message ?: "Não foi possível importar o arquivo",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp),
@@ -41,6 +66,26 @@ internal fun ResearchRequests(modifier: Modifier = Modifier) {
                     "Cada pedido nasce de uma lacuna observada no mundo. A pesquisa, aquisição, quarentena e validação ficam ligadas ao ciclo e ao cidadão que formulou a consulta.",
                     color = Solar.Muted,
                     fontSize = 12.sp
+                )
+                Button(
+                    enabled = !state.busy,
+                    onClick = {
+                        documentPicker.launch(
+                            arrayOf(
+                                "text/plain",
+                                "text/markdown",
+                                "text/csv",
+                                "application/json",
+                                "application/epub+zip",
+                                "application/octet-stream"
+                            )
+                        )
+                    }
+                ) { Text("Entregar TXT · MD · CSV · JSON · EPUB") }
+                Text(
+                    "Os arquivos entram na quarentena epistêmica com hash e proveniência. PDF e áudio ainda não são aceitos: os extratores nativos correspondentes permanecem pendentes.",
+                    color = Solar.Muted,
+                    fontSize = 10.sp
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (state.busy) {
