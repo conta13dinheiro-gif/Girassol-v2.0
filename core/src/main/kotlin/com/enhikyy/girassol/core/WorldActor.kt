@@ -119,10 +119,13 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                         }
                     }
                     Activity.BUILD -> {
-                        success = rooms.size < 10 && transfer(balances, "market", "structures", "timber", 4)
+                        success = (rulesVersion >= 6 || rooms.size < 10) && transfer(balances, "market", "structures", "timber", 4)
                         if (success) {
-                            val n = rooms.size - 6
-                            rooms += Room("annex_$n", "Anexo ${n + 1}", 2.0 + n * 2.0, 9.0, 1.7, 1.5, 2)
+                            if (rulesVersion >= 6) rooms += ProceduralDistricts.nextAnnex(rooms)
+                            else {
+                                val n = rooms.size - 6
+                                rooms += Room("annex_$n", "Anexo ${n + 1}", 2.0 + n * 2.0, 9.0, 1.7, 1.5, 2)
+                            }
                             needs = needs.copy(curiosity = (needs.curiosity + .2).coerceAtMost(1.0))
                         }
                     }
@@ -187,7 +190,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             Activity.STUDY to ((1 - n.curiosity) * 1.6 + rng.nextDouble() * .3),
             Activity.WRITE to ((1 - n.curiosity) * 1.7 + rng.nextDouble() * .4),
             Activity.COFFEE to ((1 - n.energy) * 1.4 + rng.nextDouble() * .3),
-            Activity.BUILD to (if (world.rooms.size < 10) .5 + rng.nextDouble() * .8 else -1.0)
+            Activity.BUILD to (if (rulesVersion >= 6 || world.rooms.size < 10) .5 + rng.nextDouble() * .8 else -1.0)
         )
         return scores.maxBy { it.second + if (it.first == a.activity) .12 else 0.0 }.first
     }
