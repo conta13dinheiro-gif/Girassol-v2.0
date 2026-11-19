@@ -28,13 +28,22 @@ internal object DistrictWaveFunctionCollapse {
     fun generate(seed: Long, chunkX: Int, chunkZ: Int): List<Kind> {
         val rng = Canonical.stream(seed, "district:$chunkX:$chunkZ", 0, "wfc-district-v1")
         val domains = IntArray(WIDTH * HEIGHT) { ALL }
+        // A civic boundary tile connects independently generated chunks without
+        // introducing incompatible district seams at their shared borders.
+        for (x in 0 until WIDTH) {
+            domains[index(x, 0)] = bit(Kind.CIVIC)
+            domains[index(x, HEIGHT - 1)] = bit(Kind.CIVIC)
+        }
+        for (z in 0 until HEIGHT) {
+            domains[index(0, z)] = bit(Kind.CIVIC)
+            domains[index(WIDTH - 1, z)] = bit(Kind.CIVIC)
+        }
         val anchors = listOf(
-            Cell(0, 0) to Kind.RESIDENTIAL,
-            Cell(WIDTH - 1, 0) to Kind.AGRICULTURE,
-            Cell(0, HEIGHT - 1) to Kind.RECYCLING,
-            Cell(WIDTH - 1, HEIGHT - 1) to Kind.ENERGY,
-            Cell(WIDTH / 2, HEIGHT / 2) to Kind.RESEARCH,
-            Cell(WIDTH / 2, 0) to Kind.CIVIC
+            Cell(4, 4) to Kind.RESIDENTIAL,
+            Cell(12, 4) to Kind.AGRICULTURE,
+            Cell(4, 12) to Kind.RECYCLING,
+            Cell(12, 12) to Kind.ENERGY,
+            Cell(WIDTH / 2, HEIGHT / 2) to Kind.RESEARCH
         )
         val queue = ArrayDeque<Int>()
         domains.indices.forEach(queue::addLast)
