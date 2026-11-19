@@ -122,7 +122,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                     Activity.BUILD -> {
                         success = (rulesVersion >= 6 || rooms.size < 10) && transfer(balances, "market", "structures", "timber", 4)
                         if (success) {
-                            if (rulesVersion >= 6) rooms += ProceduralDistricts.nextAnnex(rooms)
+                            if (rulesVersion >= 6) rooms += ProceduralDistricts.nextAnnex(rooms,state.seed)
                             else {
                                 val n = rooms.size - 6
                                 rooms += Room("annex_$n", "Anexo ${n + 1}", 2.0 + n * 2.0, 9.0, 1.7, 1.5, 2)
