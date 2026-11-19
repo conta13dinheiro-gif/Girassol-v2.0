@@ -47,6 +47,7 @@ import com.enhikyy.girassol.runtime.BiosphereUi
 import com.enhikyy.girassol.render.NativeProjection
 import com.enhikyy.girassol.render.FilamentWorldView
 import com.enhikyy.girassol.audio.AudioStatus
+import com.enhikyy.girassol.audio.NeuralSpeechEngine
 import com.enhikyy.girassol.cognition.CognitionStatus
 import java.util.Locale
 import kotlin.math.*
@@ -279,6 +280,9 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 
 @Composable private fun Citizens(world: WorldState, modifier: Modifier, select: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    NeuralSpeechEngine.initialize(context)
+    val speechStatus by NeuralSpeechEngine.state.collectAsStateWithLifecycle()
     val agents = world.agents.filter { it.name.contains(query, true) || it.lineage.contains(query, true) }
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item { PageHeading("INDIVÍDUOS, HISTÓRIAS E VÍNCULOS", "Quem habita este mundo", "Cada habitante tem necessidades, experiências e um perfil genético próprio.") }
@@ -302,7 +306,23 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     )
                 }
                 world.artifacts.lastOrNull { it.author==a.id && it.title=="Fala interna" }?.let { thought ->
-                    Text("REFLEXÃO PRIVADA · ${thought.text}",color=Solar.Cognitive,fontSize=10.sp)
+                    Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                        Text("REFLEXÃO PRIVADA · ${thought.text}",color=Solar.Cognitive,fontSize=10.sp)
+                        OutlinedButton(
+                            enabled=speechStatus.installed && !speechStatus.busy,
+                            onClick={
+                                runCatching {
+                                    NeuralSpeechEngine.speak(
+                                        thought.text,
+                                        voiceId=speechStatus.voiceId,
+                                        pan=((a.x-a.z)/30.0).toFloat().coerceIn(-1f,1f)
+                                    )
+                                }.onFailure {
+                                    android.widget.Toast.makeText(context,it.message ?: "Falha na síntese de voz",android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        ) { Text("Ouvir reflexão") }
+                    }
                 }
             }
         }
@@ -444,6 +464,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             }
         }
         item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
+        item { SectionTitle("Voz neural offline"); Spacer(Modifier.height(10.dp)); NeuralSpeechPanel() }
         item { SectionTitle("Shizuku · telemetria de sistema"); Spacer(Modifier.height(10.dp)); ShizukuPanel() }
         item {
             SectionTitle("Recursos do mercado"); Spacer(Modifier.height(12.dp))
