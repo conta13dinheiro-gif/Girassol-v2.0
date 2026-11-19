@@ -33,6 +33,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
       - name: Install declared Android toolchain
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
+      - name: Fast Kotlin and dataset protocol checks
+        run: ./gradlew :core:test :research:test :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --no-daemon
       - name: Unit tests, lint and all APK variants
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :research:test :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
       - name: Production JNI learning and Shadow-Replay

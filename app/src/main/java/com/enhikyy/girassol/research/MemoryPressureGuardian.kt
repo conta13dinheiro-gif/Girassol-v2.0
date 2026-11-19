@@ -30,10 +30,13 @@ internal class MemoryPressureGuardian(context: Context) : ResearchGate, AutoClos
     private fun connected(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.let {
         it.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) && (!wifiOnly || it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))
     } ?: false
-    override fun check() {
+    fun checkLocal() {
         if(Thread.currentThread().isInterrupted) throw ResearchPaused("Pesquisa interrompida")
         if(!enabled) throw ResearchPaused("Auto-pesquisa desativada")
         if(!green()) throw ResearchPaused("Aguardando memória verde e temperatura adequada")
+    }
+    override fun check() {
+        checkLocal()
         if(!connected()) throw ResearchPaused(if(wifiOnly) "Aguardando Wi-Fi validado" else "Aguardando conexão")
     }
     private fun revoke() { listeners.forEach { it() } }

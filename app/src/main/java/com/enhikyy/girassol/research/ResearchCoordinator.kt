@@ -22,7 +22,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     private val guardian=MemoryPressureGuardian(app)
     private val http=ResilientHttp(gate=guardian)
     private val seeker=HuggingFaceDatasetSeeker(http)
-    private val models=DualModelOrchestrator(app,guardian)
+    private val models=DualModelOrchestrator(app,ResearchGate { guardian.checkLocal() })
     private val executor=Executors.newSingleThreadExecutor { task->Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);task.run() },"Girassol-Research") }
     private val generation=AtomicLong()
     @Volatile private var future: Future<*>?=null
@@ -47,7 +47,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         val token=generation.get();message("Pesquisa em andamento",true)
         future=executor.submit {
             try {
-                guardian.check();val result=operation();guardian.check()
+                guardian.checkLocal();val result=operation();guardian.checkLocal()
                 handler.post { if(generation.get()==token) { future=null;try { accept(result);refresh();message("Biblioteca atualizada") } catch(e: Exception) { message(e.message ?: "Aquisição não gravada") } } }
             } catch(e: LinkageError) {
                 handler.post { if(generation.get()==token) { future=null;message("Backend nativo indisponível: ${e.message}");retryAt=android.os.SystemClock.elapsedRealtime()+60000 } }
@@ -74,7 +74,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     fun committed(transition: Transition) { if(transition.event.cognition?.lesson!=null) { evidence=null;studying=null;refresh() } }
     fun consider(point: Checkpoint,actions: List<ActionRecord>) {
         if(!settings.automatic || future!=null || android.os.SystemClock.elapsedRealtime()<retryAt) return
-        try { guardian.check() } catch(e: ResearchPaused) { message(e.message ?: "Aguardando recursos");return }
+        try { guardian.checkLocal() } catch(e: ResearchPaused) { message(e.message ?: "Aguardando recursos");return }
         val world=point.state;val tables=store().research()
         if(evidence!=null) return
         val approved=world.agents.firstNotNullOfOrNull { tables.approvedFor(it.id,world.knowledge.map { lesson->lesson.id }.toSet()) }
@@ -118,6 +118,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         }
         val intent=curriculum.intent(world.seed,world.tick,citizen.id,target,if(failure!=null) "${failure.activity.label}: ${failure.outcome}" else "Pouca novidade nas experiências recentes",tables.mastery())
         tables.save(ResearchEntry(intent,ResearchPhase.SEARCHING,"Procurando dados textuais licenciados"));refresh();cooldown=world.tick+240
+        try { guardian.check() } catch(e: ResearchPaused) { message(e.message ?: "Aguardando conexão");return }
         val installed=tables.installedKeys()
         launch({
             val found=seeker.discover(intent) { key->key in installed } ?: throw java.io.IOException("Nenhum dataset público elegível encontrado")

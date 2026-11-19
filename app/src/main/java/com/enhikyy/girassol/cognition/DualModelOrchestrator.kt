@@ -9,6 +9,7 @@ import kotlinx.serialization.json.*
 
 /** Two citizen roles share one quantized base sequentially, under the same inference/import lock. */
 internal class DualModelOrchestrator(context: Context,private val gate: ResearchGate) {
+    private val app=context.applicationContext
     private val files=ModelFiles(context)
     private val adapters=ModelFiles(context,"adapters")
     @Volatile private var request=0L
@@ -19,6 +20,8 @@ internal class DualModelOrchestrator(context: Context,private val gate: Research
             check(Process.is64Bit()) { "Revisão GGUF requer processo de 64 bits" }
             val model=checkNotNull(files.current()) { "Importe um modelo GGUF para revisar a quarentena" }
             val adapter=adapters.current()
+            val memory=android.app.ActivityManager.MemoryInfo().also { app.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it) }
+            check(!memory.lowMemory && model.bytes+(adapter?.bytes ?: 0)<=(memory.availMem-512L*1048576)/2) { "RAM livre insuficiente para revisar com este GGUF" }
             fun evaluate(agent: String,skeptical: Boolean): KnowledgeReview {
                 gate.check()
                 val prompt=buildString {
