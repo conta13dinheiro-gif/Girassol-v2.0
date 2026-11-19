@@ -61,7 +61,7 @@ internal class FilmPass(private val engine: Engine, context: Context) : AutoClos
         view.viewport=Viewport(0,0,w,h)
     }
     fun update(time: Float,enabled: Boolean) {
-        instance.setParameter("time",time); instance.setParameter("amount",if(enabled) PluginRegistry.filmAmount() else 0f)
+        instance.setParameter("time",time); instance.setParameter("amount",if(enabled) PluginRegistry.filmAmount() else 0f); instance.setParameter("grain",if(enabled) PluginRegistry.filmGrain() else 0f); instance.setParameter("halation",if(enabled) PluginRegistry.filmHalation() else 0f)
     }
     private fun releaseTarget() {
         target?.let(engine::destroyRenderTarget); target=null
