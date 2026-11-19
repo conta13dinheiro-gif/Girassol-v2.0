@@ -175,4 +175,74 @@ class WorldActorTest {
         assertEquals(262, rooms.size)
     }
 
+    @Test fun reciprocalTrustCreatesDeterministicDescendantAndReplaysGenealogy() {
+        val initial = WorldActor.genesis()
+        val room = initial.rooms.first { it.id == "salon" }
+        val parents = initial.agents.take(2).mapIndexed { index, citizen ->
+            citizen.copy(
+                x = room.x + index * .4,
+                z = room.z,
+                needs = Needs(energy = .9, hydration = .9, glucose = .9, social = .9, curiosity = .9),
+                activity = Activity.TALK,
+                acting = true
+            )
+        }
+        val pair = setOf(parents[0].id, parents[1].id)
+        val state = initial.copy(
+            agents = initial.agents.map { old -> parents.firstOrNull { it.id == old.id } ?: old },
+            ties = initial.ties.map { tie ->
+                if (tie.from in pair && tie.to in pair) tie.copy(affinity = .91) else tie
+            }
+        )
+        val actorA = WorldActor(Checkpoint(state, 0, WorldActor.GENESIS_HASH), 6)
+        val actorB = WorldActor(Checkpoint(state, 0, WorldActor.GENESIS_HASH), 6)
+        val first = parents[0]
+        val proposal = NeuralProposal(
+            seed = state.seed,
+            sourceTick = state.tick,
+            agentId = first.id,
+            activity = Activity.TALK,
+            sourceStateHash = Canonical.hash(Canonical.state(state)),
+            modelHash = "a".repeat(64)
+        )
+        val intentions = actorA.intentions(proposal)
+        val poses = state.agents.associate { citizen ->
+            val point = SpatialPoint(citizen.x, 0.0, citizen.z)
+            citizen.id to SpatialPose(
+                position = point, verticalVelocity = 0.0, surface = 0.0,
+                distance = 0.0, heading = 0.0, reached = citizen.id in pair,
+                route = listOf(point)
+            )
+        }
+        val frame = SpatialFrame(
+            sourceTick = state.tick,
+            sourceHash = Canonical.hash(Canonical.state(state)),
+            seed = state.seed,
+            intentions = intentions,
+            poses = poses
+        )
+        val transition = actorA.step(neural = proposal, spatial = frame)
+        assertEquals(1, transition.state.genealogy.size)
+        val record = transition.state.genealogy.single()
+        val child = transition.state.agents.single { it.id == record.child }
+        assertEquals(parents[0].id, record.parentOne)
+        assertEquals(parents[1].id, record.parentTwo)
+        assertEquals(2, child.genome.generation)
+        assertTrue(child.lineage.contains(parents[0].lineage))
+        assertTrue(child.lineage.contains(parents[1].lineage))
+        assertEquals(0, transition.state.balances["${child.id}/coins"])
+        assertEquals(Activity.entries.size, transition.state.words.count { it.lineage == child.lineage })
+        assertTrue(record.valid(transition.state.tick, transition.state.agents))
+        assertEquals(transition, run {
+            actorB.replay(transition.event)
+            Transition(actorB.state, transition.event)
+        })
+        val restored = WorldActor(
+            Checkpoint(Canonical.state(Canonical.state(actorA.checkpoint().state)), actorA.checkpoint().eventId, actorA.checkpoint().eventHash),
+            6
+        )
+        assertEquals(actorA.state.genealogy, restored.state.genealogy)
+        assertEquals(Canonical.state(actorA.state), Canonical.state(restored.state))
+    }
+
 }
