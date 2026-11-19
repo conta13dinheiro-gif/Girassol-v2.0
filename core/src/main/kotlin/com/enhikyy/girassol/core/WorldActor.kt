@@ -107,7 +107,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                             }
                             dialogues += Dialogue(tick, a.name, partner.name, "${w.native} ${topicWord.native}.", gloss)
                             val ti = ties.indexOfFirst { it.from == a.id && it.to == partner.id }
-                            if (ti >= 0) ties[ti] = ties[ti].copy(affinity = (ties[ti].affinity + .015).coerceAtMost(1.0))\n                            if (rulesVersion >= 6) createDescendant(state.seed,tick,a,partner,agents,balances,ties,words,genealogy)
+                            if (ti >= 0) ties[ti] = ties[ti].copy(affinity = (ties[ti].affinity + .015).coerceAtMost(1.0))
+                            if (rulesVersion >= 6) createDescendant(state.seed,tick,a,partner,agents,balances,ties,words,genealogy)
                         }
                     }
                     Activity.STUDY -> { needs = needs.copy(curiosity = (needs.curiosity + .15).coerceAtMost(1.0)); a = a.copy(skill = a.skill.practice(tick)) }
@@ -312,7 +313,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")
             if(s.knowledge.any { !it.valid(s.tick) || s.agents.none { a->a.id==it.researcher } || s.agents.none { a->a.id==it.verifier } } || s.knowledge.map { it.id }.distinct().size!=s.knowledge.size) add("Proveniência de conhecimento inválida")
             if(s.evolution?.valid(s.seed,s.tick)==false) add("Política evolutiva inválida")
-            if(s.minds.keys.any { id->s.agents.none { it.id==id } } || s.minds.values.any { !it.valid(s.tick) }) add("Estado cognitivo inválido")\n            if(s.genealogy.map { it.child }.distinct().size!=s.genealogy.size || s.genealogy.any { !it.valid(s.tick,s.agents) }) add("Genealogia inválida")
+            if(s.minds.keys.any { id->s.agents.none { it.id==id } } || s.minds.values.any { !it.valid(s.tick) }) add("Estado cognitivo inválido")
+            if(s.genealogy.map { it.child }.distinct().size!=s.genealogy.size || s.genealogy.any { !it.valid(s.tick,s.agents) }) add("Genealogia inválida")
             if (s.balances.values.any { it < 0 }) add("Estoque negativo")
             val totals = s.balances.entries.groupBy { it.key.substringAfter('/') }.mapValues { (_,v) -> v.sumOf { it.value.toLong() } }
             if (totals != s.initialTotals.mapValues { it.value.toLong() }) add("Conservação violada")
