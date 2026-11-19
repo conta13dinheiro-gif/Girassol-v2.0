@@ -285,7 +285,23 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         item { OutlinedTextField(query, { query = it }, label = { Text("Buscar nome ou linhagem") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) }) }
         if (agents.isEmpty()) item { Text("Nenhum habitante encontrado.", color = Muted) }
         items(agents, key = { it.id }) { a ->
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) { AgentRow(a, select); Spacer(Modifier.height(14.dp)); NeedsBars(a.needs); Spacer(Modifier.height(12.dp)); Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp) }
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) {
+                AgentRow(a, select)
+                Spacer(Modifier.height(14.dp))
+                NeedsBars(a.needs)
+                Spacer(Modifier.height(12.dp))
+                Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp)
+                world.minds[a.id]?.psyche?.let { soul ->
+                    Text(
+                        "PAD ${"%.2f".format(soul.pleasure)} / ${"%.2f".format(soul.arousal)} / ${"%.2f".format(soul.dominance)} · cortisol ${"%.2f".format(soul.cortisol)} · oxitocina ${"%.2f".format(soul.oxytocin)}",
+                        color=Muted,fontSize=9.sp
+                    )
+                    Text(
+                        "GNW ${(soul.ignitionIndex*100).toInt()}% · erro ARD ${"%.2f".format(soul.lastPredictionError)} · vínculo ${soul.attachment.name.lowercase()}",
+                        color=if(soul.ignitionIndex>.65) Solar.Amber else Muted,fontSize=9.sp
+                    )
+                }
+            }
         }
         if (world.genealogy.isNotEmpty()) {
             item { SectionTitle("Genealogia", "${world.genealogy.size} nascimentos registrados") }
