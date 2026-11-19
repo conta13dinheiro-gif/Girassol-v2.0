@@ -84,6 +84,8 @@ jobs:
           cp "$debug_apk" dist/Girassol-debug.apk
           cp "$release_apk" dist/Girassol-release.apk
           sha256sum dist/*.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Girassol-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Girassol-release.apk
 
       - name: Publish debug APK artifact
         uses: actions/upload-artifact@v4

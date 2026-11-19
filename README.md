@@ -10,7 +10,7 @@ Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. 
 
 ## Compilação manual
 
-O workflow `.github/workflows/android-ci.yml` executa automaticamente em push, pull request e acionamento manual. Instala JDK17, SDK35, NDK27 e CMake3.22.1; compila os materiais Filament1.56.0; executa `scripts/test-native.sh`, `test` (suítes JVM de core/research/app), `testDebugUnitTest` e `lintDebug`; compila Debug/Release ARM64 e publica artefatos separados `Girassol-debug` e `Girassol-release`. O workflow `.github/workflows/android.yml` continua disponível para compilação manual. Nenhum emulador é iniciado. O release gerado pelo CI não tem assinatura de distribuição configurada.
+O workflow `.github/workflows/android-ci.yml` executa automaticamente em push, pull request e acionamento manual. Instala JDK17, SDK35, NDK27 e CMake3.22.1; compila os materiais Filament1.56.0; executa `scripts/test-native.sh`, `test` (suítes JVM de core/research/app), `testDebugUnitTest` e `lintDebug`; compila Debug/Release ARM64 e publica artefatos separados `Girassol-debug` e `Girassol-release`. O workflow `.github/workflows/android.yml` continua disponível para compilação manual. Nenhum emulador é iniciado. O CI assina Debug e Release com o debug keystore temporário do runner e verifica ambos com apksigner. A assinatura é válida para instalação de desenvolvimento, mas não é uma chave de upload Play nem garante atualizações entre execuções; para distribuição pública é necessário um keystore privado persistente.
 
 Toolchain: JDK17, SDK35, Build Tools35.0.0, NDK27.0.12077973, CMake3.22.1, Gradle8.11.1 e Kotlin2.1.10. O workflow baixa o matc oficial1.56.0 por SHA256 e compila todos os materiais antes do APK. Para compilação local futura:
 
