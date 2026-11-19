@@ -20,7 +20,7 @@ internal object NativeCityMesh {
         val input = direct(Math.multiplyExact(rooms.size, 24))
         rooms.forEach { r ->
             input.putFloat(r.x.toFloat()).putFloat(r.z.toFloat()).putFloat(r.width.toFloat()).putFloat(r.depth.toFloat())
-            input.putInt(when (r.id) { "salon" -> 0; "bedroom" -> 1; "cafe" -> 2; "market" -> 3; "library" -> 4; "workshop" -> 5; else -> 6 })
+            input.putInt(when { r.id == "salon" -> 0; r.id == "bedroom" -> 1; r.id == "cafe" -> 2; r.id == "market" -> 3; r.id == "library" -> 4; r.id == "workshop" -> 5; r.name.startsWith("Moradia modular") -> 0; r.name.startsWith("Estufa agrícola") -> 1; r.name.startsWith("Oficina de energia") -> 5; r.name.startsWith("Biblioteca de pesquisa") -> 4; r.name.startsWith("Ágora cívica") -> 3; else -> 6 })
             input.putInt(r.id.hashCode())
         }
         input.rewind()
