@@ -7,7 +7,6 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.net.Uri
 import android.os.Process
-import android.provider.OpenableColumns
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
@@ -16,7 +15,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedInputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.FilterInputStream
 import java.io.IOException
