@@ -151,6 +151,12 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             agents[index] = a
         }
         if (rulesVersion >= 7 && cognitiveInput != null) {
+            cognitiveInput.innerSpeech.toSortedMap().entries.take(4).forEach { (citizenId, thought) ->
+                val recent = artifacts.any {
+                    it.author == citizenId && it.title == "Fala interna" && tick - it.tick < 30
+                }
+                if (!recent) artifacts += Artifact(tick,citizenId,"Fala interna",thought,eventId+1)
+            }
             cognitiveInput.minds.entries
                 .filter { it.value.psyche.ignitionIndex > .65 }
                 .sortedBy { it.key }
