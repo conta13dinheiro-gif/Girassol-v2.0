@@ -3,6 +3,7 @@ package com.enhikyy.girassol.cognition
 import android.content.Context
 import android.os.Process
 import com.enhikyy.girassol.research.*
+import com.enhikyy.girassol.core.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
