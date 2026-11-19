@@ -105,3 +105,27 @@ O picker SAF permite selecionar TXT, Markdown, CSV, JSON e EPUB. A leitura ocorr
 ## Ponte Shizuku (opt-in)
 
 O app usa o provider e a API Shizuku e um UserService AIDL dedicado. O app só solicita permissão depois do toque explícito do usuário; a conexão é independente do serviço principal. A implementação remota expõe apenas leitura de UID/PID, `/proc/meminfo`, `/sys/class/thermal/thermal_zone0/temp` e `/sys/block/zram0/mm_stat`. O Binder morto/desligado/negado limpa a conexão e mantém o fallback local. AIDL usa o transaction code reservado de `destroy()`. Não se usa `app_process` manual, root, escrita de `oom_score_adj`, MANAGE_EXTERNAL_STORAGE ou comandos shell arbitrários.
+
+## Anokhin, PAD, GNW e Kuramoto — evolução canônica v7
+
+### Fonte e estado persistente
+- cognitive/anokhin_gnw_core.hpp é um header C++20 puro e testável: HormonalState, AffectivePAD, AnokhinActionAcceptor, HumanSoulState e stepKuramotoEnsemble.
+- girassol_autonomy_jni.cpp exporta NativeAutonomy_advance. O contrato externo é um FloatArray com stride56/cidadão e IDs64bits únicos; não há layout Kotlin/C++ compartilhado. O JNI verifica dimensão1–4096, estado finito, faixas hormonais/PAD, dt e identidade duplicada antes da dinâmica.
+- SoulModel persiste em MindState e valida idade/saúde, apego, Big Five, cortisol/oxitocina/dopamina, PAD, previsão sensorial16D, erro, fase/frequência Kuramoto e ignição. Loci e estado somático são herdados com PRNG determinístico.
+- Observação sensorial inclui necessidades, saúde, coesão social, novidade, outcome, atividade/atuação, distância, vizinhança e sinais neuroquímicos. O aceitador recebe previsão criada a partir da ação escolhida; não é um modelo de mundo treinado ou um modelo fisiológico validado.
+
+### Ordem do tick
+1. NativeMind.evaluate prepara/inicializa o estado de cada cidadão e chama NativeAutonomy.evaluate.
+2. JNI compara previsão anterior com observação atual, calcula erro, avança EDOs em dt=1/60s, atualiza PAD e sigmoid de ignição, avança Kuramoto e retorna R e estado somático.
+3. LTC/Hebbian/Gumbel escolhe atividade com pequenos vieses de dopamina, oxitocina, prazer, cortisol e ignição. A decisão alimenta o próximo vetor sensorial esperado.
+4. CognitiveFrame.socialSynchrony carrega R; WorldActor valida e incorpora no mesmo evento espacial. Sob regras7, GNW/rituais e falas internas tornam-se artefatos determinísticos e dialogados, nunca mutações fora do escritor único.
+5. AAudio recebe R como parâmetro atômico e mistura as oito razões Trautonium com uma escala harmônica coletiva predefinida. O callback não bloqueia o tick nem conhece objetos de mundo.
+
+### Reflexão offline com GGUF
+Task::InnerSpeech é um modo separado de NativeCognition. Usa o mesmo lock de GGUF/LoRA, janela/timeout/cancelamento existentes, contexto CPU e GBNF de caracteres Unicode permitidos. A resposta é limitada no decoder a240 codepoints/512 bytes e64tokens. A chamada é assíncrona e de baixa prioridade; a reflexão só entra no frame/evento do tick posterior, com identidade do cidadão, e não pode chamar APIs ou comandos. Sem GGUF carregado, a reflexão não ocorre e LTC/GOAP seguem funcionando. É um único modelo residente sequencial, não dois modelos simultâneos.
+
+### Testabilidade e interpretação
+anokhin_gnw_core_test.cpp executa100.000 passos hormonais e40.000 passos de ensemble sob ASan/UBSan; testes Kotlin verificam estado herdado, limites de fala e replay de ritual v7. A fórmula de ignição é heurística; PAD é parametrização afetiva; R é sincronização de fase. Nenhuma quantidade mede consciência humana. O Ignition Index de sondas lineares de LLM em arXiv2608.05160 é outro constructo. Referências externas estão no README e são inspirações/hipóteses, não comprovação biológica.
+
+### Limites explícitos
+Não há TTS Kokoro/Piper empacotado, modelos de voz no APK, diarização multiparty, HRTF Steam Audio, occlusion/propagation ou medição de inteligibilidade/latência no dispositivo. O estéreo atual é panorama/síntese, não espacialização binaural real. A Steam Audio C API documenta Android ARM64 e efeitos binaurais por fonte com HRTF; ainda não foi incorporada como dependência. Também não há simulação hormonal clínica ou claim de consciência.
