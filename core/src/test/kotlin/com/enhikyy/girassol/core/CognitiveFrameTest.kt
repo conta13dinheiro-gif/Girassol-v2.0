@@ -52,4 +52,29 @@ class CognitiveFrameTest {
         assertTrue(transition.event.actions.all { it.activity==Activity.WATER })
         assertTrue(WorldActor.violations(transition.state).isEmpty())
     }
+    @Test fun descendantInheritsDeterministicLtcPersonalityAndValidatedParentalSkill() {
+        val world=WorldActor.genesis().copy(tick=12)
+        val one=world.agents[0]
+        val two=world.agents[1]
+        val child=one.copy(
+            id="child_test",
+            name="Descendente",
+            lineage="${one.lineage}·${two.lineage}",
+            genome=Genome(one.genome.curiosity,two.genome.sociability,2)
+        )
+        val first=MindState.initial(world,one)
+        val second=MindState.initial(world,two).copy(
+            memory=MemoryBank(
+                procedures=listOf(Procedure(Activity.STUDY,3,.8,10,10)),
+                reflectedTick=10
+            )
+        )
+        val inherited=MindState.inherit(world,child,first,second)
+        assertTrue(inherited.valid(world.tick))
+        assertEquals(child.genome.curiosity.express(),inherited.personality[0],0.0)
+        assertEquals(child.genome.sociability.express(),inherited.personality[2],0.0)
+        assertTrue(inherited.memory.procedures.any { it.action==Activity.STUDY && it.teacher==two.id && it.successes>=3 })
+        assertEquals(inherited,MindState.inherit(world,child,first,second))
+    }
+
 }
