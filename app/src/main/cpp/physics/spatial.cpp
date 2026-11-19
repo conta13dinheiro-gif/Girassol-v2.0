@@ -8,7 +8,7 @@
 
 namespace girassol::physics {
 namespace {
-constexpr double cell=.10,eps=1e-6;
+constexpr double baseCell=.10,eps=1e-6;
 struct Box { double x,z,X,Z; };
 struct Floor { Point a,b,c; };
 bool overlap(double x,double z,const Box& b,double r=radius) {
@@ -24,7 +24,7 @@ struct Scene::Data {
     std::vector<RoomSpec> rooms;
     std::vector<Box> walls;
     std::vector<Floor> floors;
-    double x=-5,z=-5; int width=0,depth=0;
+    double x=-5,z=-5,cell=baseCell; int width=0,depth=0;
     std::vector<std::vector<int>> obstacles,supports;
     std::vector<unsigned char> blocked;
     int at(double X,double Z) const {
@@ -114,7 +114,14 @@ Scene::Scene(const std::vector<RoomSpec>& rooms,std::uint64_t seed) {
     Mesh mesh;if(!city_mesh(rooms.data(),rooms.size()*sizeof(RoomSpec),rooms.size(),seed,mesh)) throw std::invalid_argument("Invalid scene");
     double X=17,Z=16;
     for(const auto& v:mesh.vertices) { d->x=std::min(d->x,static_cast<double>(v.x)-1);d->z=std::min(d->z,static_cast<double>(v.z)-1);X=std::max(X,static_cast<double>(v.x)+1);Z=std::max(Z,static_cast<double>(v.z)+1); }
-    d->width=static_cast<int>(std::ceil((X-d->x)/cell));d->depth=static_cast<int>(std::ceil((Z-d->z)/cell));
+    const double spanX=std::max(baseCell,X-d->x),spanZ=std::max(baseCell,Z-d->z);
+    // The occupancy index has two vector objects and one byte per tile. Keep its
+    // baseline allocation within a memory budget and trade grid density for extent.
+    constexpr double indexBudgetBytes=32.0*1024.0*1024.0;
+    const double bytesPerTile=static_cast<double>(2*sizeof(std::vector<int>)+sizeof(unsigned char));
+    const double tileBudget=indexBudgetBytes/bytesPerTile;
+    d->cell=std::max(baseCell,std::sqrt(spanX*spanZ/tileBudget));
+    d->width=static_cast<int>(std::ceil((X-d->x)/d->cell));d->depth=static_cast<int>(std::ceil((Z-d->z)/d->cell));
     const auto count=static_cast<std::size_t>(d->width)*static_cast<std::size_t>(d->depth);
     d->obstacles.resize(count);d->supports.resize(count);d->blocked.resize(count);
     for(std::size_t i=0;i<mesh.indices.size();i+=3) {
