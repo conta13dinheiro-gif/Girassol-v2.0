@@ -70,6 +70,7 @@ internal object NativeMind {
                 if(teacher!=null) world.minds[teacher.id]?.let { bank=bank.learnFrom(teacher.id,it.memory,world.tick) }
             }
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
+            bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
             val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
             check(next.valid(world.tick))
             minds[citizen.id]=next
