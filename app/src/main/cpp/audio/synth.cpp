@@ -31,7 +31,7 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         celebration_*=static_cast<float>(std::exp(-dt/2.5));
         timer_+=dt;
         const double interval=1.85-.45*mastery_;
-        if (timer_>=interval) { timer_-=interval; note_index_=(note_index_+1)%notes.size(); }
+        if (timer_>=interval) { timer_-=interval; note_index_=(note_index_+1)%p.ratios.size(); }
         const double noteFrequency=referenceFrequency*static_cast<double>(p.ratios[note_index_%p.ratios.size()])*p.pitch;
         phase(hum_,60,dt); phase(note_,noteFrequency,dt); phase(sub_,noteFrequency*.5,dt);
         phase(step_,1.7,dt);
