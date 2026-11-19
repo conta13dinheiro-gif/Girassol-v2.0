@@ -10,7 +10,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         private set
     private var eventId = checkpoint.eventId
     private var previousHash = checkpoint.eventHash
-    init { require(rulesVersion in 1..6); require(state.version == 1); require(violations(state).isEmpty()) }
+    init { require(rulesVersion in 1..7); require(state.version == 1); require(violations(state).isEmpty()) }
     fun checkpoint() = Checkpoint(state, eventId, previousHash)
 
     /** Same admitted intentions used by the native planner and by execution. */
@@ -149,10 +149,53 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             trails[cell] = (trails[cell] + .04).coerceAtMost(1.0)
             agents[index] = a
         }
+        if (rulesVersion >= 7 && cognitiveInput != null) {
+            cognitiveInput.minds.entries
+                .filter { it.value.psyche.ignitionIndex > .65 }
+                .sortedBy { it.key }
+                .take(4)
+                .forEach { (citizenId, mind) ->
+                    val recent = artifacts.any {
+                        it.author == citizenId && it.title == "Ignição global GNW" && tick - it.tick < 30
+                    }
+                    if (!recent) {
+                        val emotion = "P=${"%.2f".format(mind.psyche.pleasure)} A=${"%.2f".format(mind.psyche.arousal)} D=${"%.2f".format(mind.psyche.dominance)}"
+                        artifacts += Artifact(
+                            tick, citizenId, "Ignição global GNW",
+                            "Erro preditivo Anokhin=${"%.3f".format(mind.psyche.lastPredictionError)}; índice de ignição=${"%.3f".format(mind.psyche.ignitionIndex)}; PAD $emotion.",
+                            eventId + 1
+                        )
+                    }
+                }
+
+            val agora = rooms.firstOrNull { it.name.startsWith("Ágora cívica") }
+            if (cognitiveInput.socialSynchrony >= .90 && agora != null) {
+                val participants = agents.filter {
+                    kotlin.math.abs(it.x - agora.x) <= agora.width / 2.0 &&
+                        kotlin.math.abs(it.z - agora.z) <= agora.depth / 2.0
+                }.sortedBy { it.id }
+                val recentRitual = artifacts.lastOrNull { it.title == "Ritual de fase na Ágora" }
+                if (participants.size >= 4 && (recentRitual == null || tick - recentRitual.tick >= 240)) {
+                    val names = participants.map { it.name }
+                    artifacts += Artifact(
+                        tick, "biosfera", "Ritual de fase na Ágora",
+                        "Sincronização Kuramoto R=${"%.3f".format(cognitiveInput.socialSynchrony)} reuniu ${names.joinToString(", ")} na Ágora.",
+                        eventId + 1
+                    )
+                    val first = participants.first()
+                    val second = participants.last()
+                    val nativeWord = words.firstOrNull { it.lineage == first.lineage && it.concept == Activity.TALK }?.native ?: "va-ri"
+                    dialogues += Dialogue(
+                        tick, first.id, second.id, nativeWord,
+                        "A fase coletiva encontrou um ritmo comum; ${names.size} habitantes participaram do ritual."
+                    )
+                }
+            }
+        }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val next = base.copy(spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        val next = base.copy(socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
-        val raw = CanonicalEvent(version = if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        val raw = CanonicalEvent(version = if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -277,7 +320,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
     }
 
     companion object {
-        const val CURRENT_RULES_VERSION = 6
+        const val CURRENT_RULES_VERSION = 7
         val GENESIS_HASH = "0".repeat(64)
         fun genesis(seed: Long = 20261119): WorldState {
             val rooms = listOf(Room("salon", "Sala solar", 3.0, 3.0, 3.8, 2.6, 6), Room("bedroom", "Dormitório Aurora", 8.0, 2.5, 3.8, 2.5, 3), Room("cafe", "Café & fonte", 2.5, 6.5, 3.0, 2.0, 2), Room("market", "Mercado", 8.5, 6.5, 3.0, 2.0, 2), Room("library", "Biblioteca", 5.5, .6, 3.0, 1.4, 1), Room("workshop", "Oficina", 5.4, 9.0, 2.3, 1.8, 1))
@@ -309,6 +352,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
+            if(!s.socialSynchrony.isFinite() || s.socialSynchrony !in 0.0..1.0) add("Sincronização social inválida")
             if(s.spatial.keys.any { id->s.agents.none { it.id==id } } || s.spatial.values.any { !it.valid() }) add("Estado espacial inválido")
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")
             if(s.knowledge.any { !it.valid(s.tick) || s.agents.none { a->a.id==it.researcher } || s.agents.none { a->a.id==it.verifier } } || s.knowledge.map { it.id }.distinct().size!=s.knowledge.size) add("Proveniência de conhecimento inválida")
