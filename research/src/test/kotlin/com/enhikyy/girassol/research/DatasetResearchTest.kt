@@ -9,6 +9,14 @@ class DatasetResearchTest {
     private val intent=EpistemicCurriculumEngine().intent(1,12,"adao",Domain.PHYSICS,"Lacuna observada",mapOf(Domain.LOGIC to .8))
     private val card="""{"id":"science/qa","sha":"abc","downloads":200,"gated":false,"cardData":{"license":"cc-by-4.0","task_categories":["question-answering"]}}"""
     private val rows="""{"rows":[{"row_idx":2,"truncated_cells":[],"row":{"question":"What conserves energy?","answer":"An isolated system."}},{"row_idx":3,"truncated_cells":[0],"row":{"text":"truncated data must not be learned"}}]}"""
+    @Test fun resourceAdmissionUsesStrictGreenThresholdAndThermalLimit() {
+        assertFalse(MemoryPressurePolicy.green(MemoryPressurePolicy.GREEN_BYTES,false,0))
+        assertTrue(MemoryPressurePolicy.green(MemoryPressurePolicy.GREEN_BYTES+1,false,0))
+        assertFalse(MemoryPressurePolicy.green(Long.MAX_VALUE,true,0))
+        assertFalse(MemoryPressurePolicy.green(Long.MAX_VALUE,false,2))
+        assertTrue(ResearchSettings(automatic=true,quarantine=false).valid())
+        assertFalse(ResearchSettings(quotaMb=128).valid())
+    }
     @Test fun dependencyGraphAndBilingualIntentAreStable() {
         val engine=EpistemicCurriculumEngine()
         assertEquals(Domain.LOGIC,engine.blocker(Domain.ENGINEERING,emptyMap()))

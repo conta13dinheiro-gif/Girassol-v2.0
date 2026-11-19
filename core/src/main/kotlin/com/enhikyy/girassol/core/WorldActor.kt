@@ -133,7 +133,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             agents[index] = a
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val next = base.copy(evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList())
+        val next = base.copy(knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
         val raw = CanonicalEvent(version = if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
@@ -209,6 +209,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         }
         fun violations(s: WorldState): List<String> = buildList {
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")
+            if(s.knowledge.any { !it.valid(s.tick) || s.agents.none { a->a.id==it.researcher } || s.agents.none { a->a.id==it.verifier } } || s.knowledge.map { it.id }.distinct().size!=s.knowledge.size) add("Proveniência de conhecimento inválida")
             if(s.evolution?.valid(s.seed,s.tick)==false) add("Política evolutiva inválida")
             if(s.minds.keys.any { id->s.agents.none { it.id==id } } || s.minds.values.any { !it.valid(s.tick) }) add("Estado cognitivo inválido")
             if (s.balances.values.any { it < 0 }) add("Estoque negativo")

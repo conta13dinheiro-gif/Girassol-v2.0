@@ -34,5 +34,9 @@ int main(int argc, char** argv) {
     // A new request must survive cancellation of the previous generation.
     const auto subsequent = infer(model, prompt, 9);
     if (subsequent.find("\"activity\"") == std::string::npos) throw std::runtime_error("Recovery failed");
+    const auto review = infer(model,"Evaluate this fact as educational evidence. Water freezes at zero degrees Celsius at standard pressure. Return JSON {\"verdict\":\"APPROVE\",\"confidence\":95}.",10,30000,"",girassol::cognition::Task::KnowledgeReview);
+    if(review.find("\"verdict\"")==std::string::npos || review.find("\"confidence\"")==std::string::npos || review.find("activity")!=std::string::npos)
+        throw std::runtime_error("Knowledge review grammar was not applied");
+    std::printf("Knowledge review output: %s\n",review.c_str());
     std::printf("Recovery output: %s\nInvalid model, size limit, pre-cancel, deadline, active cancellation and recovery passed.\n", subsequent.c_str());
 }

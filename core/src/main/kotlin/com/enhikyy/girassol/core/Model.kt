@@ -76,7 +76,8 @@ class DeterministicRng(private var state: Long) {
     val dialogues: List<Dialogue> = emptyList(), val artifacts: List<Artifact> = emptyList(),
     val actionCounts: Map<String, Int> = emptyMap(), val trail: List<Double> = List(144) { 0.0 },
     @EncodeDefault(EncodeDefault.Mode.NEVER) val minds: Map<String,MindState> = emptyMap(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null)
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val knowledge: List<KnowledgeLesson> = emptyList())
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CanonicalEvent(val version: Int = 1, val eventId: Long, val tick: Long,
     val actions: List<ActionRecord>, val stateHash: String, val previousHash: String, val hash: String = "",

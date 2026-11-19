@@ -10,6 +10,21 @@ internal object NativeMind {
     init { System.loadLibrary("girassol_projection") }
     private external fun advance(data: ByteBuffer): Boolean
     private val networkBuffer=ThreadLocal.withInitial { ByteBuffer.allocateDirect(280*8).order(ByteOrder.nativeOrder()) }
+    /** One actual Hebbian/LTC study update. The exact parameter diff is later journalled by WorldActor. */
+    fun study(old: MindState,text: String,confidence: Int,tick: Long): MindState {
+        require(text.isNotBlank() && confidence in 90..100)
+        val data=checkNotNull(networkBuffer.get()).apply { clear() }
+        old.parameters.forEach(data::putDouble);old.hidden.forEach(data::putDouble)
+        // Content-addressed stimulus is a neural exposure, not a claim of language understanding.
+        val digest=java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
+        repeat(12) { data.putDouble((digest[it].toInt() and 255)/255.0) }
+        data.putDouble(confidence/100.0).putDouble(1.0).putDouble(Activity.STUDY.ordinal.toDouble()).putDouble(1.0)
+        repeat(8) { data.putDouble(0.0) }
+        check(advance(data))
+        val exposure=old.exposure.toMutableList();if(exposure[Activity.STUDY.ordinal]<Int.MAX_VALUE) exposure[Activity.STUDY.ordinal]++
+        return old.copy(parameters=List(248) { data.getDouble(it*8) },hidden=List(8) { data.getDouble((248+it)*8) },exposure=exposure,learnedTick=tick)
+            .also { check(it.valid(tick)) }
+    }
     fun evaluate(world: WorldState,lastActions: List<ActionRecord> = emptyList(),policy: List<Double> = world.evolution?.weights ?: List(8) { 0.0 }): CognitiveFrame {
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()

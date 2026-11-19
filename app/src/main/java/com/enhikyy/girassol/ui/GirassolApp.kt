@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.enhikyy.girassol.core.*
 import com.enhikyy.girassol.runtime.BiosphereUi
 import com.enhikyy.girassol.render.NativeProjection
@@ -75,7 +76,9 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var economy by rememberSaveable { mutableStateOf(false) }
     var renderError by remember { mutableStateOf<String?>(null) }
     var historical by remember { mutableStateOf<WorldState?>(null) }
+    var systemSection by rememberSaveable { mutableIntStateOf(0) }
     var historySection by rememberSaveable { mutableIntStateOf(0) }
+    val research by com.enhikyy.girassol.research.ResearchHub.state.collectAsStateWithLifecycle()
     val world=historical ?: ui.world
     val selected=world?.agents?.firstOrNull { it.id==selectedId }
     val room=world?.rooms?.firstOrNull { "room:${it.id}"==selectedId }
@@ -94,7 +97,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         onRelease={ it.close() },
                         update={ view->
                             view.select={ if(!cinema) selectedId=it }
-                            view.update(world,ui.running,ui.thermal,1f)
+                            view.update(world,ui.running && historical==null,ui.thermal,1f,research.busy && historical==null)
                             if(appliedFocus!=focusRequest) { view.focus(focusId); appliedFocus=focusRequest }
                         }
                     )
@@ -138,7 +141,14 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                                     if(historySection==0) Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
                                     else Culture(world,Modifier.weight(1f))
                                 }
-                                3->SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
+                                3->{
+                                    TabRow(systemSection,containerColor=Color.Transparent) {
+                                        listOf("Sistema & RSI","Biblioteca").forEachIndexed { i,label->Tab(systemSection==i,{ systemSection=i },text={ Text(label) }) }
+                                    }
+                                    if(systemSection==0) SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
+                                    else if(historical==null) ResearchLibrary(Modifier.weight(1f))
+                                    else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                }
                             }
                         }
                     }

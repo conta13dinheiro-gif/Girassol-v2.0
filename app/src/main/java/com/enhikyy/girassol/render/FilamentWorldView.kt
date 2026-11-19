@@ -69,6 +69,8 @@ internal class FilamentWorldView(
     private var publishedAt=0L
     private var tickDuration=500.0
     private var zoomSetting=1f
+    private var researchLight=0
+    private var researching=false
     private var sunEntity=0
     private var follow: String?=null
     private var panX=0f
@@ -150,6 +152,9 @@ internal class FilamentWorldView(
             .shadowOptions(LightManager.ShadowOptions().apply { mapSize=1024; shadowFar=90f; shadowCascades=2; normalBias=.4f; constantBias=.001f })
             .build(e,sunEntity)
         scene!!.addEntity(sunEntity)
+        researchLight=entity()
+        LightManager.Builder(LightManager.Type.POINT).color(.12f,.7f,1f).intensity(0f).falloff(5f).castShadows(false).build(e,researchLight)
+        scene!!.addEntity(researchLight)
         helper.renderCallback=object: UiHelper.RendererCallback {
             override fun onNativeWindowChanged(surface: Surface) { swapChain?.let { e.destroySwapChain(it) }; swapChain=e.createSwapChain(surface) }
             override fun onDetachedFromSurface() { swapChain?.let { e.destroySwapChain(it); e.flushAndWait() }; swapChain=null }
@@ -168,9 +173,10 @@ internal class FilamentWorldView(
             (r.minOf { it.z-it.depth/2 }+r.maxOf { it.z+it.depth/2 })/2)
         rig.reset()
     }
-    fun update(world: WorldState,running: Boolean,thermalStatus: Int,zoom: Float) {
+    fun update(world: WorldState,running: Boolean,thermalStatus: Int,zoom: Float,researchBusy: Boolean=false) {
         if(closed) return
         moving=running
+        researching=researchBusy
         if(thermal!=thermalStatus) {
             thermal=thermalStatus
             view?.ambientOcclusionOptions=com.google.android.filament.View.AmbientOcclusionOptions().apply { enabled=thermal<3; radius=.5f }
@@ -330,6 +336,10 @@ internal class FilamentWorldView(
             // Maintain night readability through the physical exposure, while retaining emissive contrast.
             camera?.setExposure(16f,1f/125f,100f+night*500f)
             val visualTime=(now%600000)/1000f
+            val research=lm.getInstance(researchLight)
+            val library=rooms?.firstOrNull { it.id=="library" }
+            if(library!=null) lm.setPosition(research,library.x.toFloat(),1.7f,library.z.toFloat())
+            lm.setIntensity(research,if(researching && library!=null) 1800f+1600f*(.5f+.5f*sin(visualTime*2.4f)) else 0f)
             city.forEach { it.instance.setParameter("time",visualTime); it.instance.setParameter("night",night); it.glass?.setParameter("time",visualTime); it.glass?.setParameter("night",night) }
             actors.forEach { (_,a)-> a.mesh?.let { mesh->
                 val progress=((now-a.changedAt)/tickDuration).coerceIn(0.0,1.0)

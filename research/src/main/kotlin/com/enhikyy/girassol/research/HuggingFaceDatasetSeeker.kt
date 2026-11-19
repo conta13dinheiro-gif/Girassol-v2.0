@@ -21,10 +21,12 @@ class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
         require(id.matches(Regex("[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?")) && id.split('/').none { it=="." || it==".." })
         return id.split('/')
     }
-    fun search(intent: DatasetResearchIntent): List<String> = listOf(intent.queryEn,intent.queryPt).flatMap { query->
-        parse(http.get(url(hub,listOf("api","datasets"),mapOf("search" to query,"sort" to "downloads","direction" to "-1","limit" to "20"))))
+    fun search(intent: DatasetResearchIntent): List<String> {
+        fun query(term: String): List<String> = parse(http.get(url(hub,listOf("api","datasets"),mapOf("search" to term,"sort" to "downloads","direction" to "-1","limit" to "20"))))
             .jsonArray.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
-    }.distinct()
+        val precise=listOf(intent.queryEn,intent.queryPt).flatMap(::query).distinct()
+        return if(precise.isNotEmpty()) precise else listOf(intent.queryEn.substringBefore(' '),intent.queryPt.substringBefore(' ')).distinct().flatMap(::query).distinct()
+    }
     fun inspect(id: String): DatasetRepo? {
         val obj=parse(http.get(url(hub,listOf("api","datasets")+repoParts(id)))).jsonObject
         if(obj["private"]?.jsonPrimitive?.booleanOrNull==true || obj["disabled"]?.jsonPrimitive?.booleanOrNull==true) return null
@@ -60,8 +62,22 @@ class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
             if(e.status !in setOf(404,422,501)) throw e
             endpoint=url(viewer,listOf("rows"),common); http.get(endpoint,false)
         }
-        val body=parse(document).jsonObject
-        val rows=(body["rows"] as? JsonArray).orEmpty().mapIndexedNotNull { position,element->
+        val rows=DatasetText.rows(document.bytes,offset)
+        if(rows.isEmpty()) throw IOException("Nenhum trecho textual completo encontrado neste lote")
+        return DatasetBatch(repo,subset,intent.queryHash,endpoint.toString(),document.fetchedAt,sha256(document.bytes),document.bytes,rows)
+    }
+    fun discover(intent: DatasetResearchIntent,installed: (DatasetKey)->Boolean): Pair<DatasetRepo,DatasetSplit>? = search(intent)
+        .mapNotNull { id->
+            try { inspect(id) } catch(e: ResearchPaused) { throw e } catch(_: HttpFailure) { null }
+        }.sortedByDescending { it.score }.firstNotNullOfOrNull { repo->
+            splits(repo.id).firstOrNull { !installed(DatasetKey(repo.id,it.config,it.split,intent.queryHash)) }?.let { repo to it }
+        }
+}
+
+object DatasetText {
+    fun rows(raw: ByteArray,offset: Long=0): List<DatasetRow> {
+        val body=Json.parseToJsonElement(raw.decodeToString()).jsonObject
+        return (body["rows"] as? JsonArray).orEmpty().mapIndexedNotNull { position,element->
             val wrapper=element.jsonObject
             if((wrapper["truncated_cells"] as? JsonArray)?.isNotEmpty()==true) return@mapIndexedNotNull null
             val row=wrapper["row"] as? JsonObject ?: return@mapIndexedNotNull null
@@ -71,11 +87,5 @@ class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
             if(text.length<16 || text.length>32768 || text.indexOf('\u0000')>=0) return@mapIndexedNotNull null
             DatasetRow(wrapper["row_idx"]?.jsonPrimitive?.longOrNull ?: (offset+position),text,sha256(text.toByteArray()))
         }
-        if(rows.isEmpty()) throw IOException("Nenhum trecho textual completo encontrado neste lote")
-        return DatasetBatch(repo,subset,intent.queryHash,endpoint.toString(),document.fetchedAt,sha256(document.bytes),document.bytes,rows)
     }
-    fun discover(intent: DatasetResearchIntent,installed: (DatasetKey)->Boolean): Pair<DatasetRepo,DatasetSplit>? = search(intent)
-        .mapNotNull(::inspect).sortedByDescending { it.score }.firstNotNullOfOrNull { repo->
-            splits(repo.id).firstOrNull { !installed(DatasetKey(repo.id,it.config,it.split,intent.queryHash)) }?.let { repo to it }
-        }
 }

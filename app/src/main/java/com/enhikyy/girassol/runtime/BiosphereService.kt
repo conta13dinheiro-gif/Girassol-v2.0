@@ -22,6 +22,7 @@ class BiosphereService : Service() {
     private lateinit var thread: HandlerThread
     private lateinit var handler: Handler
     private lateinit var store: WorldStore
+    private lateinit var research: com.enhikyy.girassol.research.ResearchCoordinator
     private var actor: WorldActor? = null
     private var running = false
     private var speed = 1
@@ -44,7 +45,7 @@ class BiosphereService : Service() {
                 val prior=actor!!.state
                 if(thermal>0 || memory.lowMemory) rsi.cancel()
                 val revision=rsi.take(prior)
-                val mind=com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions).copy(evolution=revision)
+                val mind=research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions).copy(evolution=revision))
                 val candidate=WorldActor(actor!!.checkpoint(),4)
                 val transition = candidate.step(proposal,mind)
                 if (proposal != null) neuralResult = if (transition.event.neural != null)
@@ -53,6 +54,8 @@ class BiosphereService : Service() {
                 store.commit(transition,prior)
                 actor=candidate
                 lastActions=transition.event.actions
+                research.committed(transition)
+                research.consider(candidate.checkpoint(),lastActions)
                 rsi.consider(prior,transition,thermal==0 && !memory.lowMemory)
                 BiosphereHub.mutable.value = BiosphereUi(world = transition.state, running = true, loading = false, neuralResult = neuralResult, speed = speed, thermal = thermal, availableMb = memory.availMem / 1048576, hash = transition.event.hash)
                 if (transition.state.tick % 30 == 0L) getSystemService(NotificationManager::class.java).notify(10, notification())
@@ -67,13 +70,21 @@ class BiosphereService : Service() {
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Girassol:Biosphere")
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("biosphere", "Biosfera em execução", NotificationManager.IMPORTANCE_LOW))
         store = WorldStore(this)
+        research=com.enhikyy.girassol.research.ResearchCoordinator(this,handler) { store }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(10, notification())
         handler.post {
             try {
                 if (actor == null) { actor = store.load()?.let { WorldActor(it,4) } ?: WorldActor(rulesVersion=4); lastActions=store.lastActions() }
+                research.refresh()
                 when (intent?.action) {
+                    ACTION_RESEARCH -> {
+                        research.cancel()
+                        val previous=com.enhikyy.girassol.research.ResearchHub.state.value.settings
+                        research.configure(previous.copy(automatic=intent.getBooleanExtra("automatic",previous.automatic),wifiOnly=intent.getBooleanExtra("wifi",previous.wifiOnly),quarantine=intent.getBooleanExtra("review",previous.quarantine),quotaMb=intent.getIntExtra("quota",previous.quotaMb)))
+                        if(prefs.getBoolean("running",true)) startLoop() else { stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId) }
+                    }
                     ACTION_LOAD -> {
                         if (prefs.getBoolean("running", true)) startLoop()
                         else {
@@ -83,7 +94,7 @@ class BiosphereService : Service() {
                     }
                     ACTION_FORK -> {
                         val wasRunning=running
-                        rsi.cancel(); running=false; pendingNeural=null; handler.removeCallbacks(tick)
+                        rsi.cancel(); research.cancel(); running=false; pendingNeural=null; handler.removeCallbacks(tick)
                         BiosphereHub.mutable.value=BiosphereHub.mutable.value.copy(running=false)
                         try {
                             val name=store.fork(intent.getLongExtra("moment",-1))
@@ -99,7 +110,7 @@ class BiosphereService : Service() {
                     }
                     ACTION_SWITCH -> {
                         val wasRunning=running
-                        rsi.cancel(); running=false; pendingNeural=null; handler.removeCallbacks(tick)
+                        rsi.cancel(); research.cancel(); running=false; pendingNeural=null; handler.removeCallbacks(tick)
                         BiosphereHub.mutable.value=BiosphereHub.mutable.value.copy(running=false)
                         try {
                             val name=checkNotNull(intent.getStringExtra("database"))
@@ -120,7 +131,7 @@ class BiosphereService : Service() {
                         } else { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
                     }
                     ACTION_PAUSE -> {
-                        pendingNeural = null; rsi.cancel()
+                        pendingNeural = null; rsi.cancel(); research.cancel()
                         running = false; handler.removeCallbacks(tick); prefs.edit().putBoolean("running", false).apply()
                         if (wakeLock.isHeld) wakeLock.release()
                         BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(world = actor!!.state, running = false, loading = false)
@@ -160,7 +171,7 @@ class BiosphereService : Service() {
         handler.removeCallbacks(tick); handler.post(tick)
     }
     private fun fail(e: Exception) {
-        running = false; rsi.cancel()
+        running = false; rsi.cancel(); research.cancel()
         if (wakeLock.isHeld) wakeLock.release()
         BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(running = false, loading = false, error = e.message ?: "Falha ao abrir a biosfera")
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
@@ -176,10 +187,17 @@ class BiosphereService : Service() {
     override fun onDestroy() {
         handler.removeCallbacks(tick)
         rsi.close()
+        research.close()
         handler.post { running = false; if (wakeLock.isHeld) wakeLock.release(); store.close(); thread.quitSafely() }
         super.onDestroy()
     }
     companion object {
+        const val ACTION_RESEARCH="com.enhikyy.girassol.RESEARCH"
+        fun researchSettings(context: Context,settings: com.enhikyy.girassol.research.ResearchSettings) {
+            require(settings.valid())
+            context.startForegroundService(Intent(context,BiosphereService::class.java).setAction(ACTION_RESEARCH)
+                .putExtra("automatic",settings.automatic).putExtra("wifi",settings.wifiOnly).putExtra("review",settings.quarantine).putExtra("quota",settings.quotaMb))
+        }
         const val ACTION_PROPOSAL = "com.enhikyy.girassol.PROPOSAL"
         fun propose(context: Context, proposal: NeuralProposal) {
             context.startForegroundService(Intent(context, BiosphereService::class.java).setAction(ACTION_PROPOSAL)

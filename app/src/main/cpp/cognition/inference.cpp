@@ -30,12 +30,18 @@ constexpr const char* grammar = R"GBNF(root ::= "{" ws "\"activity\"" ws ":" ws 
 activity ::= "\"WATER\"" | "\"COFFEE\"" | "\"EAT\"" | "\"SLEEP\"" | "\"TALK\"" | "\"WRITE\"" | "\"STUDY\"" | "\"BUILD\""
 ws ::= [ \t\n\r]{0,4}
 )GBNF";
+constexpr const char* review_grammar = R"GBNF(root ::= "{" ws "\"verdict\"" ws ":" ws verdict ws "," ws "\"confidence\"" ws ":" ws confidence ws "}" ws
+verdict ::= "\"APPROVE\"" | "\"REJECT\"" | "\"UNCERTAIN\""
+confidence ::= "100" | [1-9] [0-9]? | "0"
+ws ::= [ \t\n\r]{0,4}
+)GBNF";
 }
 void cancel_through(std::int64_t request) noexcept {
     auto previous = cancelled.load(std::memory_order_relaxed);
     while (previous < request && !cancelled.compare_exchange_weak(previous, request, std::memory_order_relaxed)) {}
 }
-std::string infer(const std::string& path, const std::string& prompt, std::int64_t id, int timeout_ms, const std::string& adapter) {
+std::string infer(const std::string& path, const std::string& prompt, std::int64_t id, int timeout_ms, const std::string& adapter, Task task) {
+    const bool reviewing = task == Task::KnowledgeReview;
     if (id <= 0 || prompt.empty() || prompt.size() > 4096 || prompt.find('\0') != std::string::npos ||
         timeout_ms < 1 || timeout_ms > 30000) throw std::runtime_error("Parâmetros de inferência inválidos");
     Request request{id, Clock::now() + std::chrono::milliseconds(timeout_ms)};
@@ -65,12 +71,12 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
         else throw std::runtime_error("Template de conversa não suportado");
     }
     const int count = -llama_tokenize(vocab, formatted.data(), static_cast<int>(formatted.size()), nullptr, 0, true, true);
-    if (count <= 0 || count > 416) throw std::runtime_error("Contexto excede 416 tokens");
+    if (count <= 0 || count > (reviewing ? 1792 : 416)) throw std::runtime_error("Contexto excede a janela desta tarefa");
     std::vector<llama_token> tokens(count);
     if (llama_tokenize(vocab, formatted.data(), static_cast<int>(formatted.size()), tokens.data(), count, true, true) != count)
         throw std::runtime_error("Falha ao tokenizar contexto");
     auto context_params = llama_context_default_params();
-    context_params.n_ctx = 512; context_params.n_batch = 128; context_params.n_ubatch = 128;
+    context_params.n_ctx = reviewing ? 2048 : 512; context_params.n_batch = 128; context_params.n_ubatch = 128;
     context_params.n_threads = 2; context_params.n_threads_batch = 2;
     context_params.offload_kqv = false;
     context_params.abort_callback = abort_decode; context_params.abort_callback_data = &request;
@@ -87,7 +93,7 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
     }
     auto sampler_params = llama_sampler_chain_default_params();
     std::unique_ptr<llama_sampler, decltype(&llama_sampler_free)> sampler(llama_sampler_chain_init(sampler_params), llama_sampler_free);
-    auto* constrained = llama_sampler_init_grammar(vocab, grammar, "root");
+    auto* constrained = llama_sampler_init_grammar(vocab, reviewing ? review_grammar : grammar, "root");
     if (!sampler || !constrained) { if (constrained) llama_sampler_free(constrained); throw std::runtime_error("Falha na gramática de ações"); }
     llama_sampler_chain_add(sampler.get(), constrained);
     llama_sampler_chain_add(sampler.get(), llama_sampler_init_greedy());

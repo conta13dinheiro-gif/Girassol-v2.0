@@ -28,13 +28,14 @@ import kotlin.math.*
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CognitiveFrame(val sourceTick: Long,val sourceHash: String,
     val minds: Map<String,MindState>,val decisions: Map<String,Activity>,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val lesson: KnowledgeLesson? = null) {
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
         exposure=m.exposure.toList(),behaviors=m.behaviors.map { it.toList() },memory=m.memory.snapshot()) },decisions=decisions.toMap(),evolution=evolution?.snapshot())
     fun applicable(world: WorldState): Boolean {
         val ids=world.agents.map { it.id }.toSet()
         return sourceTick==world.tick && sourceHash==Canonical.hash(Canonical.state(world)) && minds.keys==ids &&
-            (evolution==null || evolution.applicable(world)) && decisions.keys==ids && minds.values.all { it.valid(world.tick) }
+            (evolution==null || evolution.applicable(world)) && (lesson==null || lesson.applicable(world)) && decisions.keys==ids && minds.values.all { it.valid(world.tick) }
     }
 }

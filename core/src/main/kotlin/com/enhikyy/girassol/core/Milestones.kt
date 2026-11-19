@@ -8,6 +8,9 @@ object Milestones {
         val out=mutableListOf<MilestoneCause>()
         if(previous==null) out+=MilestoneCause("origin","Primeiros caminhos","Primeiro estado registrado nesta linha do tempo.",w.agents.map { it.id })
         if(previous!=null) {
+            w.knowledge.filter { lesson->previous.knowledge.none { it.id==lesson.id } }.forEach { lesson->
+                out+=MilestoneCause("research","Uma descoberta compartilhada","Conhecimento de ${lesson.domain.lowercase()} incorporado após revisão cruzada e replay sem regressão.",listOf(lesson.researcher,lesson.verifier))
+            }
             if(w.evolution!=null && w.evolution!=previous.evolution) out+=MilestoneCause("evolution","Uma política comprovada","A política superou a referência nas janelas de treino e validação de ${w.evolution.horizon} ciclos, sem regressão nas quatro métricas.",w.agents.map { it.id })
             val built=w.rooms.filter { r->previous.rooms.none { it.id==r.id } }
             if(built.isNotEmpty()) out+=MilestoneCause("architecture","A cidade se expande",built.joinToString { it.name }+" construído com recursos do mercado.",transition.event.actions.filter { it.activity==Activity.BUILD && it.outcome=="OK" }.map { it.agentId })
