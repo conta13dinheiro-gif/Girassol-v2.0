@@ -7,6 +7,7 @@ android {
     ndkVersion = "27.0.12077973"
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     defaultConfig {
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         applicationId = "com.enhikyy.girassol"
         minSdk = 33
         targetSdk = 35
@@ -18,7 +19,7 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "x86_64")
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
         }
     }
