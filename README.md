@@ -82,6 +82,10 @@ O LoRA é aplicado com `llama_adapter_lora_init`/`llama_set_adapter_lora`, usand
 
 Teste GGUF host: `scripts/test-cognition.sh /caminho/modelo.gguf`. O smoke realizado usa SmolLM2-135M-Instruct Q4_K_M, revisão bartowski09816acd5d99df7be770d85ea30822623dab342c, SHA2562e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d. Cards bartowski e HuggingFaceTB declaram Apache2.0; os pesos não são redistribuídos.
 
+## Shizuku opcional e telemetria somente de leitura
+
+A área Sistema permite pedir autorização explícita e conectar um UserService Shizuku. Quando o serviço está disponível, ele lê `/proc/meminfo`, a primeira zona térmica e estatísticas de zRAM e informa o UID do processo remoto. O contrato AIDL não expõe shell, execução de comandos, escrita em sysfs, ajuste de prioridades ou acesso arbitrário ao armazenamento. Sem Shizuku, sem permissão ou após a morte do Binder, a simulação permanece no processo normal com telemetria local. A pessoa precisa iniciar Shizuku por ADB/depuração sem fio e autorizar o app; isto não contorna root nem garante execução após reinicializações.
+
 ## Formato binário .grs e quantização adaptativa
 
 O núcleo agora oferece `GirassolRecordCodec` versão1: matrizes com dimensões verificadas, header little-endian, SHA-256 sobre metadados e payload, Float32, INT8 simétrico com delta-varint zig-zag e vetores ternários {-1,0,+1} compactados em2bits. `AdaptiveQuantizerEngine` compara os três formatos e escolhe o menor que respeita o RMSE solicitado. O formato tem testes de round-trip e rejeição de corrupção. Ainda não há migração automática do SQLite/HNSW antigo para .grs nem compressão Zstd; o codec não reescreve os registros históricos.
