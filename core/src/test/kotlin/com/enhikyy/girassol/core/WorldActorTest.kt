@@ -173,6 +173,11 @@ class WorldActorTest {
             rooms = rooms + next
         }
         assertEquals(262, rooms.size)
+        val districtNames = rooms.map { it.name.substringBeforeLast(' ') }.toSet()
+        assertTrue(districtNames.containsAll(setOf(
+            "Moradia modular", "Estufa agrícola", "Reciclagem e reúso",
+            "Oficina de energia", "Biblioteca de pesquisa", "Ágora cívica"
+        )))
     }
 
     @Test fun reciprocalTrustCreatesDeterministicDescendantAndReplaysGenealogy() {
