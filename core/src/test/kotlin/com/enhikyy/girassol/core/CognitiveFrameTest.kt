@@ -69,7 +69,7 @@ class CognitiveFrameTest {
                 reflectedTick=10
             )
         )
-        val inherited=MindState.inherit(world,child,first,second)
+        val inherited=MindState.inherit(world,child,one.id,two.id,first,second)
         assertTrue(inherited.valid(world.tick))
         assertEquals(child.genome.curiosity.express(),inherited.personality[0],0.0)
         assertEquals(child.genome.sociability.express(),inherited.personality[2],0.0)
