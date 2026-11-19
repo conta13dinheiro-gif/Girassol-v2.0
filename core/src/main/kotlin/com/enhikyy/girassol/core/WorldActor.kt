@@ -19,7 +19,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) && it.applicable(base) }
         val input=cognition?.takeIf { rulesVersion>=4 && it.applicable(state) }
         return base.agents.associate { a->a.id to (if(a.id==admitted?.agentId) admitted.activity
-            else if(input!=null && a.acceptsNeuralActivity()) input.decisions.getValue(a.id) else choose(a,base.tick,base)) }
+            else if(input!=null && a.acceptsNeuralActivity()) { val proposed=input.decisions.getValue(a.id); if(rulesVersion>=6) UtilityGoapPlanner.choose(base,a,proposed) else proposed } else choose(a,base.tick,base)) }
     }
 
     @Synchronized fun step(neural: NeuralProposal? = null, cognition: CognitiveFrame? = null, spatial: SpatialFrame? = null): Transition {
