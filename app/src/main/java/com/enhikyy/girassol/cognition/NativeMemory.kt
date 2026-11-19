@@ -23,7 +23,7 @@ internal object NativeMemory {
         return List(found) { i ->
             val episode=bank.episodes[output.getInt(i*8)]
             val similarity=output.getFloat(i*8+4).coerceIn(-1f,1f)
-            Hit(episode,((similarity+1f)*.5f).coerceIn(0f,1f),similarity)
+            Hit(episode,MemoryBank.cosineWeight(similarity.toDouble()).toFloat(),similarity)
         }.sortedWith(
             compareByDescending<Hit> { hit -> bank.utilityAdjustedScore(hit.episode.eventId, hit.similarity.toDouble()) }
                 .thenByDescending { it.episode.importance }
