@@ -15,9 +15,11 @@ import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedInputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.FilterInputStream
+import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.Executors
@@ -47,7 +49,7 @@ object NeuralSpeechEngine {
     private const val MAX_TEXT_CHARS = 240
     private const val MAX_AUDIO_SECONDS = 90
     private val worker = Executors.newSingleThreadExecutor { runnable ->
-        Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO); runnable.run() }, "Girassol-Kokoro-TTS")
+        Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND); runnable.run() }, "Girassol-Kokoro-TTS")
     }
     private val stateMutable = MutableStateFlow(NeuralSpeechState())
     val state = stateMutable.asStateFlow()
@@ -56,6 +58,7 @@ object NeuralSpeechEngine {
     @Volatile private var synthesis: OfflineTts? = null
     @Volatile private var currentTrack: AudioTrack? = null
     @Volatile private var currentTask: Future<*>? = null
+    private val engineLock = Any()
     @Volatile private var requestedVoice = 42
 
     private val root: File
@@ -86,19 +89,21 @@ object NeuralSpeechEngine {
      */
     fun importKokoroBundle(context: Context, uri: Uri) {
         initialize(context)
-        require(context.contentResolver.openInputStream(uri) != null) { "Não foi possível abrir o pacote de voz" }
         stop()
         stateMutable.value = stateMutable.value.copy(busy = true, message = "Validando pacote Kokoro PT-BR…")
         staging.deleteRecursively()
         require(staging.mkdirs()) { "Não foi possível criar a área temporária da voz" }
         try {
             val seen = HashSet<String>()
+            val hashes = ArrayList<String>()
             var entryCount = 0
             var expanded = 0L
             var espeakEntries = 0
             var modelBytes = 0L
-            ZipInputStream(BufferedInputStream(context.contentResolver.openInputStream(uri)
-                ?: throw IllegalArgumentException("Arquivo de voz indisponível"))).use { zip ->
+            var voiceBytes = 0L
+            val rawInput = context.contentResolver.openInputStream(uri)
+                ?: throw IllegalArgumentException("Não foi possível abrir o pacote de voz")
+            ZipInputStream(BufferedInputStream(BoundedInputStream(rawInput, ARCHIVE_LIMIT))).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     entryCount++
@@ -113,8 +118,7 @@ object NeuralSpeechEngine {
                         basename == "tokens.txt" -> "tokens.txt"
                         espeakIndex >= 0 && segments.size > espeakIndex + 1 ->
                             "espeak-ng-data/" + segments.drop(espeakIndex + 1).joinToString("/")
-                        basename.equals("LICENSE", ignoreCase = true) ||
-                            basename.equals("README.md", ignoreCase = true) -> basename.lowercase()
+                        basename.equals("LICENSE", ignoreCase = true) -> "LICENSE"
                         else -> null
                     }
                     val output = if (relative == null || entry.isDirectory) null else {
@@ -124,55 +128,60 @@ object NeuralSpeechEngine {
                             target.parentFile?.let { require(it.exists() || it.mkdirs()) }
                         }
                     }
-                    val fileBuffer = if (output != null) ByteArrayOutputStream() else null
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        val read = zip.read(buffer)
-                        if (read < 0) break
-                        expanded = Math.addExact(expanded, read.toLong())
-                        require(expanded <= TOTAL_LIMIT) { "Conteúdo descompactado excede 410 MiB" }
-                        if (output != null) {
-                            fileBuffer!!.write(buffer, 0, read)
-                            if (relative == "model.onnx") {
-                                modelBytes = Math.addExact(modelBytes, read.toLong())
-                                require(modelBytes <= MODEL_LIMIT) { "Modelo ONNX excede 380 MiB" }
+                    val digest = if (output != null) MessageDigest.getInstance("SHA-256") else null
+                    FileOutputStreamOrNull(output).use { destination ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val read = zip.read(buffer)
+                            if (read < 0) break
+                            expanded = Math.addExact(expanded, read.toLong())
+                            require(expanded <= TOTAL_LIMIT) { "Conteúdo descompactado excede 410 MiB" }
+                            if (output != null) {
+                                when (relative) {
+                                    "model.onnx" -> {
+                                        modelBytes = Math.addExact(modelBytes, read.toLong())
+                                        require(modelBytes <= MODEL_LIMIT) { "Modelo ONNX excede 380 MiB" }
+                                    }
+                                    "voices.bin" -> {
+                                        voiceBytes = Math.addExact(voiceBytes, read.toLong())
+                                        require(voiceBytes <= 64L * 1024L * 1024L) { "voices.bin excede 64 MiB" }
+                                    }
+                                }
+                                destination!!.write(buffer, 0, read)
+                                digest!!.update(buffer, 0, read)
                             }
                         }
                     }
-                    if (output != null) {
-                        val bytes = fileBuffer!!.toByteArray()
-                        output.writeBytes(bytes)
-                        if (relative!!.startsWith("espeak-ng-data/")) espeakEntries++
-                        writeHashLine(relative, bytes)
+                    if (relative?.startsWith("espeak-ng-data/") == true && output != null) {
+                        espeakEntries++
                     }
+                    if (output != null) hashes += "${digest!!.digest().joinToString("") { "%02x".format(it) }}  $relative"
                     zip.closeEntry()
                 }
             }
-            require(File(staging, "model.onnx").length() in (100L * 1024L * 1024L)..MODEL_LIMIT) {
+            require(modelBytes in (100L * 1024L * 1024L)..MODEL_LIMIT) {
                 "model.onnx não corresponde ao pacote Kokoro-82M esperado"
             }
-            require(File(staging, "voices.bin").length() >= 1024L * 1024L) { "voices.bin ausente ou incompleto" }
-            require(File(staging, "tokens.txt").length() in 100L..(1024L * 1024L)) { "tokens.txt ausente ou inválido" }
+            require(voiceBytes >= 1024L * 1024L) { "voices.bin ausente ou incompleto" }
+            require(File(staging, "tokens.txt").length() in 100L..(1024L * 1024L)) {
+                "tokens.txt ausente ou inválido"
+            }
             require(espeakEntries >= 20 && File(staging, "espeak-ng-data").isDirectory) {
                 "Dados de fonemização espeak-ng-data ausentes"
             }
-            File(staging, "bundle.sha256").writeText(
-                staging.walkTopDown().filter { it.isFile && it.name != "bundle.sha256" }
-                    .sortedBy { it.relativeTo(staging).invariantSeparatorsPath }
-                    .joinToString("\n") { file ->
-                        "${sha256(file.readBytes())}  ${file.relativeTo(staging).invariantSeparatorsPath}"
-                    } + "\n"
-            )
-            synthesis?.free()
-            synthesis = null
-            val backup = File(staging.parentFile, ".kokoro-pt-br.old")
-            backup.deleteRecursively()
-            if (root.exists()) require(root.renameTo(backup)) { "Não foi possível substituir a voz anterior" }
-            if (!staging.renameTo(root)) {
-                if (backup.exists()) backup.renameTo(root)
-                throw IllegalStateException("Não foi possível finalizar a instalação do modelo")
+            File(staging, "bundle.sha256").writeText(hashes.sorted().joinToString("\n", postfix = "\n"))
+            synchronized(engineLock) {
+                synthesis?.free()
+                synthesis = null
+                val backup = File(staging.parentFile, ".kokoro-pt-br.old")
+                backup.deleteRecursively()
+                if (root.exists()) require(root.renameTo(backup)) { "Não foi possível substituir a voz anterior" }
+                if (!staging.renameTo(root)) {
+                    if (backup.exists()) backup.renameTo(root)
+                    throw IllegalStateException("Não foi possível finalizar a instalação do modelo")
+                }
+                backup.deleteRecursively()
             }
-            backup.deleteRecursively()
             stateMutable.value = stateMutable.value.copy(
                 installed = true, busy = false, playing = false,
                 message = "Kokoro PT-BR importado e verificado por hash"
@@ -186,6 +195,7 @@ object NeuralSpeechEngine {
             throw error
         }
     }
+
 
     fun speak(text: String, voiceId: Int = requestedVoice, pan: Float = 0f, speed: Float = 1f) {
         initialize(checkNotNull(application))
@@ -209,8 +219,10 @@ object NeuralSpeechEngine {
                 check(!memory.lowMemory && memory.availMem >= 1_200L * 1024L * 1024L) {
                     "RAM livre insuficiente para carregar Kokoro-82M com segurança"
                 }
-                val engine = synthesis ?: createEngine().also { synthesis = it }
-                val audio = engine.generate(text, sid = voiceId, speed = speed)
+                val audio = synchronized(engineLock) {
+                    val engine = synthesis ?: createEngine().also { synthesis = it }
+                    engine.generate(text, sid = voiceId, speed = speed)
+                }
                 check(!Thread.currentThread().isInterrupted)
                 val sampleRate = audio.sampleRate
                 require(sampleRate in 8000..96000 && audio.samples.isNotEmpty()) { "Saída de áudio Kokoro inválida" }
@@ -251,12 +263,23 @@ object NeuralSpeechEngine {
                         stereo[i * 2 + 1] = mono * rightGain
                     }
                     val written = track.write(stereo, 0, frames * 2, AudioTrack.WRITE_BLOCKING)
-                    check(written > 0) { "A reprodução de fala foi interrompida" }
+                    check(written > 0 && written % 2 == 0) { "A reprodução de fala foi interrompida" }
                     offset += written / 2
                 }
                 if (!Thread.currentThread().isInterrupted) {
-                    track.stop()
-                    stateMutable.value = stateMutable.value.copy(playing = false, message = "Fala concluída")
+                    val deadline = android.os.SystemClock.elapsedRealtime() + MAX_AUDIO_SECONDS * 1000L + 5000L
+                    while (track.playbackHeadPosition.toLong() < audio.samples.size &&
+                        !Thread.currentThread().isInterrupted &&
+                        android.os.SystemClock.elapsedRealtime() < deadline) {
+                        Thread.sleep(15)
+                    }
+                    check(track.playbackHeadPosition.toLong() >= audio.samples.size || Thread.currentThread().isInterrupted) {
+                        "A saída de áudio não avançou até o fim"
+                    }
+                    if (!Thread.currentThread().isInterrupted) {
+                        track.stop()
+                        stateMutable.value = stateMutable.value.copy(playing = false, message = "Fala concluída")
+                    }
                 }
                 track.release()
                 currentTrack = null
@@ -281,9 +304,11 @@ object NeuralSpeechEngine {
 
     fun remove() {
         stop()
-        synthesis?.free()
-        synthesis = null
-        root.deleteRecursively()
+        synchronized(engineLock) {
+            synthesis?.free()
+            synthesis = null
+            root.deleteRecursively()
+        }
         stateMutable.value = stateMutable.value.copy(
             installed = false, busy = false, playing = false,
             message = "Modelo de voz removido do armazenamento privado"
@@ -328,11 +353,37 @@ object NeuralSpeechEngine {
         return parts.joinToString("/")
     }
 
-    private fun writeHashLine(relative: String, bytes: ByteArray) {
-        val hashFile = File(staging, ".hashes.tmp")
-        hashFile.appendText("${sha256(bytes)}  $relative\n")
+    private fun normalizeZipPath(path: String): String {
+        val clean = path.replace('\\\\', '/')
+        require(clean.isNotBlank() && !clean.startsWith('/') && !clean.contains(':'))
+        val parts = clean.split('/').filter { it.isNotEmpty() && it != "." }
+        require(parts.isNotEmpty() && parts.none { it == ".." } && parts.size <= 12)
+        return parts.joinToString("/")
     }
 
-    private fun sha256(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private class BoundedInputStream(input: InputStream, private val maximum: Long) : FilterInputStream(input) {
+        private var consumed = 0L
+        @Throws(IOException::class)
+        override fun read(): Int {
+            val value = super.read()
+            if (value >= 0) count(1)
+            return value
+        }
+        @Throws(IOException::class)
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val count = super.read(buffer, offset, length)
+            if (count > 0) count(count)
+            return count
+        }
+        private fun count(bytes: Int) {
+            consumed = Math.addExact(consumed, bytes.toLong())
+            if (consumed > maximum) throw IOException("Arquivo ZIP comprimido excede 380 MiB")
+        }
+    }
+
+    private class FileOutputStreamOrNull(file: File?) : AutoCloseable {
+        private val stream = file?.let(::FileOutputStream)
+        fun write(bytes: ByteArray, offset: Int, length: Int) { stream?.write(bytes, offset, length) }
+        override fun close() { stream?.close() }
+    }
 }
