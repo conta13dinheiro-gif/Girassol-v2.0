@@ -33,7 +33,7 @@ Essas entregas não são equivalentes à implementação integral de todos os bl
 
 ### Integrações incrementais presentes nesta linha de trabalho
 
-- **H2 — Memória/imunidade epistêmica:** seleção prioritária de episódios, retenção limitada a 512 episódios por habitante durante consolidação/overflow e operador de opinião subjetiva com deduplicação por hash do evento-fonte. O fusionador está disponível como motor tipado; a persistência de crenças por domínio e a propagação social completa ainda faltam.
+- **H2 — Memória/imunidade epistêmica:** seleção prioritária de episódios, retenção limitada a 512 episódios por habitante durante consolidação/overflow e operador de opinião subjetiva com deduplicação por hash do evento-fonte. Nesta atualização, a recuperação nativa passou a ter duas fases (cosseno/HNSW + reordenação por Q de MemRL), com crédito atrasado somente para episódios recuperados e persistência no evento cognitivo. O fusionador está disponível como motor tipado; ledger de crenças por domínio e propagação social completa ainda faltam.
 - **H3 — Alostase:** classes térmicas, custo de deliberação dependente de calor/energia, gate para GGUF local e redução da contribuição da política neural sob carga térmica. Não há Tsetlin aprendido persistente ainda.
 - **H4 — Anti-colapso:** entropia normalizada da distribuição de ações e bônus de novidade para ações raras quando a população se homogeneíza. É um proxy comportamental, não mede entropia lexical nem divergência Jensen–Shannon entre dialetos.
 
@@ -41,7 +41,7 @@ Essas entregas não são equivalentes à implementação integral de todos os bl
 
 | Módulo original | Situação real |
 |---|---|
-| Quatro camadas de memória, nós associativos e Q-learning MemRL completo | Parcial: memória episódica/reflexões/procedimentos existem; grafo semântico completo e acesso ACT-R por nó não. |
+| Quatro camadas de memória, nós associativos e Q-learning MemRL completo | Parcial: episódios/reflexões/procedimentos, consolidação ACT-R-style e Q de MemRL simplificado para reordenar memórias recuperadas estão integrados; grafo associativo completo, camadas semânticas/temporais/causais e ACT-R por nó ainda faltam. |
 | Crenças subjetivas por domínio, desconto de confiança entre anéis de Dunbar e fusão persistida | Parcial: motor de opinião/deduplicação existe; ledger e propagação na rede social faltam. |
 | BKT pedagógico e cliodinâmica/instituições de Ostrom/Turchin | Pendente. |
 | PIANO, active inference/expected free energy e calibração Brier | Parcial/pendente: decisões neurais e shadow replay existem; PIANO e gate Brier não. |
@@ -75,3 +75,9 @@ Essas entregas não são equivalentes à implementação integral de todos os bl
 6. Avançar para áudio espacial/diálogos, parsers PDF/áudio/Parquet e backends nativos somente com fallback e teste por ABI.
 
 **Critério de conclusão:** um módulo só deve ser marcado como concluído quando código, integração ao fluxo de estado/persistência, testes de regressão e evidência de build estiverem presentes.
+
+## Incremento MemRL desta atualização
+
+A implementação compacta está em `MemoryBank.kt`, `NativeMemory.kt` e `NativeMind.kt`. A utilidade Q é atualizada somente depois de um resultado de ação observado e somente para os IDs recuperados antes desse resultado. A consulta nativa mantém os candidatos por similaridade; Q altera a ordem dentro desse conjunto, sem substituir o filtro de relevância. Os campos novos vazios são omitidos na serialização para preservar eventos legados.
+
+O algoritmo é inspirado em [MemRL](https://arxiv.org/abs/2601.03192), mas usa retorno imediato suavizado (`alpha=0.2)) e recompensa do domínio simulado. Não implementa o retorno Monte Carlo, sumarização de trajetória por LLM, ou benchmarks publicados pelo artigo. Ver também `docs/pesquisa-externa-2026-11-19.md`.
