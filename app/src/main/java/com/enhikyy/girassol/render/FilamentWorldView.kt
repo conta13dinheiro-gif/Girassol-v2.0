@@ -15,6 +15,8 @@ import com.enhikyy.girassol.core.Activity
 import com.enhikyy.girassol.core.Citizen
 import com.enhikyy.girassol.core.Room
 import com.enhikyy.girassol.core.WorldState
+import com.enhikyy.girassol.core.SpatialPoint
+import com.enhikyy.girassol.core.SpatialPose
 import com.google.android.filament.*
 import com.google.android.filament.android.UiHelper
 import java.util.concurrent.Executors
@@ -40,6 +42,7 @@ internal class FilamentWorldView(
     private var material: Material?=null
     private var glassMaterial: Material?=null
     private var film: FilmPass?=null
+    private var contacts: ContactShadows?=null
     private var indirect: IndirectLight?=null
     private var skybox: Skybox?=null
     private var skyTexture: Texture?=null
@@ -84,7 +87,9 @@ internal class FilamentWorldView(
     private data class ActorVisual(val color: Long,var role: Int,var x: Double,var z: Double,
         var fromX: Double=x,var fromZ: Double=z,var targetX: Double=x,var targetZ: Double=z,
         var changedAt: Long=0,var walking: Boolean=false,var yaw: Double=0.0,var targetYaw: Double=0.0,
-        var activity: Activity=Activity.TALK,var acting: Boolean=false,var mesh: GpuMesh?=null,var revision: Int=0)
+        var activity: Activity=Activity.TALK,var acting: Boolean=false,var mesh: GpuMesh?=null,var revision: Int=0,
+        var y: Double=0.0,var ground: Double=0.0,var route: List<SpatialPoint> = emptyList(),
+        var stride: Double=0.0,var lean: Double=0.0)
     private val scaleDetector=ScaleGestureDetector(context,object: ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(d: ScaleGestureDetector): Boolean { rig.scale(d.scaleFactor.toDouble()); return true }
     })
@@ -142,6 +147,7 @@ internal class FilamentWorldView(
         val glassBytes=context.assets.open("materials/glass.filamat").use { it.readBytes() }
         glassMaterial=Material.Builder().payload(java.nio.ByteBuffer.allocateDirect(glassBytes.size).put(glassBytes).apply { flip() },glassBytes.size).build(e)
         film=FilmPass(e,context)
+        contacts=ContactShadows(e,checkNotNull(scene),context)
         grading=ColorGrading.Builder().toneMapper(ToneMapper.ACES()).build(e)
         view!!.colorGrading=grading
         indirect=IndirectLight.Builder().irradiance(1,floatArrayOf(.23f,.3f,.4f)).intensity(26000f).build(e)
@@ -206,6 +212,7 @@ internal class FilamentWorldView(
             }
         }
         val ids=world.agents.map { it.id }.toSet()
+        contacts?.retain(ids.toSet())
         actors.keys.filter { it !in ids }.forEach { actors.remove(it)?.mesh?.let(::destroyMesh) }
         val now=SystemClock.uptimeMillis()
         if(world.tick!=lastTick) {
@@ -227,7 +234,7 @@ internal class FilamentWorldView(
                     } catch(e: Exception) { main.post { if(!closed) fail(e.message?:"Falha no habitante") } }
                 }
             }
-            if(world.tick!=lastTick) setTarget(a,c,now)
+            if(world.tick!=lastTick) setTarget(a,c,world.spatial[c.id],now)
         }
         lastTick=world.tick
         if(zoom!=zoomSetting) { rig.scale((zoom/zoomSetting).toDouble()); zoomSetting=zoom }
@@ -266,8 +273,16 @@ internal class FilamentWorldView(
         upload(skyTexture!!,0,data.sky); upload(diffuseTexture!!,0,data.irradiance)
         data.reflections.forEachIndexed { level,cube->upload(reflectionTexture!!,level,cube) }
     }
-    private fun setTarget(a: ActorVisual,c: Citizen,now: Long) {
+    private fun setTarget(a: ActorVisual,c: Citizen,pose: SpatialPose?,now: Long) {
+        val initial=a.changedAt==0L
         a.fromX=a.x; a.fromZ=a.z; a.targetX=c.x; a.targetZ=c.z; a.changedAt=now
+        if(pose!=null) {
+            a.route=pose.route;a.ground=pose.surface
+            if(initial || pose.corrected) { a.x=pose.route.first().x;a.z=pose.route.first().z;a.y=pose.route.first().y }
+        } else {
+            val floor=if(rooms.orEmpty().any { abs(c.x-it.x)<=it.width/2 && abs(c.z-it.z)<=it.depth/2 }) .175 else 0.0
+            a.ground=floor;a.route=listOf(SpatialPoint(a.x,a.y,a.z),SpatialPoint(c.x,floor,c.z))
+        }
         val dx=c.x-a.x; val dz=c.z-a.z
         a.walking=hypot(dx,dz)>.001
         if(a.walking) a.targetYaw=atan2(dx,dz)
@@ -288,7 +303,7 @@ internal class FilamentWorldView(
         val id=entity(); val mesh=GpuMesh(id,vb,ib,instance,glass).also { meshes+=it }
         glass?.setParameter("time",0f); glass?.setParameter("night",0f)
         instance.setParameter("time",0f); instance.setParameter("night",0f); instance.setParameter("gait",0f)
-        instance.setParameter("activity",0f); instance.setParameter("phase",0f)
+        instance.setParameter("activity",0f); instance.setParameter("phase",0f);instance.setParameter("lean",0f)
         vb.setBufferAt(e,0,data.vertices); ib.setBuffer(e,data.indices)
         val lo=FloatArray(3) { Float.POSITIVE_INFINITY }; val hi=FloatArray(3) { Float.NEGATIVE_INFINITY }
         repeat(data.vertexCount) { i-> repeat(3) { axis->val x=data.vertices.getFloat(i*32+axis*4); lo[axis]=min(lo[axis],x); hi[axis]=max(hi[axis],x) } }
@@ -341,18 +356,28 @@ internal class FilamentWorldView(
             if(library!=null) lm.setPosition(research,library.x.toFloat(),1.7f,library.z.toFloat())
             lm.setIntensity(research,if(researching && library!=null) 1800f+1600f*(.5f+.5f*sin(visualTime*2.4f)) else 0f)
             city.forEach { it.instance.setParameter("time",visualTime); it.instance.setParameter("night",night); it.glass?.setParameter("time",visualTime); it.glass?.setParameter("night",night) }
-            actors.forEach { (_,a)-> a.mesh?.let { mesh->
+            actors.forEach { (id,a)-> a.mesh?.let { mesh->
                 val progress=((now-a.changedAt)/tickDuration).coerceIn(0.0,1.0)
-                val smooth=progress*progress*(3-2*progress)
-                a.x=a.fromX+(a.targetX-a.fromX)*smooth; a.z=a.fromZ+(a.targetZ-a.fromZ)*smooth
-                a.yaw+=atan2(sin(a.targetYaw-a.yaw),cos(a.targetYaw-a.yaw))*(1-exp(-12*dt))
-                val walking=moving && a.walking && progress<1
+                val previousX=a.x;val previousZ=a.z
+                // Follow the recorded fixed-step polyline, never a chord through interior corners.
+                if(a.route.isNotEmpty()) {
+                    val sample=progress*(a.route.size-1);val index=sample.toInt().coerceAtMost(a.route.lastIndex)
+                    val first=a.route[index];val second=a.route[(index+1).coerceAtMost(a.route.lastIndex)];val f=sample-index
+                    a.x=first.x+(second.x-first.x)*f;a.y=first.y+(second.y-first.y)*f;a.z=first.z+(second.z-first.z)*f
+                    if(hypot(second.x-first.x,second.z-first.z)>1e-6) a.targetYaw=atan2(second.x-first.x,second.z-first.z)
+                }
+                val traveled=hypot(a.x-previousX,a.z-previousZ)
+                val walking=moving && traveled>1e-6 && progress<1
+                if(walking) a.stride=(a.stride+traveled*(2*PI/.68))%(2*PI)
+                val turn=atan2(sin(a.targetYaw-a.yaw),cos(a.targetYaw-a.yaw))
+                a.yaw+=turn*(1-exp(-12*dt));a.lean+=((if(walking) turn.coerceIn(-.12,.12) else 0.0)-a.lean)*(1-exp(-10*dt))
                 mesh.instance.setParameter("time",visualTime); mesh.instance.setParameter("night",night)
-                mesh.instance.setParameter("gait",if(walking) 1f else 0f)
+                mesh.instance.setParameter("phase",a.stride.toFloat());mesh.instance.setParameter("lean",a.lean.toFloat())
+                mesh.instance.setParameter("gait",if(walking) (traveled/dt/.9).coerceIn(0.0,1.0).toFloat() else 0f)
                 mesh.instance.setParameter("activity",if(moving && a.acting) when(a.activity) { Activity.TALK->1f; Activity.WRITE,Activity.STUDY->2f; Activity.BUILD->3f; else->0f } else 0f)
-                Matrix.setIdentityM(matrix,0); Matrix.translateM(matrix,0,a.x.toFloat(),.16f,a.z.toFloat())
+                Matrix.setIdentityM(matrix,0); Matrix.translateM(matrix,0,a.x.toFloat(),a.y.toFloat(),a.z.toFloat())
                 Matrix.rotateM(matrix,0,Math.toDegrees(a.yaw).toFloat(),0f,1f,0f)
-                if(a.acting && a.activity==Activity.SLEEP) { Matrix.translateM(matrix,0,0f,.10f,0f); Matrix.rotateM(matrix,0,80f,1f,0f,0f) }
+                contacts?.update(id,a.x,a.z,a.ground,a.y)
                 e.transformManager.setTransform(e.transformManager.getInstance(mesh.entity),matrix)
             } }
             follow?.let { id-> actors[id]?.let { rig.focus(it.x,it.z,.65) } }
@@ -391,6 +416,7 @@ internal class FilamentWorldView(
         meshes.toList().forEach(::destroyMesh); actors.clear(); city.clear(); roomEntities.clear()
         entities.forEach { e.destroyCameraComponent(it); e.destroyEntity(it); EntityManager.get().destroy(it) }; entities.clear()
         view?.renderTarget=null
+        contacts?.close();contacts=null
         film?.close(); film=null
         view?.let { e.destroyView(it) }
         scene?.indirectLight=null; scene?.skybox=null

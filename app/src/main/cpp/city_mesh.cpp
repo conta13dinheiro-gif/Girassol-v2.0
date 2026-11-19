@@ -192,7 +192,7 @@ bool city_mesh(const void* input, std::size_t bytes, std::size_t count, std::uin
         // Smooth peripheral relief; occupied parcels remain level with canonical positions.
         auto terrain=[&](float x,float z) -> float {
             const float outside=std::max({loX-x,x-hiX,loZ-z,z-hiZ,0.f});
-            return -.025f+std::min(outside*.18f,.8f)*(std::sin(x*.6f)*std::cos(z*.5f)*.32f+.32f);
+            return std::min(outside*.18f,.8f)*(std::sin(x*.6f)*std::cos(z*.5f)*.32f+.32f);
         };
         constexpr int grid=28;
         for (int iz=0;iz<grid;++iz) for (int ix=0;ix<grid;++ix) {
@@ -215,9 +215,15 @@ bool city_mesh(const void* input, std::size_t bytes, std::size_t count, std::uin
             const float t=static_cast<float>(i)/16*6.2831853f;
             const float x=(loX+hiX)*.5f+std::cos(t)*((hiX-loX)*.5f+1.4f);
             const float z=(loZ+hiZ)*.5f+std::sin(t)*((hiZ-loZ)*.5f+1.4f);
+            const auto treeStart=m.vertices.size();
             tree(m,x,z,.85f+static_cast<float>((seed+static_cast<unsigned>(i)*11)%24)/100,static_cast<unsigned>(i)*13);
-            if (i%2==0) { post(m,x+.3f,0,z+.3f,.028f,1.5f,color(58,75,78,4));
-                ellipsoid(m,x+.3f,1.53f,z+.3f,.09f,.12f,.09f,color(255,207,133,8),8,4); }
+            const float ground=terrain(x,z);
+            for(std::size_t v=treeStart;v<m.vertices.size();++v) m.vertices[v].y+=ground;
+            if (i%2==0) { const auto lampStart=m.vertices.size();post(m,x+.3f,0,z+.3f,.028f,1.5f,color(58,75,78,4));
+                ellipsoid(m,x+.3f,1.53f,z+.3f,.09f,.12f,.09f,color(255,207,133,8),8,4);
+                const float lampGround=terrain(x+.3f,z+.3f);
+                for(std::size_t v=lampStart;v<m.vertices.size();++v) m.vertices[v].y+=lampGround;
+            }
         }
         // Small water garden, bridge and shoreline stones outside occupied parcels.
         ellipsoid(m,loX-2,.035f,loZ-1,1.25f,.03f,1.55f,color(41,112,133,6),24,4);
@@ -257,6 +263,9 @@ Mesh citizen_mesh(std::uint32_t rgba, unsigned role) {
     } else if (role==3) { // Cafe: apron.
         box(m,-.12f,.49f,.111f,.24f,.35f,.025f,color(221,211,170,10));
     }
+    // The authored sole, not an arbitrary renderer offset, is the model origin.
+    float sole=1.f;for(const auto& v:m.vertices) sole=std::min(sole,v.y);
+    for(auto& v:m.vertices) v.y-=sole;
     return m;
 }
 

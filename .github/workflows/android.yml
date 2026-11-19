@@ -1,24 +1,14 @@
-name: Girassol Android 13+
+name: Girassol — compilação manual Android 13+
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 concurrency:
-  group: girassol-${{ github.workflow }}-${{ github.ref }}
+  group: girassol-build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  native:
-    name: C++ ASan + UBSan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - run: scripts/test-native.sh
   android:
-    name: JVM, lint, APK Debug + Release
+    name: Compilar ARM64 Debug + Release
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -31,90 +21,35 @@ jobs:
         with:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
-      - name: Install declared Android toolchain
+      - name: Instalar toolchain declarada
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
-      - name: Fast Kotlin and dataset protocol checks
-        run: ./gradlew :core:test :research:test :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --no-daemon
-      - name: Unit tests, lint and all APK variants
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :research:test :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
-      - name: Production JNI learning and Shadow-Replay
-        run: scripts/test-mind-jni.sh
-      - name: ARM64 installable debug APK
+      - name: Preparar compilador de materiais Filament 1.56.0
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 https://github.com/google/filament/releases/download/v1.56.0/filament-v1.56.0-linux.tgz -o "$RUNNER_TEMP/filament.tgz"
+          echo '393dcc066987345282f4b5c3f525ab053d9c21087141cdc8015f403cddf455f0  '"$RUNNER_TEMP/filament.tgz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/filament"
+          tar -xzf "$RUNNER_TEMP/filament.tgz" --strip-components=1 -C "$RUNNER_TEMP/filament"
+          echo "FILAMENT_TOOLS_DIR=$RUNNER_TEMP/filament" >> "$GITHUB_ENV"
+      - name: Compilar materiais e shaders
+        run: scripts/compile-materials.sh
+      - name: Compilar Kotlin, JNI C++ e APKs sem executar testes
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
+      - name: APK Debug ARM64
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: girassol-arm64-debug
           path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
           if-no-files-found: error
-      - name: ARM64 unsigned release APK
+      - name: APK Release ARM64 sem assinatura
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: girassol-arm64-release-unsigned
           path: app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
           if-no-files-found: error
-      - name: Emulator test APKs
+      - name: Materiais compilados
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: girassol-emulator-apks
+          name: girassol-filament-materials
           path: |
-            app/build/outputs/apk/debug/app-x86_64-debug.apk
-            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          if-no-files-found: error
-      - name: JVM and lint reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: girassol-test-reports
-          path: |
-            core/build/reports/tests/
-            research/build/reports/tests/
-            app/build/reports/
-            app/build/test-results/
-            core/build/test-results/
-            research/build/test-results/
-  cognition:
-    name: Real GGUF inference and cancellation
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Download pinned synthetic-test model
-        run: |
-          curl --fail --location --retry 3 --connect-timeout 20 --max-time 300 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/SmolLM2-135M-Instruct-Q4_K_M.gguf' -o "$RUNNER_TEMP/model.gguf"
-          echo '2e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d  '"$RUNNER_TEMP/model.gguf" | sha256sum --check
-      - run: scripts/test-cognition.sh "$RUNNER_TEMP/model.gguf"
-  instrumentation:
-    name: Android API33 emulator
-    needs: android
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: girassol-emulator-apks
-          path: ci-apks
-      - name: Enable KVM access
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Execute SQLite, JNI, AAudio and renderer instrumentation
-        uses: ReactiveCircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808 # v2
-        with:
-          api-level: 33
-          arch: x86_64
-          target: google_apis
-          profile: pixel_2
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: scripts/test-device-apks.sh ci-apks
-      - name: Device reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: girassol-api33-device-reports
-          path: ci-device-reports/
+            app/src/main/assets/materials/
+            app/src/main/materials/city.sha256

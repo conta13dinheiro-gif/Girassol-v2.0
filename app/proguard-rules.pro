@@ -20,3 +20,5 @@
 
 -keep class com.enhikyy.girassol.cognition.NativeSemanticMemory { *; }
 -keep class com.enhikyy.girassol.research.NonRootSwapArena { *; }
+
+-keep class com.enhikyy.girassol.physics.NativeSpatial { *; }

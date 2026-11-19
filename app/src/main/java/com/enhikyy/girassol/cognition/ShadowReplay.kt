@@ -8,14 +8,15 @@ internal object ShadowReplay {
     data class Rollout(val metrics: ReplayMetrics,val checkpoint: Checkpoint,val actions: List<ActionRecord>)
     data class Result(val revision: PolicyRevision?,val evaluated: Int,val baseline: ReplayMetrics,val candidate: ReplayMetrics,val message: String)
     fun rollout(origin: Checkpoint,weights: List<Double>,actions: List<ActionRecord>,horizon: Int,cancel: ()->Boolean): Rollout {
-        val actor=WorldActor(origin,4); var last=actions
+        val actor=WorldActor(origin,5); var last=actions
         var resilience=0.0; var harmony=0.0; var energy=0.0
         val beforeNovel=origin.state.minds.values.sumOf { it.behaviors.size }
         val beforeConsumption=listOf(Activity.WATER,Activity.COFFEE,Activity.EAT).sumOf { origin.state.actionCounts[it.name] ?: 0 }
         repeat(horizon) {
             if(cancel() || Thread.currentThread().isInterrupted) throw CancellationException()
             val input=NativeMind.evaluate(actor.state,last,weights)
-            val next=actor.step(cognition=input); last=next.event.actions
+            val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(actor.state,actor.intentions(cognition=input))
+            val next=actor.step(cognition=input,spatial=spatial); last=next.event.actions
             val people=next.state.agents
             resilience+=people.count { minOf(it.needs.energy,it.needs.hydration,it.needs.glucose)>=.1 }.toDouble()/people.size
             harmony+=people.map { it.needs.social }.average()

@@ -10,10 +10,19 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         private set
     private var eventId = checkpoint.eventId
     private var previousHash = checkpoint.eventHash
-    init { require(rulesVersion in 1..4); require(state.version == 1); require(violations(state).isEmpty()) }
+    init { require(rulesVersion in 1..5); require(state.version == 1); require(violations(state).isEmpty()) }
     fun checkpoint() = Checkpoint(state, eventId, previousHash)
 
-    @Synchronized fun step(neural: NeuralProposal? = null, cognition: CognitiveFrame? = null): Transition {
+    /** Same admitted intentions used by the native planner and by execution. */
+    @Synchronized fun intentions(neural: NeuralProposal? = null,cognition: CognitiveFrame? = null): Map<String,Activity> {
+        val base=state.copy(tick=state.tick+1,agents=state.agents.map { it.copy(needs=it.needs.metabolize()) })
+        val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) && it.applicable(base) }
+        val input=cognition?.takeIf { rulesVersion>=4 && it.applicable(state) }
+        return base.agents.associate { a->a.id to (if(a.id==admitted?.agentId) admitted.activity
+            else if(input!=null && a.acceptsNeuralActivity()) input.decisions.getValue(a.id) else choose(a,base.tick)) }
+    }
+
+    @Synchronized fun step(neural: NeuralProposal? = null, cognition: CognitiveFrame? = null, spatial: SpatialFrame? = null): Transition {
         val tick = state.tick + 1
         // 1: Runtime input boundary. Thermal policy changes pacing outside this logical core.
         // 2: Environment, spatial trail and metabolism.
@@ -21,9 +30,9 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 3-7: Perception, bounded memory, appraisal, utility and intention hysteresis.
         val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) && it.applicable(base) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
-        val proposals = base.agents.associate { a -> a.id to
-            (if (a.id == admitted?.agentId) admitted.activity
-                else if(cognitiveInput!=null && a.acceptsNeuralActivity()) cognitiveInput.decisions.getValue(a.id) else choose(a, tick)) }
+        val proposals = intentions(neural,cognitiveInput)
+        val physics=spatial?.snapshot()?.takeIf { rulesVersion>=5 && it.applicable(state,proposals) }
+        require(rulesVersion<5 || physics!=null) { "Resultado físico ausente ou incompatível" }
         // 8-9: Bounded typed neural input; arbitration below rechecks physical preconditions.
         val agents = base.agents.map { it.copy(acting = false) }.toMutableList()
         val balances = base.balances.toMutableMap()
@@ -51,10 +60,13 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             var a = agents[index]
             val action = proposals.getValue(a.id)
             val room = base.rooms.first { it.id == action.room }
+            val pose=physics?.poses?.get(a.id)
+            if(pose!=null) a=a.copy(x=pose.position.x,z=pose.position.z)
             val distance = hypot(room.x - a.x, room.z - a.z)
-            if (distance > .35) {
-                val factor = min(.45, distance) / distance
-                a = a.copy(x = a.x + (room.x - a.x) * factor, z = a.z + (room.z - a.z) * factor, activity = action)
+            if (if(pose!=null) !pose.reached else distance > .35) {
+                val factor = if(distance>0) min(.45, distance) / distance else 0.0
+                a = if(pose==null) a.copy(x = a.x + (room.x - a.x) * factor, z = a.z + (room.z - a.z) * factor, activity = action)
+                    else a.copy(activity=action)
                 records += ActionRecord(a.id, action, "MOVE")
             } else if ((occupied[room.id] ?: 0) < room.capacity) {
                 // 11: All physical preconditions are checked again at execution time.
@@ -133,9 +145,9 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             agents[index] = a
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val next = base.copy(knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList())
+        val next = base.copy(spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
-        val raw = CanonicalEvent(version = if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        val raw = CanonicalEvent(version = if(physics!=null) 5 else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -147,7 +159,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         if (event.eventId == eventId) { require(event.hash == previousHash); return }
         require(event.eventId == eventId + 1 && event.previousHash == previousHash && event.tick == state.tick + 1)
         val shadow = WorldActor(checkpoint(), event.version)
-        val result = shadow.step(event.neural,event.cognition)
+        val result = shadow.step(event.neural,event.cognition,event.spatial)
         require(result.event == event) { "Replay divergente" }
         state = result.state; eventId = event.eventId; previousHash = event.hash
     }
@@ -208,6 +220,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
+            if(s.spatial.keys.any { id->s.agents.none { it.id==id } } || s.spatial.values.any { !it.valid() }) add("Estado espacial inválido")
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")
             if(s.knowledge.any { !it.valid(s.tick) || s.agents.none { a->a.id==it.researcher } || s.agents.none { a->a.id==it.verifier } } || s.knowledge.map { it.id }.distinct().size!=s.knowledge.size) add("Proveniência de conhecimento inválida")
             if(s.evolution?.valid(s.seed,s.tick)==false) add("Política evolutiva inválida")

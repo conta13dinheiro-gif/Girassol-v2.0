@@ -12,6 +12,11 @@ internal object NativeCityMesh {
                                     vertices: ByteBuffer?, indices: ByteBuffer?): Long
 
     fun city(rooms: List<Room>, seed: Long, mode: Int = 0): Data {
+        val input=roomBuffer(rooms)
+        return build(input, rooms.size, seed, mode, 0)
+    }
+
+    fun roomBuffer(rooms: List<Room>): ByteBuffer {
         require(rooms.size <= 64)
         val input = direct(rooms.size * 24)
         rooms.forEach { r ->
@@ -20,7 +25,7 @@ internal object NativeCityMesh {
             input.putInt(r.id.hashCode())
         }
         input.rewind()
-        return build(input, rooms.size, seed, mode, 0)
+        return input
     }
 
     fun citizen(argb: Long, role: Int = 0): Data {

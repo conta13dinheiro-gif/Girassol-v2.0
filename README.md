@@ -1,17 +1,17 @@
 <!-- coderabbit-ai-generated:v1 -->
 
-<!-- coderabbit-ai-generated-section:v1:b6d16d35bb40f066ab0f4d39c2c125c5b6f39a8db4e6b61e42231536139ee798 -->
+<!-- coderabbit-ai-generated-section:v1:b6935071ff3f580e5a51ee49266220193be5a28b79a8e0553203c299ec681a3b -->
 
 # Girassol v2.0
 
-Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição deste incremento é **0.7.0**. O APK ARM64 funciona sem conta, rede ou modelo obrigatório.
+Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição deste incremento é **0.8.0**. O APK ARM64 funciona sem conta, rede ou modelo obrigatório.
 
 ## Compilar e instalar
 
 JDK17, SDK35, Build Tools35.0.0, NDK27.0.12077973, CMake3.22.1. Gradle8.11.1 e Kotlin2.1.10 estão declarados no projeto.
 
 ```sh
-./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :app:assembleRelease :app:assembleDebugAndroidTest
+./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :research:test :app:assembleRelease :app:assembleDebugAndroidTest
 scripts/test-native.sh
 adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 ```
@@ -47,6 +47,12 @@ A memória persistida no checkpoint SQLite tem três representações:
 
 O HNSW nativo recupera candidatos por produto interno e ordena por similaridade, importância e recência. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
 
+## Hugging Face & Biblioteca
+
+Pesquisa autônoma PT/EN, currículo de dez domínios, busca/curadoria no Hub, streaming de trechos, quarentena com duas avaliações GGUF, replay nativo e estudo físico na biblioteca. Diário comprimido encadeado por SHA256, embeddings GGUF completos e busca HNSW por modelo, cache textual direto JSON/JSONL/CSV com Range/mmap, cota/LRU/fixação e cancelamento por memória/temperatura. Controles em Sistema → Biblioteca.
+
+Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: treino LoRA e decoder direto Parquet continuam pendentes; avaliações do modelo não comprovam verdade factual.
+
 ## GGUF e LoRA
 
 Em Sistema, importe um GGUF de instruções compatível e, opcionalmente, um adaptador LoRA compatível. Arquivos são copiados para armazenamento privado sem backup, identificados por SHA256 e indexados atomicamente. Importação cancelada preserva a seleção anterior. Não há teto artificial de512MB; espaço em disco, RAM disponível, arquitetura do processo e temperatura são verificados. A estimativa de RAM não garante suporte a todo modelo. Nenhum peso acompanha o APK.
@@ -69,16 +75,17 @@ Rejeitar todos os candidatos é um resultado válido. Pausa, troca de linha, des
 
 WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
 
-SQLite schema1→2 adiciona marcos sem reescrever eventos/checkpoint anteriores. Auditoria confere IDs, ticks, hashes e vínculo ao checkpoint; não substitui assinatura autenticada contra reescrita integral do banco. Os diários completos são preservados; poda com âncoras criptográficas ainda não foi implementada.
+SQLite migra aditivamente até schema4: marcos, pesquisa e vetores, sem reescrever eventos/checkpoint anteriores. Auditoria confere IDs, ticks, hashes e vínculo ao checkpoint; não substitui assinatura autenticada contra reescrita integral do banco. Os diários completos são preservados; poda com âncoras criptográficas ainda não foi implementada.
 
 ## Estado e pendências
 
 Este incremento **não conclui toda a especificação**. A cidade lógica ainda possui seis fundadores e construção até dez ambientes. Permanecem: navegação de multidões Recast/Detour e planejamento GPGOAP; distritos WFC/Earcut e crescimento urbano aberto; reprodução/morte/genealogia e mutação estrutural NEAT; instituições/leis/comércio emergentes completos; cognição linguística generativa e treinamento LoRA; compactação com poda auditável; direção cinematográfica automática; validação visual, de áudio, memória e60FPS em dispositivos de4GB.
 
-As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC e hnswlib, com versões/licenças preservadas.
+As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC, hnswlib, OkHttp e RapidJSON, com versões/licenças preservadas.
 
 ## Organização
 
+- `research/`: currículo, protocolos HF/HTTP, aquisição, quarentena e cota sem Android.
 - `core/`: estado, contratos, diário/replay, memória e critérios de promoção, sem Android.
 - `app/src/main/cpp/`: malhas, projeção, LTC/Hebbian, HNSW, CMA-ES, llama.cpp/JNI e síntese/AAudio.
 - `app/src/main/java/`: serviço, armazenamento, importação, coordenação cognitiva, render e Compose.

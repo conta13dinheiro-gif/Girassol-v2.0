@@ -77,14 +77,16 @@ class DeterministicRng(private var state: Long) {
     val actionCounts: Map<String, Int> = emptyMap(), val trail: List<Double> = List(144) { 0.0 },
     @EncodeDefault(EncodeDefault.Mode.NEVER) val minds: Map<String,MindState> = emptyMap(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val knowledge: List<KnowledgeLesson> = emptyList())
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val knowledge: List<KnowledgeLesson> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: Map<String,SpatialPose> = emptyMap())
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CanonicalEvent(val version: Int = 1, val eventId: Long, val tick: Long,
     val actions: List<ActionRecord>, val stateHash: String, val previousHash: String, val hash: String = "",
     @EncodeDefault(EncodeDefault.Mode.NEVER) val neural: NeuralProposal? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val cognition: CognitiveFrame? = null) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val cognition: CognitiveFrame? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: SpatialFrame? = null) {
     fun computedHash(): String = Canonical.hash(Canonical.event(copy(hash = "")))
-    fun valid() = version in 1..4 && (when(version) { 1,2 -> neural==null && cognition==null; 3 -> neural!=null && cognition==null; else -> cognition!=null }) && hash == computedHash()
+    fun valid() = version in 1..5 && (when(version) { 1,2 -> neural==null && cognition==null && spatial==null; 3 -> neural!=null && cognition==null && spatial==null; 4 -> cognition!=null && spatial==null; else -> spatial!=null }) && hash == computedHash()
 }
 data class Transition(val state: WorldState, val event: CanonicalEvent)
 data class Checkpoint(val state: WorldState, val eventId: Long, val eventHash: String)

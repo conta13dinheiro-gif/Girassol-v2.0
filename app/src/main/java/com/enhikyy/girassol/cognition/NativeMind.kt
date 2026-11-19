@@ -59,6 +59,7 @@ internal object NativeMind {
             minds[citizen.id]=next
             val scores=values(272,8).toMutableList()
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
+            val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
             Activity.entries.forEachIndexed { i,activity->
                 // Learned value, homeostasis, distance and intrinsic novelty all affect the next decision.
                 val room=world.rooms.first { it.id==activity.room }
@@ -66,6 +67,10 @@ internal object NativeMind {
                 val expected=if(experience.isEmpty()) bank.reflections.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
                     else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
                 val technique=bank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
+                // Seeded Gumbel exploration scales with curiosity and lack of novelty; outputs are journaled.
+                val temperature=.04+.20*old.personality[0]*(1-novelty)
+                val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
+                scores[i]+=-ln(-ln(u))*temperature
                 scores[i]+=policy[i]+expected*.4+technique*.15+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-hypot(room.x-citizen.x,room.z-citizen.z)*.025
                 if(activity==Activity.SLEEP && n.energy>.8) scores[i]-=1
                 if(activity==Activity.BUILD && (world.rooms.size>=10 || (world.balances["market/timber"] ?: 0)<4)) scores[i]-=3

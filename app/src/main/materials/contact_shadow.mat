@@ -1,0 +1,17 @@
+material {
+    name : GirassolGroundContact,
+    shadingModel : unlit,
+    blending : transparent,
+    doubleSided : true,
+    depthWrite : false,
+    requires : [ uv0 ],
+    parameters : [ { type : float, name : opacity } ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        float radius = length(getUV0() * 2.0 - 1.0);
+        float alpha = (1.0 - smoothstep(0.0, 1.0, radius)) * materialParams.opacity;
+        material.baseColor = float4(0.012 * alpha, 0.010 * alpha, 0.008 * alpha, alpha);
+    }
+}
