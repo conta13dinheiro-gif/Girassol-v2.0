@@ -23,6 +23,8 @@ internal object DistrictWaveFunctionCollapse {
         ALL
     )
 
+    internal fun areCompatible(first: Kind, second: Kind): Boolean = compatible[first.ordinal] and bit(second) != 0
+
     private data class Cell(val x: Int, val z: Int)
 
     fun generate(seed: Long, chunkX: Int, chunkZ: Int): List<Kind> {
