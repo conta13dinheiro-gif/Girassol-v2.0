@@ -271,7 +271,8 @@ class WorldActorTest {
             sourceHash = Canonical.hash(Canonical.state(world)),
             minds = minds,
             decisions = world.agents.associate { it.id to Activity.TALK },
-            socialSynchrony = .97
+            socialSynchrony = .97,
+            innerSpeech = mapOf(world.agents.first().id to "Preciso comparar a previsão antes de agir.")
         )
         assertTrue(cognitive.applicable(world))
         val intentions = actor.intentions(cognition = cognitive)
@@ -294,6 +295,7 @@ class WorldActorTest {
         assertEquals(7, transition.event.version)
         assertTrue(transition.event.valid())
         assertEquals(.97, transition.state.socialSynchrony, 1e-9)
+        assertTrue(transition.state.artifacts.any { it.title == "Fala interna" && it.author == world.agents.first().id })
         assertTrue(transition.state.artifacts.any { it.title == "Ignição global GNW" })
         assertTrue(transition.state.artifacts.any { it.title == "Ritual de fase na Ágora" })
         assertTrue(transition.state.dialogues.any { it.portuguese.contains("ritual") })
