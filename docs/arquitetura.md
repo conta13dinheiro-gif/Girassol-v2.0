@@ -1,0 +1,82 @@
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:dba1a4a944baaf52c56992b93d64958f859923a14055c7e81d817ceee677be64 -->
+
+# Arquitetura inicial e interpretação dos anexos
+
+## Fontes recebidas
+
+Os seis arquivos são especificações e exemplos sobrepostos, não um checkout compilável. O PDF possui 39 páginas. A leitura estrutural abrangeu seções, contratos, classes, funções, fórmulas, exemplos, referências e roteiro dos arquivos. O código de referência requer integração e verificação independente; declarações de auditoria ou benchmarks nos anexos não estabelecem resultados neste repositório.
+
+| Arquivo de entrada | Bytes | SHA-256 |
+| --- | ---: | --- |
+| A_gera_o_autom.txt | 98303 | `9c7bdd969cf34e06f45e83f9191a91aec44be1351f82e3729c7e7a5d5179c9bb` |
+| 1._Ponte_JNI_C_.txt | 280003 | `47820205f9cb58ceb2d8b8060d638065d0615afe90f2f02e646373e4d2433258` |
+| Girassol_RSI_Fronteiras_Pesquisa_Profunda_Hip_teses_e_Implementa_o_Nativa.md | 30418 | `033491a850f3784c0cac49a0f668de4b9ce9186d29115c6f6337cfa0f1bc7e2c` |
+| Links_teis_e_Refer_ncias_para_o_Ecossistema_Girassol.md | 9083 | `9436553ad733de128863ff109d625c6a52114b1610f2fd28ff097d0dca7e635e` |
+| Girassol_Arquitetura_Mestre_GEA_Teorias_Avan_adas_e_Plano_de_Execu_o_24-7_1_.pdf | 1137695 | `2ebe7189891b851dfa89caf84d32f4463bc05f00bae280ce8e0de5de7dced2cb` |
+| Completo.md | 110569 | `299cd783fb1a01b9a6ea1909fb612f412d0109381f9be4a51be6831d5a994725` |
+
+## Arquitetura atual — incremento 0.7
+
+```mermaid
+flowchart TD
+  Public[Snapshot publicado] --> Minds[LTC + Hebbian + HNSW em C++ JNI]
+  Public --> Llama[GGUF / LoRA opcional]
+  Minds --> Frame[Entradas canônicas v4]
+  Llama --> Frame
+  Frame --> Actor[WorldActor: autoridade única]
+  Actor --> Store[(SQLite WAL FULL)]
+  Store --> Public
+  Public --> Render[Filament + Compose + AAudio]
+  Store --> History[Marcos / Flashback / Bifurcação]
+  Public --> Sandbox[WorldActor isolado + redes nativas]
+  Sandbox --> CMA[CMA-ES nativo]
+  CMA --> Evidence[Treino e validação sem regressão]
+  Evidence --> Frame
+```
+
+## Compatibilidade e decisões
+
+- **Autoridade e tempo:** WorldActor continua Kotlin/JVM, independente do renderer/áudio e do relógio físico. Componentes C++ propõem decisões e produzem apresentação. A adoção da transição ocorre depois de sua transação durável; falha de gravação não avança o ator adotado.
+- **Economia:** seção29 de Completo exige conservação estrita. Consumo transfere para ambiente/arquivo/estruturas; reciclagem devolve às contas de mercado e salários usam moedas existentes. Não há criação de matéria ou moeda após a gênese.
+- **Diário:** eventos1/2 e fixtures200eventos permanecem inalterados. Evento3 acrescenta proposta GGUF. Evento4 recebe CognitiveFrame com identidade do snapshot de origem, parâmetros LTC, Big Five, memória e decisões. Campos novos vazios/nulos são omitidos para preservar hashes antigos. Frames são copiados defensivamente, inclusive vetores internos. O replay recompõe e compara eventos em ator temporário antes de adotá-los; não exige backend nativo.
+- **Persistência:** SQLite schema2 acrescenta a tabela de marcos com snapshot integral/digest/hash do evento. A migração não reescreve registros antigos. Flashback verifica snapshot e vínculo ao diário; bifurcação copia o prefixo para outro banco e valida a cópia antes de trocar a linha ativa. Não se usa arquivo `world_snapshot.bin` separado. Diários completos são mantidos; poda segura requer futuro protocolo de âncoras e retenção histórica.
+- **JNI:** vértices32bytes (posição float3, quaternion float4, RGBA8); malhas e estados de cálculo usam DirectByteBuffer e validação de capacidades. Há upload CPU→GPU e cópias locais para alinhamento/validação; não se afirma ausência total de cópias.
+- **Renderer:** Filament1.56.0, PBR procedural e vidro separado, IBL com convolução difusa e prefiltragem GGX, sombras/SSAO/ACES/bloom/antialiasing. Passagem offscreen com acabamento próprio. Céu/clima são apresentação reprodutível, sem autoridade meteorológica sobre o mundo. Aparência, precisão do picking e ciclo de vida GPU ainda precisam de aparelho.
+- **Aprendizagem:** tinymind LTC12×8 e leitura de oito ações; atualização Hebbiana/Oja pelos resultados registrados. Novidade é kNN de descritores comportamentais. Duas dimensões Big Five usam traços genéticos existentes; as demais são inicializadas pelo PRNG. Não há alegação verificável de consciência ou livre-arbítrio, reprodução ou NEAT estrutural.
+- **Memória:** episódios vetoriais observacionais16D persistidos no estado, HNSW temporário em RAM, score recência/importância/similaridade; reflexões estatísticas durante repouso; rotinas validadas e ensino próximo. Isso não equivale a embeddings semânticos linguísticos, síntese livre de teorias ou biblioteca de programas Voyager.
+- **RSI:** CMA-ES próprio em C++ com matriz completa, caminhos cumulativos e adaptação do passo; otimiza oito vieses compartilhados. O sandbox executa WorldActor/redes reais por256ticks, com treino e janela disjunta de validação. Ganho>0,03 e dominância sem regressão são necessários nas duas. A hipóteseH1 cita0,03 e outro exemplo0,025; adota-se0,03. Proveniência liga pesos, métricas, origem e algoritmo ao SQLite. Políticas distritais e evolução estrutural permanecem pendentes.
+- **GGUF/LoRA:** llama.cpp b4514, arquivos privados por hash e indexação atômica; adaptador aplicado ao modelo carregado daquela inferência e liberado antes do contexto. Os pesos GGUF não são treinados online. Saída restrita a atividade, sem geração neural de diálogo/leis/cidade. Importação não possui teto fixo512MB, mas conserva checagens de RAM/disco/temperatura. Contexto512 e resposta64tokens são parâmetros operacionais do protocolo atual, não promessa de compatibilidade universal.
+- **Áudio:** síntese C++ separada do mundo e controlada por observações, sem bloqueios/alocações explícitas no callback. Foco, lifecycle e liberação acontecem na thread de controle. Saída física e qualidade ainda não verificadas no sandbox.
+
+## Dependências incorporadas
+
+| Componente | Revisão | Licença / integração |
+| --- | --- | --- |
+| Filament |1.56.0 / matc56| Apache2.0; Android AAR e materiais pré-compilados verificáveis |
+| llama.cpp |b4514, ec7f3ac9ab33e46b136eb5ab6a76c4d81f57c7f1| MIT; archiveSHA256 fixado no CMake |
+| tinymind LTC |f63f8ae9a74868050b02b115d3484c296ae50199| MIT; cabeçalhos transitivos preservados, ORIGIN.txt |
+| hnswlib |ca426729609b3221563047ceb269cc1213e0d376| Apache2.0; NoExceptions, -fno-exceptions, ORIGIN.txt |
+
+HNSW utiliza a opção upstream `HNSWLIB_USE_PREFETCH=0`. O caminho SSE de lookahead padrão apresentou heap-buffer-overflow no teste ASan de inserção; a configuração de produção e a de teste desativam esse caminho. Os cabeçalhos vendorizados não foram alterados. O algoritmo CMA-ES é implementação própria das equações de Hansen, sem copiar/vincular libcmaes. As demais bibliotecas sugeridas nos pedidos são referências, não dependências fictícias.
+
+## Pendências da especificação
+
+1. Recast/Detour, multidões sem colisão, GPGOAP e navegação física de interiores.
+2. WFC/Earcut, distritos especializados, expansão urbana aberta e economia produtiva espacial. O núcleo ainda tem seis fundadores e teto de dez ambientes.
+3. Ciclo de vida reprodutivo, genealogia persistida, herança Big Five completa e mutação estrutural NEAT.
+4. Instituições/leis/comércio emergentes, linguagem com adoção social e geração GGUF livre validada.
+5. Embeddings linguísticos, reflexão neural e biblioteca de habilidades executáveis generalizáveis.
+6. RSI distrital/estrutural, treinamento LoRA e confirmação de um adaptador compatível real.
+7. Compactação/poda com âncoras criptográficas, preservação das bifurcações e política de retenção.
+8. Direção cinematográfica automática e maratona física em Android13+/ARM64/4GB com medição de FPS, memória, temperatura e áudio.
+
+## Validação e limites
+
+Gates: `./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :app:assembleRelease :app:assembleDebugAndroidTest`; `scripts/test-native.sh` compila seis suítes com ASan/UBSan; smoke GGUF usa modelo externo. Os testes de propriedade/replay legados são independentes das novas entradas neurais gravadas. Há testes novos de cópia defensiva, memória/consolidação/ensino, admissão de políticas, proveniência, migração, histórico e bifurcação.
+
+O host pode executar código de produção Kotlin/JNI para testar aprendizagem e Shadow-Replay sem Android. Isso não valida GPU, framework SQLite Android, SAF, AAudio/foco ou comportamento de aparelho. Instrumentação compilada não equivale a instrumentação executada. A meta60FPS não é uma medição. Os resultados exatos e hashes dos inputs/artefatos são mantidos no registro de validação do workspace, separado do repositório.
+
+
+<!-- /coderabbit-ai-generated:v1 -->

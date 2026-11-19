@@ -1,0 +1,46 @@
+// Original film-inspired finish. No proprietary Dehancer code or Kodak colour profile.
+material {
+    name : GirassolFilm70,
+    shadingModel : unlit,
+    vertexDomain : device,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    requires : [ uv0 ],
+    parameters : [
+        { type : sampler2d, name : sceneColor },
+        { type : float2, name : texel },
+        { type : float, name : time },
+        { type : float, name : amount }
+    ]
+}
+fragment {
+    float filmLuma(float3 c) { return dot(c,float3(.2126,.7152,.0722)); }
+    float random(float2 p) { return fract(sin(dot(p,float2(12.9898,78.233))) * 43758.5453); }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        float2 uv = getUV0();
+        float3 base = texture(materialParams_sceneColor,uv).rgb;
+        float3 halo = float3(0.0);
+        float weights = 0.0;
+        // Wider red and shorter amber diffusion around highlights, suppressed in their cores.
+        for (int i=0;i<12;i++) {
+            float angle = float(i)*2.39996323;
+            float radius = 1.0+float(i)*.7;
+            float2 delta = float2(cos(angle),sin(angle))*materialParams.texel*radius;
+            float3 sampleColor = texture(materialParams_sceneColor,clamp(uv+delta,.001,.999)).rgb;
+            float w = exp(-radius*.25);
+            halo += max(sampleColor-float3(.65),float3(0.0))*w;
+            weights += w;
+        }
+        float edge = 1.0-smoothstep(.55,.95,filmLuma(base));
+        float3 halation = halo/weights * float3(.15,.045,.008)*edge;
+        float frame = floor(materialParams.time*24.0);
+        float2 pixel = floor(uv/materialParams.texel);
+        float noise = (random(pixel+frame*float2(71.3,19.7))+random(pixel*.57-frame*float2(13.1,41.2))-1.0);
+        float density = .0035 + .0045*sqrt(clamp(filmLuma(base),0.0,1.0));
+        float2 screen = uv*2.0-1.0;
+        float vignette = 1.0-.07*pow(clamp(dot(screen,screen)*.5,0.0,1.0),2.0);
+        material.baseColor = float4(clamp((base+halation*materialParams.amount)*mix(1.0,vignette,materialParams.amount)+noise*density*materialParams.amount,0.0,1.0),1.0);
+    }
+}

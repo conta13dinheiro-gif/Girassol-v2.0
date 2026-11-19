@@ -1,0 +1,75 @@
+material {
+    name : GirassolSolarNocturne,
+    shadingModel : lit,
+    requires : [ color ],
+    parameters : [
+        { type : float, name : time },
+        { type : float, name : night },
+        { type : float, name : gait },
+        { type : float, name : activity },
+        { type : float, name : phase }
+    ]
+}
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        float tag = floor(material.color.a * 255.0 + 0.5);
+        float t = materialParams.time;
+        float3 p = getPosition().xyz;
+        // Foliage only: wind has no effect on trunks, structures or canonical positions.
+        if (tag == 7.0) {
+            material.worldPosition.x += sin(t * 1.3 + p.z * 1.7) * 0.028 * max(p.y - 0.8, 0.0);
+            material.worldPosition.z += cos(t * 0.9 + p.x) * 0.015 * max(p.y - 0.8, 0.0);
+        }
+        if (tag >= 12.0 && tag <= 16.0) {
+            float swing = sin(t * 7.5 + materialParams.phase) * materialParams.gait * 0.65;
+            float angle = 0.0;
+            float pivot = 0.49;
+            if (tag == 13.0 || tag == 14.0) {
+                pivot = 0.84;
+                angle = swing * (tag == 13.0 ? 1.0 : -1.0);
+                if (materialParams.activity == 1.0) angle += sin(t * 3.8 + materialParams.phase) * 0.28 - 0.3;
+                if (materialParams.activity == 2.0) angle = -0.9 + sin(t * 5.0) * 0.12;
+                if (materialParams.activity == 3.0) angle = -0.8 + sin(t * 7.0) * 0.45;
+            }
+            if (tag == 15.0 || tag == 16.0) angle = swing * (tag == 15.0 ? -1.0 : 1.0);
+            if (tag == 12.0) { pivot = 1.0; angle = sin(t * 2.5) * 0.06 * materialParams.activity; }
+            float y = p.y - pivot;
+            float3 posed = float3(p.x, pivot + cos(angle) * y - sin(angle) * p.z, sin(angle) * y + cos(angle) * p.z);
+            material.worldPosition.xyz += (getWorldFromModelMatrix() * float4(posed - p, 0.0)).xyz;
+            // Rotate the tangent frame with articulated parts so lighting follows the pose.
+            float3x3 rotation = float3x3(1.0,0.0,0.0, 0.0,cos(angle),sin(angle), 0.0,-sin(angle),cos(angle));
+            float3x3 model = float3x3(getWorldFromModelMatrix());
+            material.worldNormal = model * rotation * transpose(model) * material.worldNormal;
+        }
+    }
+}
+fragment {
+    float grain(float3 p) { return fract(sin(dot(floor(p),float3(12.9898,78.233,37.719))) * 43758.5453); }
+    void material(inout MaterialInputs material) {
+        float tag = floor(getColor().a * 255.0 + 0.5);
+        float3 p = getUserWorldPosition();
+        float noise = grain(p * 85.0);
+        float textureValue = 0.94 + 0.12 * noise;
+        float roughness = 0.82;
+        float metallic = 0.0;
+        float bump = 0.08;
+        if (tag == 1.0 || tag == 7.0) { textureValue *= 0.87 + 0.22 * grain(p * 5.0); roughness = 0.96; bump = 0.20; }
+        if (tag == 2.0) { textureValue *= 0.88 + 0.12 * smoothstep(0.03,0.07,min(fract(p.x*3.0),fract(p.z*3.0))); bump = 0.15; }
+        if (tag == 3.0) { textureValue *= 0.84 + 0.16 * sin(p.x * 45.0 + sin(p.z * 12.0)); roughness = 0.64; bump = 0.10; }
+        if (tag == 4.0) { roughness = 0.29 + noise * 0.08; metallic = 0.85; bump = 0.025; }
+        if (tag == 5.0) { roughness = 0.10; metallic = 0.12; bump = 0.0; }
+        if (tag == 6.0) { roughness = 0.09; bump = 0.12; textureValue = 0.96 + 0.04*sin(p.x*12.0+p.z*15.0-materialParams.time); }
+        float wave = tag == 6.0 ? sin(p.x*16.0+materialParams.time)*cos(p.z*13.0-materialParams.time*.7) : noise - 0.5;
+        material.normal = normalize(float3(wave*bump, (grain(p.zyx*79.0)-0.5)*bump, 1.0));
+        prepareMaterial(material);
+        // Vertex palette is authored in sRGB; surface computations take linear values.
+        material.baseColor = float4(pow(getColor().rgb, float3(2.2)) * textureValue, 1.0);
+        material.roughness = roughness;
+        material.metallic = metallic;
+        material.reflectance = tag == 5.0 || tag == 6.0 ? 0.55 : 0.4;
+        material.clearCoat = tag == 5.0 || tag == 6.0 ? 1.0 : 0.0;
+        material.clearCoatRoughness = 0.1;
+        if (tag == 8.0) material.emissive = float4(getColor().rgb * (1200.0 + 14000.0*materialParams.night), 0.0);
+        if (tag == 5.0) material.emissive = float4(float3(1.0,.60,.22) * 1800.0 * materialParams.night, 0.0);
+    }
+}

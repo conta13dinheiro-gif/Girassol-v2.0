@@ -1,0 +1,22 @@
+material {
+    name : GirassolFrostedGlass,
+    shadingModel : lit,
+    blending : transparent,
+    doubleSided : true,
+    requires : [ color ],
+    parameters : [ { type : float, name : night }, { type : float, name : time } ]
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        float3 p = getUserWorldPosition();
+        float frost = fract(sin(dot(floor(p * 240.0), float3(12.9898,78.233,37.719))) * 43758.5453);
+        material.normal = normalize(float3((frost-.5)*.04,0.0,1.0));
+        prepareMaterial(material);
+        material.baseColor = float4(pow(getColor().rgb,float3(2.2)),.32);
+        material.roughness = .18 + frost*.10;
+        material.metallic = 0.0;
+        material.reflectance = .55;
+        material.clearCoat = 1.0;
+        material.emissive = float4(float3(1.0,.6,.22) * 650.0 * materialParams.night,0.0);
+    }
+}

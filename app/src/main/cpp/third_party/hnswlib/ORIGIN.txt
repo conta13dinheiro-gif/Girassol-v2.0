@@ -1,0 +1,6 @@
+Source: https://github.com/nmslib/hnswlib
+Commit: ca426729609b3221563047ceb269cc1213e0d376
+Archive SHA-256: caa2d04fbea366ed3d29bae81985f224f179a841fbf3d8322953ecd2ebb9a009
+License: Apache-2.0; upstream headers unmodified.
+Integration uses -fno-exceptions (HNSWLIB_ENABLE_EXCEPTIONS=OFF) and Status-returning NoExceptions APIs.
+Prefetch disabled using upstream HNSWLIB_USE_PREFETCH=0: GCC15 ASan detected an out-of-bounds neighbor lookahead read in searchBaseLayer with the default SSE prefetch path. Regression suite covers 2000 inserts.
