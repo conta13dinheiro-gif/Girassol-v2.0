@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.util.concurrent.atomic.AtomicLong
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 internal data class ResearchStatus(val settings: ResearchSettings=ResearchSettings(),val entries: List<ResearchEntry> = emptyList(),
     val message: String="Ative a pesquisa para os habitantes consultarem o Hugging Face.",val bytes: Long=0,val busy: Boolean=false)
@@ -32,7 +33,11 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     private val guardian=MemoryPressureGuardian(app)
     private val http=ResilientHttp(gate=guardian)
     private val compact=CompactDatasetSource(app,http,{ store().databaseName!! },{ settings })
-    private val seeker=HuggingFaceDatasetSeeker(http,compact=compact::acquire)
+    private fun seeker() = HuggingFaceDatasetSeeker(
+        http,
+        hub = (PluginRegistry.activeDataSourceEndpoint()?.trimEnd('/') ?: "https://huggingface.co/api/datasets").plus("/").toHttpUrl(),
+        compact = compact::acquire
+    )
     private val models=DualModelOrchestrator(app,ResearchGate { guardian.checkLocal() })
     private val executor=Executors.newSingleThreadExecutor { task->Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);task.run() },"Girassol-Research") }
     private val generation=AtomicLong()
@@ -150,8 +155,8 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
                 WorldStore(app,database).use { read->read.research().similar(query.first,query.second,guardian::checkLocal) }
             } else emptyList()
             if(local.firstOrNull()?.second?.let { it>=.62f }==true) return@launch SearchResult.Local(local)
-            val found=seeker.discover(intent) { key->key in installed || installed.any { it.repo==key.repo && it.queryHash==key.queryHash && it.config.startsWith("file:") } } ?: throw java.io.IOException("Nenhum dataset público elegível encontrado")
-            SearchResult.Download(seeker.acquire(found.first,found.second,intent))
+            val found=seeker().discover(intent) { key->key in installed || installed.any { it.repo==key.repo && it.queryHash==key.queryHash && it.config.startsWith("file:") } } ?: throw java.io.IOException("Nenhum dataset público elegível encontrado")
+            SearchResult.Download(seeker().acquire(found.first,found.second,intent))
         }) { result->
             when(result) {
                 is SearchResult.Download->{ val current=store().load() ?: point;tables.acquire(intent,result.batch,current,(settings.quotaMb*1048576L-compact.bytes()).coerceAtLeast(0)) }
