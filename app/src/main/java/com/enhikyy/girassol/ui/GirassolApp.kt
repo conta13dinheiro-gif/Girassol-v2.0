@@ -301,6 +301,9 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         color=if(soul.ignitionIndex>.65) Solar.Amber else Muted,fontSize=9.sp
                     )
                 }
+                world.artifacts.lastOrNull { it.author==a.id && it.title=="Fala interna" }?.let { thought ->
+                    Text("REFLEXÃO PRIVADA · ${thought.text}",color=Solar.Cognitive,fontSize=10.sp)
+                }
             }
         }
         if (world.genealogy.isNotEmpty()) {
