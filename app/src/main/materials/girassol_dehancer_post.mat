@@ -11,7 +11,9 @@ material {
         { type : sampler2d, name : sceneColor },
         { type : float2, name : texel },
         { type : float, name : time },
-        { type : float, name : amount }
+        { type : float, name : amount },
+        { type : float, name : grain },
+        { type : float, name : halation }
     ]
 }
 fragment {
@@ -34,13 +36,13 @@ fragment {
             weights += w;
         }
         float edge = 1.0-smoothstep(.55,.95,filmLuma(base));
-        float3 halation = halo/weights * float3(.15,.045,.008)*edge;
+        float3 halation = halo/weights * float3(.15,.045,.008)*edge*materialParams.halation;
         float frame = floor(materialParams.time*24.0);
         float2 pixel = floor(uv/materialParams.texel);
         float noise = (random(pixel+frame*float2(71.3,19.7))+random(pixel*.57-frame*float2(13.1,41.2))-1.0);
         float density = .0035 + .0045*sqrt(clamp(filmLuma(base),0.0,1.0));
         float2 screen = uv*2.0-1.0;
         float vignette = 1.0-.07*pow(clamp(dot(screen,screen)*.5,0.0,1.0),2.0);
-        material.baseColor = float4(clamp((base+halation*materialParams.amount)*mix(1.0,vignette,materialParams.amount)+noise*density*materialParams.amount,0.0,1.0),1.0);
+        material.baseColor = float4(clamp((base+halation*materialParams.amount)*mix(1.0,vignette,materialParams.amount)+noise*density*materialParams.grain*materialParams.amount,0.0,1.0),1.0);
     }
 }
