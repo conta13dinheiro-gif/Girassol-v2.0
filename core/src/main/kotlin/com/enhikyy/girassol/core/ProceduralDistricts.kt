@@ -2,8 +2,6 @@ package com.enhikyy.girassol.core
 
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
-import kotlin.math.floorDiv
-import kotlin.math.floorMod
 import kotlin.math.sqrt
 
 /** Deterministic spiral parcels backed by WFC district constraints. */
@@ -15,10 +13,10 @@ object ProceduralDistricts {
     fun nextAnnex(rooms: List<Room>, seed: Long): Room {
         val index = rooms.count { it.id.startsWith("annex_") }
         val (gx, gz) = spiral(index)
-        val chunkX = floorDiv(gx, CHUNK_SIZE)
-        val chunkZ = floorDiv(gz, CHUNK_SIZE)
-        val localX = floorMod(gx, CHUNK_SIZE)
-        val localZ = floorMod(gz, CHUNK_SIZE)
+        val chunkX = Math.floorDiv(gx, CHUNK_SIZE)
+        val chunkZ = Math.floorDiv(gz, CHUNK_SIZE)
+        val localX = Math.floorMod(gx, CHUNK_SIZE)
+        val localZ = Math.floorMod(gz, CHUNK_SIZE)
         val layout = plans.computeIfAbsent(ChunkKey(seed, chunkX, chunkZ)) {
             DistrictWaveFunctionCollapse.generate(seed, chunkX, chunkZ)
         }
