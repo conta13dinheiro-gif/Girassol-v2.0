@@ -66,7 +66,7 @@ HNSW utiliza a opção upstream `HNSWLIB_USE_PREFETCH=0`. O caminho SSE de looka
 ## Pendências da especificação
 
 1. Recast/Detour, RVO2 completo e navegação de múltiplos andares. Há A* e steering com colisores derivados da cena e, em regras6, planner GOAP/utility próprio de horizonte curto; GPGOAP não foi integrado como dependência.
-2. WFC/Earcut, distritos especializados e economia produtiva espacial. A expansão lógica em regras6 usa lotes em espiral e não tem mais teto de dez ambientes; a geometria nativa ainda tem envelope de coordenadas e precisa de streaming por blocos para escala geográfica muito grande. O mundo começa com seis fundadores.
+2. WFC ponderado em blocos17×17 com seis arquétipos de distrito, lotes em espiral e conectores cívicos nas bordas está integrado em regras6. Earcut/triangulação de polígonos urbanos, interiors em múltiplos andares e economia produtiva espacial permanecem pendentes. A geometria nativa ainda tem envelope de coordenadas e precisa de streaming por blocos para escala geográfica muito grande. O mundo começa com seis fundadores.
 3. Regras6 geram descendentes de pares com confiança recíproca, recombinam loci determinísticos, registram hash genético e árvore familiar no estado canônico e transmitem habilidades que já foram validadas como compartilháveis. Mortalidade, expectativa de vida, herança Big Five completa e mutação estrutural NEAT permanecem pendentes.
 4. Instituições/leis/comércio emergentes, linguagem com adoção social e geração GGUF livre validada.
 5. Reflexão neural e biblioteca de habilidades executáveis generalizáveis. Embeddings GGUF completos/HNSW da biblioteca foram integrados no incremento0.8; vetores de episódios continuam observacionais16D.
