@@ -29,8 +29,8 @@ object ProceduralDistricts {
             DistrictWaveFunctionCollapse.Kind.RESEARCH -> "research" to "Biblioteca de pesquisa"
             DistrictWaveFunctionCollapse.Kind.CIVIC -> "civic" to "Ágora cívica"
         }
-        val x = 14.0 + gx * 2.0
-        val z = 9.0 + gz * 2.0
+        val x = 30.0 + gx * 2.0
+        val z = 24.0 + gz * 2.0
         return Room("annex_${index}_$code", "$title ${index + 1}", x, z, 1.7, 1.5, 2)
     }
 

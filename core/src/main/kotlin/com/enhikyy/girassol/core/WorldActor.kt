@@ -17,7 +17,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
     /** Same admitted intentions used by the native planner and by execution. */
     @Synchronized fun intentions(neural: NeuralProposal? = null,cognition: CognitiveFrame? = null): Map<String,Activity> {
         val base=state.copy(tick=state.tick+1,agents=state.agents.map { it.copy(needs=it.needs.metabolize()) })
-        val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) && it.applicable(base) }
+        val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) }
         val input=cognition?.takeIf { rulesVersion>=4 && it.applicable(state) }
         return base.agents.associate { a->a.id to (if(a.id==admitted?.agentId) admitted.activity
             else if(input!=null && a.acceptsNeuralActivity()) { val proposed=input.decisions.getValue(a.id); if(rulesVersion>=6) UtilityGoapPlanner.choose(base,a,proposed) else proposed } else choose(a,base.tick,base)) }
@@ -29,7 +29,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 2: Environment, spatial trail and metabolism.
         val base = state.copy(tick = tick, agents = state.agents.map { it.copy(needs = it.needs.metabolize()) }, trail = state.trail.map { it * .97 })
         // 3-7: Perception, bounded memory, appraisal, utility and intention hysteresis.
-        val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) && it.applicable(base) }
+        val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
         val proposals = intentions(neural,cognitiveInput)
         val physics=spatial?.snapshot()?.takeIf { rulesVersion>=5 && it.applicable(state,proposals) }
