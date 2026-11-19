@@ -86,7 +86,7 @@ struct HumanSoulState {
         const float rawDrive = 0.45f * error + 0.35f * externalSalience
             + 0.20f * std::fabs(somaticBias);
         const float exponent = std::clamp(-12.0f * (rawDrive - 0.52f), -40.0f, 40.0f);
-        ignitionIndex = 1.0f / (1.0f + std::exp(-exponent));
+        ignitionIndex = 1.0f / (1.0f + std::exp(exponent));
         return ignitionIndex > 0.65f;
     }
 };
