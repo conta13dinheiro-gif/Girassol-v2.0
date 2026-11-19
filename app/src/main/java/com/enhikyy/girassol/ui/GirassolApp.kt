@@ -77,6 +77,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var renderError by remember { mutableStateOf<String?>(null) }
     var historical by remember { mutableStateOf<WorldState?>(null) }
     var historySection by rememberSaveable { mutableIntStateOf(0) }
+    var hfSection by rememberSaveable { mutableIntStateOf(0) }
     val research by com.enhikyy.girassol.research.ResearchHub.state.collectAsStateWithLifecycle()
     val world=historical ?: ui.world
     val selected=world?.agents?.firstOrNull { it.id==selectedId }
@@ -134,8 +135,17 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                             when(tab) {
                                 1->Citizens(world,Modifier.weight(1f)) { selectedId=it }
                                 2->ResearchRequests(Modifier.weight(1f))
-                                3->if(historical==null) ResearchLibrary(Modifier.weight(1f))
-                                   else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                3->{
+                                    TabRow(hfSection,containerColor=Color.Transparent) {
+                                        listOf("Pesquisa","Plugins").forEachIndexed { i,label->
+                                            Tab(hfSection==i,{ hfSection=i },text={ Text(label) })
+                                        }
+                                    }
+                                    if(hfSection==0) {
+                                        if(historical==null) ResearchLibrary(Modifier.weight(1f))
+                                        else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                    } else PluginsPage(Modifier.weight(1f))
+                                }
                                 4->{
                                     TabRow(historySection,containerColor=Color.Transparent) {
                                         listOf("Marcos","Cultura","Sistema").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
