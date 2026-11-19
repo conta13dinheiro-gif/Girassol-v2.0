@@ -10,7 +10,15 @@ object ProceduralDistricts {
         val (gx, gz) = spiral(index)
         val x = 14.0 + gx * 2.0
         val z = 9.0 + gz * 2.0
-        return Room("annex_$index", "Anexo ${index + 1}", x, z, 1.7, 1.5, 2)
+        val (code,title) = when(index % 6) {
+            0 -> "residential" to "Moradia modular"
+            1 -> "agriculture" to "Estufa agrícola"
+            2 -> "recycling" to "Reciclagem e reúso"
+            3 -> "energy" to "Oficina de energia"
+            4 -> "research" to "Biblioteca de pesquisa"
+            else -> "civic" to "Ágora cívica"
+        }
+        return Room("annex_${index}_$code", "$title ${index + 1}", x, z, 1.7, 1.5, 2)
     }
 
     internal fun spiral(index: Int): Pair<Int, Int> {
