@@ -425,6 +425,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             }
         }
         item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
+        item { SectionTitle("Shizuku · telemetria de sistema"); Spacer(Modifier.height(10.dp)); ShizukuPanel() }
         item {
             SectionTitle("Recursos do mercado"); Spacer(Modifier.height(12.dp))
             w.initialTotals.forEach { (item, total) ->
