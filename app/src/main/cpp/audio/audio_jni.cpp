@@ -1,5 +1,7 @@
 #include "synth.hpp"
 #include <aaudio/AAudio.h>
+#include <algorithm>
+#include <cmath>
 #include <jni.h>
 #include <atomic>
 #include <mutex>
