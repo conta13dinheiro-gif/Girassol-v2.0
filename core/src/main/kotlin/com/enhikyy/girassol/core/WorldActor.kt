@@ -1,5 +1,6 @@
 package com.enhikyy.girassol.core
 
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.min
@@ -159,10 +160,10 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                         it.author == citizenId && it.title == "Ignição global GNW" && tick - it.tick < 30
                     }
                     if (!recent) {
-                        val emotion = "P=${"%.2f".format(mind.psyche.pleasure)} A=${"%.2f".format(mind.psyche.arousal)} D=${"%.2f".format(mind.psyche.dominance)}"
+                        val emotion = "P=${"%.2f".format(Locale.ROOT,mind.psyche.pleasure)} A=${"%.2f".format(Locale.ROOT,mind.psyche.arousal)} D=${"%.2f".format(Locale.ROOT,mind.psyche.dominance)}"
                         artifacts += Artifact(
                             tick, citizenId, "Ignição global GNW",
-                            "Erro preditivo Anokhin=${"%.3f".format(mind.psyche.lastPredictionError)}; índice de ignição=${"%.3f".format(mind.psyche.ignitionIndex)}; PAD $emotion.",
+                            "Erro preditivo Anokhin=${"%.3f".format(Locale.ROOT,mind.psyche.lastPredictionError)}; índice de ignição=${"%.3f".format(Locale.ROOT,mind.psyche.ignitionIndex)}; PAD $emotion.",
                             eventId + 1
                         )
                     }
@@ -179,7 +180,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                     val names = participants.map { it.name }
                     artifacts += Artifact(
                         tick, "biosfera", "Ritual de fase na Ágora",
-                        "Sincronização Kuramoto R=${"%.3f".format(cognitiveInput.socialSynchrony)} reuniu ${names.joinToString(", ")} na Ágora.",
+                        "Sincronização Kuramoto R=${"%.3f".format(Locale.ROOT,cognitiveInput.socialSynchrony)} reuniu ${names.joinToString(", ")} na Ágora.",
                         eventId + 1
                     )
                     val first = participants.first()
