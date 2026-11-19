@@ -174,7 +174,8 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
                 val document=readLocalDocument(uri)
                 val cleaned=document.text.replace("\u0000","").trim()
                 require(cleaned.length>=16) { "O documento não contém texto suficiente para estudo" }
-                val chunks=cleaned.chunked(12000).take(100).filter { it.length>=16 }
+                val chunks=cleaned.chunked(30000).filter { it.length>=16 }
+                require(chunks.size<=100) { "O documento excede o limite de 100 trechos do journal atual" }
                 require(chunks.isNotEmpty()) { "Nenhum trecho utilizável foi extraído" }
                 val rowElements=chunks.mapIndexed { index,chunk ->
                     JsonObject(mapOf(
