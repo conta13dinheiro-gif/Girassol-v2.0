@@ -213,9 +213,12 @@ class WorldActorTest {
         val intentions = actorA.intentions(proposal)
         val poses = state.agents.associate { citizen ->
             val point = SpatialPoint(citizen.x, 0.0, citizen.z)
+            val destination = state.rooms.first { it.id == intentions.getValue(citizen.id).room }
+            val reached = kotlin.math.abs(citizen.x - destination.x) <= destination.width / 2.0 &&
+                kotlin.math.abs(citizen.z - destination.z) <= destination.depth / 2.0
             citizen.id to SpatialPose(
                 position = point, verticalVelocity = 0.0, surface = 0.0,
-                distance = 0.0, heading = 0.0, reached = citizen.id in pair,
+                distance = 0.0, heading = 0.0, reached = reached,
                 route = listOf(point)
             )
         }

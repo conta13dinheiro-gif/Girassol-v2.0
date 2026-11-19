@@ -83,8 +83,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/debug dist/release
-          find app/build/outputs/apk/debug -type f -name '*.apk' -exec cp '{}' dist/debug/ ;
-          find app/build/outputs/apk/release -type f -name '*.apk' -exec cp '{}' dist/release/ ;
+          mapfile -d '' debug_apks < <(find app/build/outputs/apk/debug -type f -name '*.apk' -print0)
+          ((${#debug_apks[@]} > 0)) || { echo "::error::No debug APK was generated"; exit 1; }
+          cp "${debug_apks[@]}" dist/debug/
+          mapfile -d '' release_apks < <(find app/build/outputs/apk/release -type f -name '*.apk' -print0)
+          ((${#release_apks[@]} > 0)) || { echo "::error::No release APK was generated"; exit 1; }
+          cp "${release_apks[@]}" dist/release/
           test -n "$(find dist/debug -name '*.apk' -print -quit)"
           test -n "$(find dist/release -name '*.apk' -print -quit)"
           sha256sum dist/debug/*.apk dist/release/*.apk
@@ -97,7 +101,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Girassol-debug
-          path: dist/debug/*.apk
+          path: dist/debug/
           if-no-files-found: error
           retention-days: 30
 
@@ -106,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Girassol-release
-          path: dist/release/*.apk
+          path: dist/release/
           if-no-files-found: error
           retention-days: 30
 

@@ -12,7 +12,28 @@ object ProceduralDistricts {
 
     fun nextAnnex(rooms: List<Room>, seed: Long): Room {
         val index = rooms.count { it.id.startsWith("annex_") }
-        val (gx, gz) = spiral(index)
+        // Select the next unoccupied parcel on an unbounded deterministic spiral.
+        // This keeps the initial six rooms and imported/custom rooms collision-free.
+        var parcelIndex = index
+        var gx: Int
+        var gz: Int
+        var x: Double
+        var z: Double
+        while (true) {
+            val parcel = spiral(parcelIndex)
+            gx = parcel.first
+            gz = parcel.second
+            x = 30.0 + gx * 2.0
+            z = 24.0 + gz * 2.0
+            val overlaps = rooms.any { existing ->
+                val overlapX = kotlin.math.abs(existing.x - x) < (existing.width + 1.7) / 2.0
+                val overlapZ = kotlin.math.abs(existing.z - z) < (existing.depth + 1.5) / 2.0
+                overlapX && overlapZ
+            }
+            if (!overlaps) break
+            parcelIndex = Math.addExact(parcelIndex, 1)
+        }
+
         val chunkX = Math.floorDiv(gx, CHUNK_SIZE)
         val chunkZ = Math.floorDiv(gz, CHUNK_SIZE)
         val localX = Math.floorMod(gx, CHUNK_SIZE)
@@ -29,8 +50,6 @@ object ProceduralDistricts {
             DistrictWaveFunctionCollapse.Kind.RESEARCH -> "research" to "Biblioteca de pesquisa"
             DistrictWaveFunctionCollapse.Kind.CIVIC -> "civic" to "Ágora cívica"
         }
-        val x = 30.0 + gx * 2.0
-        val z = 24.0 + gz * 2.0
         return Room("annex_${index}_$code", "$title ${index + 1}", x, z, 1.7, 1.5, 2)
     }
 
