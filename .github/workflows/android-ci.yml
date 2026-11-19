@@ -4,9 +4,10 @@ on:
   push:
     branches:
       - "**"
+  # Push already covers PR synchronize events. Keep PR events only for opening/reopening
+  # so a single commit does not launch two identical builds.
   pull_request:
-    branches:
-      - "**"
+    types: [opened, reopened]
   workflow_dispatch:
 
 permissions:
