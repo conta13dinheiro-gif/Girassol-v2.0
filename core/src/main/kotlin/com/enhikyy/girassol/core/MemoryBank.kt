@@ -56,6 +56,9 @@ import kotlin.math.*
             next=next.copy(reflections=lessons.values.sortedBy { it.action.ordinal },reflectedTick=world.tick,
                 episodes=next.episodes.filter { it.importance*exp(-(world.tick-it.tick)/2880.0)>=.04 })
         }
+        if (due || next.episodes.size > HippocampalSleepConsolidator.MAX_NODES_PER_AGENT) {
+            next = HippocampalSleepConsolidator.consolidate(next, world.tick).bank
+        }
         return next
     }
     fun learnFrom(teacherId: String,teacher: MemoryBank,tick: Long): MemoryBank {

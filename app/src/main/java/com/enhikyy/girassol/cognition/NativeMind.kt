@@ -25,7 +25,12 @@ internal object NativeMind {
         return old.copy(parameters=List(248) { data.getDouble(it*8) },hidden=List(8) { data.getDouble((248+it)*8) },exposure=exposure,learnedTick=tick)
             .also { check(it.valid(tick)) }
     }
-    fun evaluate(world: WorldState,lastActions: List<ActionRecord> = emptyList(),policy: List<Double> = world.evolution?.weights ?: List(8) { 0.0 }): CognitiveFrame {
+    fun evaluate(
+        world: WorldState,
+        lastActions: List<ActionRecord> = emptyList(),
+        policy: List<Double> = world.evolution?.weights ?: List(8) { 0.0 },
+        thermalTier: ThermalTier = ThermalTier.NONE_OR_LIGHT
+    ): CognitiveFrame {
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
         val prepared=world.agents.associate { citizen ->
             val mind=world.minds[citizen.id] ?: run {
@@ -79,12 +84,15 @@ internal object NativeMind {
                     else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
                 val technique=bank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
                 // Seeded Gumbel exploration scales with curiosity and lack of novelty; outputs are journaled.
-                val temperature=.04+.20*old.personality[0]*(1-novelty)
+                val thermalCost = AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier, 1.0, n.energy)
+                val policyScale = 1.0 / (1.0 + thermalCost)
+                val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
                 val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
                 scores[i]+=-ln(-ln(u))*temperature
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
-                scores[i]+=policy[i]+expected*.4+technique*.15+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-hypot(room.x-citizen.x,room.z-citizen.z)*.025
+                val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
+                scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-hypot(room.x-citizen.x,room.z-citizen.z)*.025
                 scores[i]+=when(activity) {
                     Activity.STUDY -> psyche.dopamine*.12+ignition*.45
                     Activity.TALK -> psyche.oxytocin*.12+maxOf(0.0,psyche.pleasure)*.04
