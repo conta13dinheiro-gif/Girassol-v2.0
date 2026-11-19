@@ -1,5 +1,7 @@
 <!-- coderabbit-ai-generated:v1 -->
 
+<!-- coderabbit-ai-generated-section:v1:2ec3c2651ea0ae8767293debda4fafb1d5953cb790d1ae7010b4ec6a7dc94508 -->
+
 <!-- coderabbit-ai-generated-section:v1:dba1a4a944baaf52c56992b93d64958f859923a14055c7e81d817ceee677be64 -->
 
 # Arquitetura inicial e interpretação dos anexos
@@ -17,7 +19,7 @@ Os seis arquivos são especificações e exemplos sobrepostos, não um checkout 
 | Girassol_Arquitetura_Mestre_GEA_Teorias_Avan_adas_e_Plano_de_Execu_o_24-7_1_.pdf | 1137695 | `2ebe7189891b851dfa89caf84d32f4463bc05f00bae280ce8e0de5de7dced2cb` |
 | Completo.md | 110569 | `299cd783fb1a01b9a6ea1909fb612f412d0109381f9be4a51be6831d5a994725` |
 
-## Arquitetura atual — incremento 0.7
+## Arquitetura atual — incremento 0.9 (fontes não executadas)
 
 ```mermaid
 flowchart TD
@@ -40,7 +42,7 @@ flowchart TD
 
 - **Autoridade e tempo:** WorldActor continua Kotlin/JVM, independente do renderer/áudio e do relógio físico. Componentes C++ propõem decisões e produzem apresentação. A adoção da transição ocorre depois de sua transação durável; falha de gravação não avança o ator adotado.
 - **Economia:** seção29 de Completo exige conservação estrita. Consumo transfere para ambiente/arquivo/estruturas; reciclagem devolve às contas de mercado e salários usam moedas existentes. Não há criação de matéria ou moeda após a gênese.
-- **Diário:** eventos1/2 e fixtures200eventos permanecem inalterados. Evento3 acrescenta proposta GGUF. Evento4 recebe CognitiveFrame com identidade do snapshot de origem, parâmetros LTC, Big Five, memória e decisões. Campos novos vazios/nulos são omitidos para preservar hashes antigos. Frames são copiados defensivamente, inclusive vetores internos. O replay recompõe e compara eventos em ator temporário antes de adotá-los; não exige backend nativo.
+- **Diário:** eventos1/2 e fixtures200eventos permanecem inalterados. Evento3 acrescenta proposta GGUF. Evento5 acrescenta SpatialFrame: semente, intenções e trajetórias de30subpassos físicos por ciclo. Replays antigos preservam as regras anteriores; os novos não executam novamente o solver. Evento4 recebe CognitiveFrame com identidade do snapshot de origem, parâmetros LTC, Big Five, memória e decisões. Campos novos vazios/nulos são omitidos para preservar hashes antigos. Frames são copiados defensivamente, inclusive vetores internos. O replay recompõe e compara eventos em ator temporário antes de adotá-los; não exige backend nativo.
 - **Persistência:** SQLite schema2 acrescenta a tabela de marcos com snapshot integral/digest/hash do evento. A migração não reescreve registros antigos. Flashback verifica snapshot e vínculo ao diário; bifurcação copia o prefixo para outro banco e valida a cópia antes de trocar a linha ativa. Não se usa arquivo `world_snapshot.bin` separado. Diários completos são mantidos; poda segura requer futuro protocolo de âncoras e retenção histórica.
 - **JNI:** vértices32bytes (posição float3, quaternion float4, RGBA8); malhas e estados de cálculo usam DirectByteBuffer e validação de capacidades. Há upload CPU→GPU e cópias locais para alinhamento/validação; não se afirma ausência total de cópias.
 - **Renderer:** Filament1.56.0, PBR procedural e vidro separado, IBL com convolução difusa e prefiltragem GGX, sombras/SSAO/ACES/bloom/antialiasing. Passagem offscreen com acabamento próprio. Céu/clima são apresentação reprodutível, sem autoridade meteorológica sobre o mundo. Aparência, precisão do picking e ciclo de vida GPU ainda precisam de aparelho.
@@ -63,18 +65,26 @@ HNSW utiliza a opção upstream `HNSWLIB_USE_PREFETCH=0`. O caminho SSE de looka
 
 ## Pendências da especificação
 
-1. Recast/Detour, multidões sem colisão, GPGOAP e navegação física de interiores.
+1. Recast/Detour, RVO2 completo, GPGOAP e navegação de múltiplos andares. Há implementação própria de A* e steering com colisores derivados da cena; sua execução não foi validada neste incremento.
 2. WFC/Earcut, distritos especializados, expansão urbana aberta e economia produtiva espacial. O núcleo ainda tem seis fundadores e teto de dez ambientes.
 3. Ciclo de vida reprodutivo, genealogia persistida, herança Big Five completa e mutação estrutural NEAT.
 4. Instituições/leis/comércio emergentes, linguagem com adoção social e geração GGUF livre validada.
-5. Embeddings linguísticos, reflexão neural e biblioteca de habilidades executáveis generalizáveis.
+5. Reflexão neural e biblioteca de habilidades executáveis generalizáveis. Embeddings GGUF completos/HNSW da biblioteca foram integrados no incremento0.8; vetores de episódios continuam observacionais16D.
 6. RSI distrital/estrutural, treinamento LoRA e confirmação de um adaptador compatível real.
 7. Compactação/poda com âncoras criptográficas, preservação das bifurcações e política de retenção.
-8. Direção cinematográfica automática e maratona física em Android13+/ARM64/4GB com medição de FPS, memória, temperatura e áudio.
+8. Direção cinematográfica automática e maratona física em Android13+/ARM64/8GB e12GB com medição de FPS, memória, temperatura e áudio.
+
+## Física e pesquisa incorporadas após0.7
+
+- `physics/spatial.cpp`: grade de10cm, obstáculos construídos dos triângulos publicados da cidade, A*, verificação de segmentos, steering/reserva de espaço e circle-vs-AABB. Gravidade integra em1/60s,30subpassos por ciclo lógico. A dimensão da grade acompanha os limites da cena. Há cache por thread/revisão/seed e buffers JNI diretos.
+- `SpatialFrame`: entrada canônica5 vinculada ao hash do estado anterior, com caminho físico, apoio, velocidade vertical e intenção. O núcleo adota posições antes da arbitragem e a persistência continua precedendo a publicação. Campos vazios são omitidos dos estados e eventos anteriores.
+- `ContactShadows` e `contact_shadow.mat`: buffers compartilhados e instâncias por cidadão, transparência radial, escala/densidade moduladas pela distância ao apoio. Respiração preserva os pés; marcha depende da distância apresentada.
+- `research/` e banco schema4: currículo, aquisição HF imutável, quarentena, embeddings GGUF/HNSW, cache Range/mmap e estudo físico. Consulte `biblioteca.md`. O estudo aceita pontos de interação livres dentro da biblioteca no novo espaço físico, preservando a regra de proximidade nos estados legados.
+- Permanecem pendentes objetos soltos/empilhamento, andares arbitrários, resolução completa de impasses de multidão e os módulos dedicados Shizuku/DGM/OpenCL/treino LoRA.
 
 ## Validação e limites
 
-Gates: `./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :app:assembleRelease :app:assembleDebugAndroidTest`; `scripts/test-native.sh` compila seis suítes com ASan/UBSan; smoke GGUF usa modelo externo. Os testes de propriedade/replay legados são independentes das novas entradas neurais gravadas. Há testes novos de cópia defensiva, memória/consolidação/ensino, admissão de políticas, proveniência, migração, histórico e bifurcação.
+O pedido mais recente suspende testes, compilações e emulação nesta entrega. O workflow agora é manual e contém somente preparação e `assembleDebug`/`assembleRelease`; ele compila os materiais via matc56 fixado por SHA256. Os scripts de testes existentes foram mantidos para uso posterior, mas não executados. O estado de compilação e a correção em execução do código0.9 estão sem confirmação. A revisão desta alteração limitou-se à leitura de interfaces, contratos e diferenças de código.
 
 O host pode executar código de produção Kotlin/JNI para testar aprendizagem e Shadow-Replay sem Android. Isso não valida GPU, framework SQLite Android, SAF, AAudio/foco ou comportamento de aparelho. Instrumentação compilada não equivale a instrumentação executada. A meta60FPS não é uma medição. Os resultados exatos e hashes dos inputs/artefatos são mantidos no registro de validação do workspace, separado do repositório.
 
