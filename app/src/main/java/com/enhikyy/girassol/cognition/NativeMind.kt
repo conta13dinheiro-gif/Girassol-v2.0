@@ -33,7 +33,7 @@ internal object NativeMind {
                 val family=world.genealogy.lastOrNull { it.child==citizen.id }
                 val first=family?.let { world.minds[it.parentOne] }
                 val second=family?.let { world.minds[it.parentTwo] }
-                if(first!=null && second!=null) MindState.inherit(world,citizen,first,second)
+                if(first!=null && second!=null) MindState.inherit(world,citizen,family.parentOne,family.parentTwo,first,second)
                 else MindState.initial(world,citizen)
             }
             val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
