@@ -187,6 +187,22 @@ object PluginRegistry {
         it.enabled && it.kind == PluginKind.AUDIO_SCALE
     }?.config?.get("rootMultiplier")?.jsonPrimitive?.floatOrNull?.coerceIn(.5f, 2f) ?: 1f
 
+    fun filmGrain(): Float = mutable.value.firstOrNull {
+        it.enabled && it.kind == PluginKind.FILM_PROFILE
+    }?.config?.get("grain")?.jsonPrimitive?.floatOrNull?.coerceIn(0f, 1f) ?: 0f
+
+    fun filmHalation(): Float = mutable.value.firstOrNull {
+        it.enabled && it.kind == PluginKind.FILM_PROFILE
+    }?.config?.get("halation")?.jsonPrimitive?.floatOrNull?.coerceIn(0f, 1f) ?: 0f
+
+    fun audioRatios(): FloatArray {
+        val fallback = floatArrayOf(1f, 1.067f, 1.125f, 1.2f, 1.333f, 1.5f, 1.6f, 1.8f)
+        val plugin = mutable.value.firstOrNull { it.enabled && it.kind == PluginKind.AUDIO_SCALE } ?: return fallback
+        val ratios = plugin.config["ratios"] as? JsonArray ?: return fallback
+        if (ratios.size != fallback.size) return fallback
+        return ratios.map { it.jsonPrimitive.floatOrNull ?: return fallback }.toFloatArray()
+    }
+
     private fun parse(bytes: ByteArray, builtIn: Boolean, enabled: Boolean): InstalledPlugin {
         require(bytes.size in 1..MAX_FILE_BYTES)
         val root = json.parseToJsonElement(bytes.decodeToString()).jsonObject
