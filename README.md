@@ -6,11 +6,11 @@
 
 # Girassol v2.0
 
-Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição deste incremento é **0.9.0**. A arquitetura ARM64 não exige conta, rede ou modelo para a simulação local. Este incremento de física ainda não foi compilado ou executado, por orientação do usuário.
+Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição declarada do aplicativo permanece **0.9.0**; as alterações desta branch são incrementais e ainda não constituem uma nova versão publicada. A arquitetura ARM64 não exige conta, rede ou modelo para a simulação local.
 
 ## Compilação manual
 
-O workflow `.github/workflows/android.yml` executa somente por **Actions → Run workflow**. Gera Debug e Release ARM64; não instala APK, não inicia emulador e não executa testes. Nenhuma compilação foi acionada para esta alteração, conforme solicitado. O release não tem assinatura de distribuição configurada.
+O workflow `.github/workflows/android-ci.yml` executa automaticamente em push, pull request e acionamento manual. Instala JDK17, SDK35, NDK27 e CMake3.22.1; compila os materiais Filament1.56.0; executa `scripts/test-native.sh`, `testDebugUnitTest` e `lintDebug`; compila Debug/Release ARM64 e publica artefatos separados `Girassol-debug` e `Girassol-release`. O workflow `.github/workflows/android.yml` continua disponível para compilação manual. Nenhum emulador é iniciado. O release gerado pelo CI não tem assinatura de distribuição configurada.
 
 Toolchain: JDK17, SDK35, Build Tools35.0.0, NDK27.0.12077973, CMake3.22.1, Gradle8.11.1 e Kotlin2.1.10. O workflow baixa o matc oficial1.56.0 por SHA256 e compila todos os materiais antes do APK. Para compilação local futura:
 
@@ -29,6 +29,13 @@ As suítes JVM/nativas/instrumentadas permanecem no código para execução futu
 - Economia mostra saldos efetivos, contas de consumo/arquivo/estruturas e distribuição das atividades; não inventa séries históricas.
 - Marcos surgem de construções, práticas comprovadas, primeira obra, crises, início da cognição, políticas promovidas e dias concluídos. Flashback carrega o estado integral verificado; bifurcação copia o prefixo do diário para um banco independente. Sistema permite voltar à linha original.
 
+## Planejamento, expansão urbana e genealogia — regras canônicas v6
+
+- `UtilityGoapPlanner` avalia sequências determinísticas de até três ações no vocabulário existente, considerando necessidades, recursos, estoque e pré-condições. `WorldActor` continua revalidando cada ação e mantendo a autoridade sobre o estado; regras e replay históricos1–5 não são reexecutados sob regras novas.
+- A construção em regras6 não para no décimo ambiente. `ProceduralDistricts` aloca anexos em espiral quadrada determinística. `city_mesh`, JNI e os buffers Kotlin não impõem mais o limite de64 ambientes nem os tetos fixos anteriores de vértices/índices; a grade de colisão adapta a densidade para um orçamento de índice de32MiB. A geometria nativa ainda mantém limites de coordenadas e precisa de estratégia por blocos para expansão geográfica de escala muito grande.
+- Quando dois cidadãos têm confiança recíproca>=0,90, a conversa pode registrar um descendente para o par. Loci expressos dos dois pais são recombinados com fluxo determinístico; a nova identidade, linhagem, vocabulário, relações, eventual habilidade compartilhável e hash do genoma entram no estado. Um par tem intervalo mínimo de1440 ciclos entre nascimentos. O registro de genealogia é validado contra os cidadãos e seus genomas e participa do hash do estado.
+- A aba Cidadãos exibe pais, descendentes, geração, ciclo do nascimento e prefixo do hash genético. Isso não equivale ainda a mortalidade/expectativa de vida, NEAT estrutural, Big Five integral hereditário ou transmissão cultural institucional completa.
+
 ## Apresentação nativa
 
 Filament1.56.0: materiais PBR procedurais para solo, pedra, madeira, metal, água e vegetação; vidro separado translúcido; normais analíticas, telhados, interiores e detalhes urbanos; habitantes articulados, acessórios e animação procedural. Ambiente com céu solar, estrelas/lua, irradiância difusa e mipmaps especulares GGX gerados em worker. Sombras direcionais DPCF com duas cascatas, SSAO, ACES, bloom, MSAA/FXAA.
@@ -45,7 +52,7 @@ Cada ciclo usa30subpassos fixos de1/60s, gravidade−9,81m/s² e apoio amostrado
 
 A câmera e a apresentação seguem os pontos físicos, evitando interpolação reta através de quinas. A fase dos passos acumula distância efetivamente apresentada; sem deslocamento, a marcha para e resta a respiração do tronco. O pivô da sola é normalizado paraY0. Sombras de contato translúcidas por cidadão acompanham o piso e perdem densidade com a altura, somadas a SSAO e DPCF.
 
-Limites atuais: navegação 2,5D no nível existente, colisões conservadoras AABB derivadas das faces, separação por steering/reserva local; não são Recast/Detour ou RVO2. Corredores muito congestionados podem exigir resolução de impasses mais completa. Não existe ainda inventário de objetos físicos soltos nem empilhamento dinâmico. O solver e os materiais novos aguardam compilação e validação pelo usuário.
+Limites atuais: navegação 2,5D no nível existente, colisões AABB derivadas das faces e separação local por steering/reserva; Recast/Detour, RVO2 e navegação em múltiplos andares ainda não estão integrados. Corredores congestionados podem exigir resolução de impasses mais completa. Não existe ainda inventário de objetos físicos soltos nem empilhamento dinâmico. A validação visual e de desempenho sustentado ainda exige aparelho ARM64.
 
 ## Aprendizagem e memória
 
@@ -85,15 +92,15 @@ Rejeitar todos os candidatos é um resultado válido. Pausa, troca de linha, des
 
 ## Contratos preservados
 
-WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção; evento5 acrescenta o resultado físico canônico. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
+WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção; evento5 acrescenta o resultado físico canônico legado; evento6 identifica os ticks da nova política espacial com planejamento GOAP, expansão procedural e genealogia. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
 
 SQLite migra aditivamente até schema4: marcos, pesquisa e vetores, sem reescrever eventos/checkpoint anteriores. Auditoria confere IDs, ticks, hashes e vínculo ao checkpoint; não substitui assinatura autenticada contra reescrita integral do banco. Os diários completos são preservados; poda com âncoras criptográficas ainda não foi implementada.
 
 ## Estado e pendências
 
-Este incremento **não conclui toda a especificação**. A cidade lógica ainda possui seis fundadores e construção até dez ambientes. Permanecem: navegação de multidões Recast/Detour e planejamento GPGOAP; distritos WFC/Earcut e crescimento urbano aberto; reprodução/morte/genealogia e mutação estrutural NEAT; instituições/leis/comércio emergentes completos; cognição linguística generativa e treinamento LoRA; compactação com poda auditável; direção cinematográfica automática; Shizuku/modo dedicado, DGM/runtime de código, OpenCL e dois GGUF residentes, treino contínuo real; dimensionamento por hardware8/12GB; validação visual, de áudio, memória e60FPS.
+Este incremento **não conclui toda a especificação**. A cidade ainda começa com seis fundadores; regras6 já permitem construir acima de dez ambientes, mas não há expansão geográfica ilimitada por blocos. Permanecem: Recast/Detour, RVO2 e navegação em múltiplos andares; WFC/Earcut para distritos especializados; mortalidade/expectativa de vida e NEAT estrutural; instituições, leis e comércio emergentes completos; transmissão cultural e Big Five integral; cognição linguística generativa livre e treinamento LoRA; decodificação Parquet direta; compactação/poda auditável; direção cinematográfica automática; Shizuku/modo dedicado, DGM/runtime de código, OpenCL e dois GGUF residentes; treino contínuo real do modelo; dimensionamento por hardware4/8/12GB; validação visual, áudio, memória, temperatura e60FPS em aparelho.
 
-As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC, hnswlib, OkHttp e RapidJSON, com versões/licenças preservadas.
+As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. O planner GOAP atual é uma implementação determinística própria no módulo `core`, não um wrapper de GPGOAP. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC, hnswlib, OkHttp e RapidJSON, com versões/licenças preservadas.
 
 ## Organização
 
