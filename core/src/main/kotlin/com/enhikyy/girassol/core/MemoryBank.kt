@@ -158,6 +158,12 @@ import kotlin.math.*
         const val MEMRL_ALPHA = 0.2
         const val DEFAULT_UTILITY_WEIGHT = 0.25
 
+        /** Convert cosine similarity [-1,1] into a safe non-negative reward weight [0,1]. */
+        fun cosineWeight(similarity: Double): Double {
+            require(similarity.isFinite() && similarity in -1.0..1.0)
+            return ((similarity + 1.0) * 0.5).coerceIn(0.0, 1.0)
+        }
+
         fun embedding(citizen: Citizen,activity: Activity = citizen.activity,reward: Double=0.0): List<Float> {
             val n=citizen.needs
             val raw=List(8) { if(it==activity.ordinal) 1.0 else 0.0 }+listOf(
