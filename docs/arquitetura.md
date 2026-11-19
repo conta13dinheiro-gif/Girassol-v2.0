@@ -100,3 +100,8 @@ O host pode executar código de produção Kotlin/JNI para testar aprendizagem e
 ## Ingestão de documentos via Storage Access Framework
 
 O picker SAF permite selecionar TXT, Markdown, CSV, JSON e EPUB. A leitura ocorre no executor de pesquisa; EPUB é extraído de entradas XHTML/HTML com limite de expansão, e o texto é dividido em trechos compatíveis com o parser de datasets. Cada lote local é associado ao cidadão/ciclo, recebe SHA-256 e passa por `ResearchTables.acquire`, reutilizando o diário encadeado e a quarentena de duas revisões. A importação respeita o limite atual de2MiB por aquisição e até100 trechos; não reescreve snapshots nem eventos do mundo. PDF e áudio ainda não são aceitos, pois os extratores nativos pdftext/MediaExtractor+FFT da especificação ainda não foram implementados.
+
+
+## Ponte Shizuku (opt-in)
+
+O app usa o provider e a API Shizuku e um UserService AIDL dedicado. O app só solicita permissão depois do toque explícito do usuário; a conexão é independente do serviço principal. A implementação remota expõe apenas leitura de UID/PID, `/proc/meminfo`, `/sys/class/thermal/thermal_zone0/temp` e `/sys/block/zram0/mm_stat`. O Binder morto/desligado/negado limpa a conexão e mantém o fallback local. AIDL usa o transaction code reservado de `destroy()`. Não se usa `app_process` manual, root, escrita de `oom_score_adj`, MANAGE_EXTERNAL_STORAGE ou comandos shell arbitrários.
