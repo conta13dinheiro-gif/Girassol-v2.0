@@ -5,12 +5,12 @@ import kotlin.math.hypot
 import kotlin.math.min
 
 /** Single owner, staged proposals from one immutable perception snapshot. No Android or wall clock. */
-class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH), private val rulesVersion: Int = CURRENT_RULES_VERSION) {
+class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH), private val rulesVersion: Int = 2) {
     var state: WorldState = checkpoint.state
         private set
     private var eventId = checkpoint.eventId
     private var previousHash = checkpoint.eventHash
-    init { require(rulesVersion in 1..5); require(state.version == 1); require(violations(state).isEmpty()) }
+    init { require(rulesVersion in 1..6); require(state.version == 1); require(violations(state).isEmpty()) }
     fun checkpoint() = Checkpoint(state, eventId, previousHash)
 
     /** Same admitted intentions used by the native planner and by execution. */
@@ -19,7 +19,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) && it.applicable(base) }
         val input=cognition?.takeIf { rulesVersion>=4 && it.applicable(state) }
         return base.agents.associate { a->a.id to (if(a.id==admitted?.agentId) admitted.activity
-            else if(input!=null && a.acceptsNeuralActivity()) input.decisions.getValue(a.id) else choose(a,base.tick)) }
+            else if(input!=null && a.acceptsNeuralActivity()) input.decisions.getValue(a.id) else choose(a,base.tick,base)) }
     }
 
     @Synchronized fun step(neural: NeuralProposal? = null, cognition: CognitiveFrame? = null, spatial: SpatialFrame? = null): Transition {
@@ -147,7 +147,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 12: Bounded social/memory outputs; immutable publication follows validation.
         val next = base.copy(spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
-        val raw = CanonicalEvent(version = if(physics!=null) 5 else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        val raw = CanonicalEvent(version = if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -164,31 +164,36 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         state = result.state; eventId = event.eventId; previousHash = event.hash
     }
 
-    private fun choose(a: Citizen, tick: Long): Activity {
+    private fun choose(a: Citizen, tick: Long, world: WorldState): Activity {
+        val fallback = chooseLegacy(a, tick, world)
+        return if (rulesVersion >= 6) UtilityGoapPlanner.choose(world, a, fallback) else fallback
+    }
+
+    private fun chooseLegacy(a: Citizen, tick: Long, world: WorldState): Activity {
         val n = a.needs
         if (n.hydration < .42) return Activity.WATER
         if (n.glucose < .4) {
             // A citizen without coins can earn a wage by writing before visiting the market.
-            if (rulesVersion >= 2 && (state.balances["${a.id}/coins"] ?: 0) == 0 &&
-                (state.balances["market/coins"] ?: 0) > 0 &&
-                ((state.balances["market/paper"] ?: 0) + (state.balances["archive/paper"] ?: 0)) > 0) return Activity.WRITE
+            if (rulesVersion >= 2 && (world.balances["${a.id}/coins"] ?: 0) == 0 &&
+                (world.balances["market/coins"] ?: 0) > 0 &&
+                ((world.balances["market/paper"] ?: 0) + (world.balances["archive/paper"] ?: 0)) > 0) return Activity.WRITE
             return Activity.EAT
         }
         if (n.energy < .38 || (a.activity == Activity.SLEEP && n.energy < .9)) return Activity.SLEEP
         if (!a.acting && tick % 16 != a.id.last().code % 16L) return a.activity
-        val rng = Canonical.stream(state.seed, a.id, tick, "decision")
+        val rng = Canonical.stream(world.seed, a.id, tick, "decision")
         val scores = listOf(
             Activity.TALK to ((1 - n.social) * 2 + a.genome.sociability.express() * .3),
             Activity.STUDY to ((1 - n.curiosity) * 1.6 + rng.nextDouble() * .3),
             Activity.WRITE to ((1 - n.curiosity) * 1.7 + rng.nextDouble() * .4),
             Activity.COFFEE to ((1 - n.energy) * 1.4 + rng.nextDouble() * .3),
-            Activity.BUILD to (if (state.rooms.size < 10) .5 + rng.nextDouble() * .8 else -1.0)
+            Activity.BUILD to (if (world.rooms.size < 10) .5 + rng.nextDouble() * .8 else -1.0)
         )
         return scores.maxBy { it.second + if (it.first == a.activity) .12 else 0.0 }.first
     }
 
     companion object {
-        const val CURRENT_RULES_VERSION = 2
+        const val CURRENT_RULES_VERSION = 6
         val GENESIS_HASH = "0".repeat(64)
         fun genesis(seed: Long = 20261119): WorldState {
             val rooms = listOf(Room("salon", "Sala solar", 3.0, 3.0, 3.8, 2.6, 6), Room("bedroom", "Dormitório Aurora", 8.0, 2.5, 3.8, 2.5, 3), Room("cafe", "Café & fonte", 2.5, 6.5, 3.0, 2.0, 2), Room("market", "Mercado", 8.5, 6.5, 3.0, 2.0, 2), Room("library", "Biblioteca", 5.5, .6, 3.0, 1.4, 1), Room("workshop", "Oficina", 5.4, 9.0, 2.3, 1.8, 1))
