@@ -16,7 +16,7 @@ float Synth::random() noexcept {
 }
 bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept {
     if (!out || frames<0 || frames>1048576 || sr<8000 || sr>192000) return false;
-    p.volume=unit(p.volume); p.left_steps=unit(p.left_steps); p.right_steps=unit(p.right_steps); p.mastery=unit(p.mastery); p.social=unit(p.social); p.weather=unit(p.weather); p.tension=unit(p.tension); p.milestone=unit(p.milestone); p.pitch=std::isfinite(p.pitch)?std::clamp(p.pitch,.5f,2.0f):1.0f;
+    p.volume=unit(p.volume); p.left_steps=unit(p.left_steps); p.right_steps=unit(p.right_steps); p.mastery=unit(p.mastery); p.social=unit(p.social); p.weather=unit(p.weather); p.tension=unit(p.tension); p.milestone=unit(p.milestone); p.pitch=std::isfinite(p.pitch)?std::clamp(p.pitch,.5f,2.0f):1.0f; p.synchrony=std::isfinite(p.synchrony)?std::clamp(p.synchrony,0.0f,1.0f):0.0f;
     for(auto& ratio:p.ratios) ratio=std::isfinite(ratio)?std::clamp(ratio,.25f,4.0f):1.0f;
     if(p.milestone>last_milestone_) celebration_=1;
     last_milestone_=p.milestone;
@@ -32,7 +32,10 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         timer_+=dt;
         const double interval=1.85-.45*mastery_;
         if (timer_>=interval) { timer_-=interval; note_index_=(note_index_+1)%p.ratios.size(); }
-        const double noteFrequency=referenceFrequency*static_cast<double>(p.ratios[note_index_%p.ratios.size()])*p.pitch;
+        constexpr std::array<float,8> collectiveRatios{1.0f,1.125f,1.25f,1.333333f,1.5f,1.666667f,1.875f,2.0f};
+        const std::size_t scaleIndex=note_index_%p.ratios.size();
+        const float activeRatio=p.ratios[scaleIndex]*(1.0f-p.synchrony)+collectiveRatios[scaleIndex]*p.synchrony;
+        const double noteFrequency=referenceFrequency*static_cast<double>(activeRatio)*p.pitch;
         phase(hum_,60,dt); phase(note_,noteFrequency,dt); phase(sub_,noteFrequency*.5,dt);
         phase(step_,1.7,dt);
         noise_+=filter*(random()-noise_);
