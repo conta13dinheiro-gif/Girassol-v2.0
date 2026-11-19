@@ -9,6 +9,7 @@ import android.os.Process
 import com.enhikyy.girassol.core.*
 import com.enhikyy.girassol.data.WorldStore
 import com.enhikyy.girassol.cognition.*
+import com.enhikyy.girassol.plugins.PluginRegistry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.*
@@ -46,7 +47,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         data class Download(val batch: DatasetBatch): SearchResult
         data class Local(val matches: List<Pair<KnowledgeCandidate,Float>>): SearchResult
     }
-    init { guardian.onRevoked { http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };handler.post { cancel() } };configure(settings) }
+    init { PluginRegistry.initialize(app); guardian.onRevoked { http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };handler.post { cancel() } };configure(settings) }
     private fun loadSettings()=ResearchSettings(prefs.getBoolean("auto",false),prefs.getBoolean("wifi",true),prefs.getBoolean("review",true),prefs.getInt("quota",512).takeIf { it in listOf(256,512,1024,2048,4096) } ?: 512)
     fun configure(value: ResearchSettings) {
         require(value.valid());settings=value;guardian.wifiOnly=value.wifiOnly;guardian.enabled=value.automatic;guardian.resume()
@@ -93,6 +94,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     fun committed(transition: Transition) { if(transition.event.cognition?.lesson!=null) { evidence=null;studying=null;refresh() } }
     fun consider(point: Checkpoint,actions: List<ActionRecord>) {
         if(!settings.automatic || future!=null || android.os.SystemClock.elapsedRealtime()<retryAt) return
+        if(!PluginRegistry.isEnabled("research.huggingface")) { message("Fonte Hugging Face desativada nos plugins"); return }
         try { guardian.checkLocal() } catch(e: ResearchPaused) { message(e.message ?: "Aguardando recursos");return }
         val world=point.state;val tables=store().research()
         if(evidence!=null) return
