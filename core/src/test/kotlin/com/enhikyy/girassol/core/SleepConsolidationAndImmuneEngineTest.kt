@@ -173,4 +173,10 @@ class SleepConsolidationAndImmuneEngineTest {
         assertEquals(.85, bank.utilityAdjustedScore(1, .85, utilityWeight = 0.0), 1e-10)
     }
 
+    @Test fun cosineSimilarityMapsToNonNegativeRewardWeight() {
+        assertEquals(0.0, MemoryBank.cosineWeight(-1.0), 1e-10)
+        assertEquals(0.5, MemoryBank.cosineWeight(0.0), 1e-10)
+        assertEquals(1.0, MemoryBank.cosineWeight(1.0), 1e-10)
+    }
+
 }
