@@ -91,7 +91,6 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     fun deliberate(world: WorldState,frame: CognitiveFrame): CognitiveFrame {
         val completed=synchronized(reflectionLock) {
             val ready=reflectionPending.toMap()
-            reflectionPending.clear()
             ready
         }
         val candidate=frame.minds.entries
@@ -151,7 +150,12 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         val researcher=studying?.intent?.discoverer ?: store().research().candidates(1).firstOrNull()?.intent?.discoverer
         return if(researcher!=null && world.agents.any { it.id==researcher && it.acceptsNeuralActivity() }) frame.copy(decisions=frame.decisions+(researcher to Activity.STUDY)) else frame
     }
-    fun committed(transition: Transition) { if(transition.event.cognition?.lesson!=null) { evidence=null;studying=null;refresh() } }
+    fun committed(transition: Transition) {
+        transition.event.cognition?.innerSpeech?.keys?.let { committedIds ->
+            synchronized(reflectionLock) { committedIds.forEach(reflectionPending::remove) }
+        }
+        if(transition.event.cognition?.lesson!=null) { evidence=null;studying=null;refresh() }
+    }
     fun consider(point: Checkpoint,actions: List<ActionRecord>) {
         if(!settings.automatic || future!=null || android.os.SystemClock.elapsedRealtime()<retryAt) return
         if(!PluginRegistry.isEnabled("research.huggingface")) { message("Fonte Hugging Face desativada nos plugins"); return }
@@ -344,5 +348,5 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         return output.toString()
     }
 
-    override fun close() { cancel();executor.shutdownNow();guardian.close() }
+    override fun close() { cancel();executor.shutdownNow();reflectionExecutor.shutdownNow();guardian.close() }
 }
