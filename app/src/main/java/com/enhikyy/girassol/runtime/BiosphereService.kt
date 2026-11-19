@@ -128,6 +128,17 @@ class BiosphereService : Service() {
                         }
                         if(wasRunning) startLoop() else { if(wakeLock.isHeld) wakeLock.release(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
                     }
+                    ACTION_IMPORT_DOCUMENT -> {
+                        val uri=checkNotNull(intent.data) { "Arquivo de origem ausente" }
+                        research.importDocument(uri) {
+                            if(!prefs.getBoolean("running",false)) {
+                                if(wakeLock.isHeld) wakeLock.release()
+                                stopForeground(STOP_FOREGROUND_REMOVE)
+                                stopSelf(startId)
+                            }
+                        }
+                        if(prefs.getBoolean("running",false)) startLoop()
+                    }
                     ACTION_PROPOSAL -> {
                         if (running) {
                             val activity = intent.getStringExtra("activity")?.let { runCatching { com.enhikyy.girassol.core.Activity.valueOf(it) }.getOrNull() }
@@ -198,6 +209,15 @@ class BiosphereService : Service() {
         super.onDestroy()
     }
     companion object {
+        const val ACTION_IMPORT_DOCUMENT="com.enhikyy.girassol.IMPORT_DOCUMENT"
+        fun importDocument(context: Context,uri: android.net.Uri) {
+            context.startForegroundService(
+                Intent(context,BiosphereService::class.java)
+                    .setAction(ACTION_IMPORT_DOCUMENT)
+                    .setData(uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+        }
         const val ACTION_DATASET="com.enhikyy.girassol.DATASET"
         fun datasetControl(context: Context,id: String,pinned: Boolean,enabled: Boolean) {
             context.startForegroundService(Intent(context,BiosphereService::class.java).setAction(ACTION_DATASET).putExtra("researchId",id).putExtra("pinned",pinned).putExtra("enabled",enabled))
