@@ -332,12 +332,14 @@ object NeuralSpeechEngine {
                     voices = File(root, "voices.bin").absolutePath,
                     tokens = File(root, "tokens.txt").absolutePath,
                     dataDir = File(root, "espeak-ng-data").absolutePath,
+                    lang = "pt"
                 ),
                 numThreads = 2,
                 debug = false,
                 provider = "cpu"
             ),
-            maxNumSentences = 1
+            maxNumSentences = 1,
+            silenceScale = .2f
         )
         return OfflineTts(config = config)
     }
