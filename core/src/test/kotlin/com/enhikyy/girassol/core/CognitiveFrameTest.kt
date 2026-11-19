@@ -74,7 +74,7 @@ class CognitiveFrameTest {
         assertEquals(child.genome.curiosity.express(),inherited.personality[0],0.0)
         assertEquals(child.genome.sociability.express(),inherited.personality[2],0.0)
         assertTrue(inherited.memory.procedures.any { it.action==Activity.STUDY && it.teacher==two.id && it.successes>=3 })
-        assertEquals(inherited,MindState.inherit(world,child,first,second))
+        assertEquals(inherited,MindState.inherit(world,child,one.id,two.id,first,second))
     }
 
 }
