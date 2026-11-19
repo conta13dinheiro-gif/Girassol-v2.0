@@ -17,8 +17,7 @@ internal object NativeCityMesh {
     }
 
     fun roomBuffer(rooms: List<Room>): ByteBuffer {
-        require(rooms.size <= 64)
-        val input = direct(rooms.size * 24)
+        val input = direct(Math.multiplyExact(rooms.size, 24))
         rooms.forEach { r ->
             input.putFloat(r.x.toFloat()).putFloat(r.z.toFloat()).putFloat(r.width.toFloat()).putFloat(r.depth.toFloat())
             input.putInt(when (r.id) { "salon" -> 0; "bedroom" -> 1; "cafe" -> 2; "market" -> 3; "library" -> 4; "workshop" -> 5; else -> 6 })
@@ -36,9 +35,11 @@ internal object NativeCityMesh {
     private fun build(input: ByteBuffer?, count: Int, seed: Long, mode: Int, color: Int): Data {
         check(NativeProjection.available) { "Biblioteca nativa indisponível" }
         val sizes = nativeBuild(input, count, seed, mode, color, null, null)
-        val vc = (sizes ushr 32).toInt()
-        val ic = sizes.toInt()
-        check(vc in 1..250_000 && ic in 1..500_000) { "Geometria nativa inválida" }
+        val vcLong = sizes ushr 32
+        val icLong = sizes and 0xffffffffL
+        check(vcLong in 1..(Int.MAX_VALUE / STRIDE).toLong() && icLong in 1..(Int.MAX_VALUE / 4).toLong()) { "Geometria nativa excede o espaço endereçável do processo" }
+        val vc = vcLong.toInt()
+        val ic = icLong.toInt()
         val vertices = direct(vc * STRIDE)
         val indices = direct(ic * 4)
         check(nativeBuild(input, count, seed, mode, color, vertices, indices) == sizes)
