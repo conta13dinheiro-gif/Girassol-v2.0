@@ -9,7 +9,8 @@ import kotlin.math.ln
 /** Public Hub and Dataset Viewer only; datasets are data and never executed as code. */
 class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
     private val hub: HttpUrl="https://huggingface.co/".toHttpUrl(),
-    private val viewer: HttpUrl="https://datasets-server.huggingface.co/".toHttpUrl()) {
+    private val viewer: HttpUrl="https://datasets-server.huggingface.co/".toHttpUrl(),
+    private val compact: ((DatasetRepo,DatasetSplit,DatasetResearchIntent,Long)->DatasetBatch)?=null) {
     private val json=Json { ignoreUnknownKeys=true }
     private val allowedLicenses=setOf("mit","apache-2.0","cc0-1.0","cc-by-4.0","cc-by-sa-4.0","bsd-3-clause","bsd-2-clause")
     private val preferredTasks=setOf("text-generation","question-answering","summarization","text2text-generation")
@@ -48,7 +49,10 @@ class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
     }
     fun splits(id: String): List<DatasetSplit> {
         repoParts(id)
-        val obj=parse(http.get(url(viewer,listOf("splits"),mapOf("dataset" to id)))).jsonObject
+        val obj=try { parse(http.get(url(viewer,listOf("splits"),mapOf("dataset" to id)))).jsonObject } catch(e: HttpFailure) {
+            if(compact!=null && e.status in setOf(404,422,501)) return listOf(DatasetSplit("default","train"))
+            throw e
+        }
         return (obj["splits"] as? JsonArray).orEmpty().mapNotNull { e->
             val row=e.jsonObject; val config=row["config"]?.jsonPrimitive?.contentOrNull; val split=row["split"]?.jsonPrimitive?.contentOrNull
             if(config.isNullOrBlank() || split.isNullOrBlank()) null else DatasetSplit(config,split)
@@ -60,7 +64,11 @@ class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
         var endpoint=url(viewer,listOf("search"),common+mapOf("query" to intent.queryEn))
         val document=try { http.get(endpoint,false) } catch(e: HttpFailure) {
             if(e.status !in setOf(404,422,501)) throw e
-            endpoint=url(viewer,listOf("rows"),common); http.get(endpoint,false)
+            endpoint=url(viewer,listOf("rows"),common)
+            try { http.get(endpoint,false) } catch(rowsError: HttpFailure) {
+                if(rowsError.status !in setOf(404,422,501) || compact==null) throw rowsError
+                return compact.invoke(repo,subset,intent,offset)
+            }
         }
         val rows=DatasetText.rows(document.bytes,offset)
         if(rows.isEmpty()) throw IOException("Nenhum trecho textual completo encontrado neste lote")

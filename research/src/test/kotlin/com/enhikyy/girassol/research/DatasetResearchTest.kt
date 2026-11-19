@@ -9,6 +9,21 @@ class DatasetResearchTest {
     private val intent=EpistemicCurriculumEngine().intent(1,12,"adao",Domain.PHYSICS,"Lacuna observada",mapOf(Domain.LOGIC to .8))
     private val card="""{"id":"science/qa","sha":"abc","downloads":200,"gated":false,"cardData":{"license":"cc-by-4.0","task_categories":["question-answering"]}}"""
     private val rows="""{"rows":[{"row_idx":2,"truncated_cells":[],"row":{"question":"What conserves energy?","answer":"An isolated system."}},{"row_idx":3,"truncated_cells":[0],"row":{"text":"truncated data must not be learned"}}]}"""
+    @Test fun compactDownloadResumesWithRangeAndETagWithoutAnonymousFileBuffers() {
+        MockWebServer().use { server->
+            val directory=java.nio.file.Files.createTempDirectory("girassol-range").toFile()
+            try {
+                val target=java.io.File(directory,"science.jsonl")
+                java.io.File(target.path+".part").writeText("first")
+                java.io.File(target.path+".etag").writeText("v1")
+                server.enqueue(MockResponse().setResponseCode(206).setHeader("Content-Range","bytes 5-10/11").setHeader("ETag","v1").setBody("second"))
+                val digest=ResilientHttp(sleeper={}).download(server.url("/file"),target,100)
+                assertEquals("firstsecond",target.readText());assertEquals(sha256("firstsecond".toByteArray()),digest)
+                val request=server.takeRequest();assertEquals("bytes=5-",request.getHeader("Range"));assertEquals("v1",request.getHeader("If-Range"))
+                assertFalse(java.io.File(target.path+".part").exists())
+            } finally { directory.deleteRecursively() }
+        }
+    }
     @Test fun resourceAdmissionUsesStrictGreenThresholdAndThermalLimit() {
         assertFalse(MemoryPressurePolicy.green(MemoryPressurePolicy.GREEN_BYTES,false,0))
         assertTrue(MemoryPressurePolicy.green(MemoryPressurePolicy.GREEN_BYTES+1,false,0))

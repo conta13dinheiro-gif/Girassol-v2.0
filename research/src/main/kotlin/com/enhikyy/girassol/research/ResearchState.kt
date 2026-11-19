@@ -15,7 +15,7 @@ import kotlinx.serialization.json.Json
     PAUSED("Suspenso"), REJECTED("Recusado"), FAILED("Não concluído")
 }
 @Serializable data class ResearchEntry(val intent: DatasetResearchIntent,val phase: ResearchPhase,val message: String,
-    val repo: String?=null,val acquired: Int=0,val learned: Int=0,val pinned: Boolean=false)
+    val repo: String?=null,val acquired: Int=0,val learned: Int=0,val pinned: Boolean=false,val enabled: Boolean=true)
 @Serializable data class KnowledgeCandidate(val id: String,val acquisitionHash: String,val intent: DatasetResearchIntent,
     val repo: String,val license: String,val row: DatasetRow,val researcher: KnowledgeReview?=null,val verifier: KnowledgeReview?=null,val embedding: List<Float> = emptyList(),val embeddingModel: String="")
 object ResearchCodec {

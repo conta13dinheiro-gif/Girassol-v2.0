@@ -17,3 +17,6 @@
 -keep class com.enhikyy.girassol.cognition.NativeMemory { *; }
 
 -keep class com.enhikyy.girassol.cognition.NativeCmaes { *; }
+
+-keep class com.enhikyy.girassol.cognition.NativeSemanticMemory { *; }
+-keep class com.enhikyy.girassol.research.NonRootSwapArena { *; }

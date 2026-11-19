@@ -79,6 +79,11 @@ class BiosphereService : Service() {
                 if (actor == null) { actor = store.load()?.let { WorldActor(it,4) } ?: WorldActor(rulesVersion=4); lastActions=store.lastActions() }
                 research.refresh()
                 when (intent?.action) {
+                    ACTION_DATASET -> {
+                        val id=checkNotNull(intent.getStringExtra("researchId"))
+                        research.control(id,intent.getBooleanExtra("pinned",false),intent.getBooleanExtra("enabled",true))
+                        if(prefs.getBoolean("running",true)) startLoop() else { stopForeground(STOP_FOREGROUND_REMOVE);stopSelf(startId) }
+                    }
                     ACTION_RESEARCH -> {
                         research.cancel()
                         val previous=com.enhikyy.girassol.research.ResearchHub.state.value.settings
@@ -192,6 +197,10 @@ class BiosphereService : Service() {
         super.onDestroy()
     }
     companion object {
+        const val ACTION_DATASET="com.enhikyy.girassol.DATASET"
+        fun datasetControl(context: Context,id: String,pinned: Boolean,enabled: Boolean) {
+            context.startForegroundService(Intent(context,BiosphereService::class.java).setAction(ACTION_DATASET).putExtra("researchId",id).putExtra("pinned",pinned).putExtra("enabled",enabled))
+        }
         const val ACTION_RESEARCH="com.enhikyy.girassol.RESEARCH"
         fun researchSettings(context: Context,settings: com.enhikyy.girassol.research.ResearchSettings) {
             require(settings.valid())

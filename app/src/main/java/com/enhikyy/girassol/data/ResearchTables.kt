@@ -24,7 +24,12 @@ class ResearchTables(private val db: SQLiteDatabase) {
         buildSet { while(c.moveToNext()) add(DatasetKey(c.getString(0),c.getString(1),c.getString(2),c.getString(3))) }
     }
     fun installed(key: DatasetKey): Boolean = db.rawQuery("SELECT 1 FROM installed_datasets WHERE repo=? AND config=? AND split=? AND query_hash=?",arrayOf(key.repo,key.config,key.split,key.queryHash)).use { it.moveToFirst() }
+    fun control(id: String,pinned: Boolean,enabled: Boolean) {
+        val current=checkNotNull(entry(id))
+        save(current.copy(pinned=pinned,enabled=enabled,message=if(enabled) "Estudo disponível para os habitantes." else "Estudo suspenso. Diário e pesos já aprendidos preservados."))
+    }
     fun acquire(intent: DatasetResearchIntent,batch: DatasetBatch,point: Checkpoint,quota: Long): List<KnowledgeCandidate> {
+        check(entry(intent.id)?.enabled!=false)
         require(batch.queryHash==intent.queryHash && intent.tick<=point.state.tick && point.state.agents.any { it.id==intent.discoverer })
         check(!installed(DatasetKey(batch.repo.id,batch.subset.config,batch.subset.split,intent.queryHash)))
         val previous=db.rawQuery("SELECT hash FROM external_knowledge_journal ORDER BY seq DESC LIMIT 1",null).use { if(it.moveToFirst()) it.getString(0) else WorldActor.GENESIS_HASH }
@@ -54,9 +59,11 @@ class ResearchTables(private val db: SQLiteDatabase) {
         return candidates
     }
     fun bytes(): Long = db.rawQuery("SELECT COALESCE(SUM(length(compressed)+length(envelope)),0) FROM external_knowledge_journal",null).use { it.moveToFirst(); it.getLong(0) }+
-        db.rawQuery("SELECT COALESCE(SUM(length(payload)),0) FROM staging_knowledge",null).use { it.moveToFirst();it.getLong(0) }
-    fun candidates(limit: Int=100): List<KnowledgeCandidate> = db.rawQuery("SELECT payload FROM staging_knowledge WHERE status='QUARANTINED' ORDER BY tick,id LIMIT ?",arrayOf(limit.toString())).use { c->
-        buildList { while(c.moveToNext()) add(ResearchCodec.decode<KnowledgeCandidate>(c.getString(0))) }
+        db.rawQuery("SELECT COALESCE(SUM(length(payload)),0) FROM staging_knowledge",null).use { it.moveToFirst();it.getLong(0) }+
+        db.rawQuery("SELECT COALESCE(SUM(length(embedding)),0) FROM knowledge_vectors",null).use { it.moveToFirst();it.getLong(0) }+
+        db.rawQuery("SELECT COALESCE(SUM(length(payload)),0) FROM research_intents",null).use { it.moveToFirst();it.getLong(0) }
+    fun candidates(limit: Int=100): List<KnowledgeCandidate> = db.rawQuery("SELECT payload FROM staging_knowledge WHERE status='QUARANTINED' ORDER BY tick,id",null).use { c->
+        buildList { while(size<limit && c.moveToNext()) { val row=ResearchCodec.decode<KnowledgeCandidate>(c.getString(0));if(entry(row.intent.id)?.enabled!=false) add(row) } }
     }
     fun snippets(intent: String): List<Pair<KnowledgeCandidate,String>> = db.rawQuery("SELECT payload,status FROM staging_knowledge WHERE intent_id=? ORDER BY id LIMIT 100",arrayOf(intent)).use { c->
         buildList { while(c.moveToNext()) add(ResearchCodec.decode<KnowledgeCandidate>(c.getString(0)) to c.getString(1)) }
@@ -79,7 +86,7 @@ class ResearchTables(private val db: SQLiteDatabase) {
     }
     fun approvedFor(agent: String,known: Set<String>): KnowledgeCandidate? = db.rawQuery("SELECT payload FROM staging_knowledge WHERE status='VALIDATED' ORDER BY tick,id",null).use { c->
         var result: KnowledgeCandidate?=null
-        while(c.moveToNext() && result==null) { val row=ResearchCodec.decode<KnowledgeCandidate>(c.getString(0));if(row.intent.discoverer==agent && row.id !in known) result=row }
+        while(c.moveToNext() && result==null) { val row=ResearchCodec.decode<KnowledgeCandidate>(c.getString(0));if(row.intent.discoverer==agent && row.id !in known && entry(row.intent.id)?.enabled!=false) result=row }
         result
     }
     private fun readCandidate(id: String): KnowledgeCandidate = db.rawQuery("SELECT payload FROM staging_knowledge WHERE id=?",arrayOf(id)).use { check(it.moveToFirst());ResearchCodec.decode(it.getString(0)) }

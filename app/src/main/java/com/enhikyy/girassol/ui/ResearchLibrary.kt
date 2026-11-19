@@ -55,6 +55,10 @@ import kotlinx.coroutines.launch
                 entry.repo?.let { Text(it,Modifier.padding(top=8.dp),color=Solar.Biosphere,fontSize=12.sp) }
                 Text("${entry.acquired} trechos recebidos · ${entry.learned} incorporados",color=Solar.Muted,fontSize=11.sp)
                 Text(entry.message,Modifier.padding(vertical=6.dp),fontSize=11.sp)
+                Row(Modifier.fillMaxWidth()) {
+                    TextButton(onClick={ BiosphereService.datasetControl(app,entry.intent.id,!entry.pinned,entry.enabled) },enabled=!readOnly) { Text(if(entry.pinned) "Desafixar" else "Fixar") }
+                    TextButton(onClick={ BiosphereService.datasetControl(app,entry.intent.id,entry.pinned,!entry.enabled) },enabled=!readOnly) { Text(if(entry.enabled) "Parar estudo" else "Retomar estudo") }
+                }
                 if(entry.acquired>0) TextButton(onClick={
                     selected=entry
                     scope.launch {

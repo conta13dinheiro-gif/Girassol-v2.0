@@ -1,0 +1,7 @@
+Upstream: https://github.com/Tencent/rapidjson
+Commit: 297637bc0a0f00dc504dbc1a47ebdaa577f8ae19
+Archive: https://codeload.github.com/Tencent/rapidjson/tar.gz/297637bc0a0f00dc504dbc1a47ebdaa577f8ae19
+Archive SHA-256: 104f57d1512da80740a3eca7d7b2acee7f749d79dbf15328ad1869c5c962011b
+Copied: include/ and license.txt (renamed LICENSE). Headers unmodified.
+Licenses: MIT; bundled msinttypes headers BSD-3-Clause. JSON_checker excluded.
+Purpose: bounded native SAX decoding of compact educational datasets in file-backed mmap arenas.

@@ -21,7 +21,8 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     private val prefs=app.getSharedPreferences("research",Context.MODE_PRIVATE)
     private val guardian=MemoryPressureGuardian(app)
     private val http=ResilientHttp(gate=guardian)
-    private val seeker=HuggingFaceDatasetSeeker(http)
+    private val compact=CompactDatasetSource(app,http,{ store().databaseName!! },{ settings })
+    private val seeker=HuggingFaceDatasetSeeker(http,compact=compact::acquire)
     private val models=DualModelOrchestrator(app,ResearchGate { guardian.checkLocal() })
     private val executor=Executors.newSingleThreadExecutor { task->Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);task.run() },"Girassol-Research") }
     private val generation=AtomicLong()
@@ -36,7 +37,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         data class Download(val batch: DatasetBatch): SearchResult
         data class Local(val matches: List<Pair<KnowledgeCandidate,Float>>): SearchResult
     }
-    init { guardian.onRevoked { http.cancel();models.cancel();handler.post { cancel() } };configure(settings) }
+    init { guardian.onRevoked { http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };handler.post { cancel() } };configure(settings) }
     private fun loadSettings()=ResearchSettings(prefs.getBoolean("auto",false),prefs.getBoolean("wifi",true),prefs.getBoolean("review",true),prefs.getInt("quota",512).takeIf { it in listOf(256,512,1024,2048,4096) } ?: 512)
     fun configure(value: ResearchSettings) {
         require(value.valid());settings=value;guardian.wifiOnly=value.wifiOnly;guardian.enabled=value.automatic;guardian.resume()
@@ -44,9 +45,10 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         if(!value.automatic) cancel()
         ResearchHub.mutable.value=ResearchHub.mutable.value.copy(settings=settings)
     }
-    fun refresh() { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(settings=settings,entries=store().research().entries(),bytes=store().research().bytes()) }
+    fun control(id: String,pinned: Boolean,enabled: Boolean) { cancel();store().research().control(id,pinned,enabled);refresh() }
+    fun refresh() { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(settings=settings,entries=store().research().entries(),bytes=store().research().bytes()+compact.bytes()) }
     private fun message(value: String,busy: Boolean=false) { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(message=value,busy=busy) }
-    fun cancel() { generation.incrementAndGet();http.cancel();models.cancel();future?.cancel(true);future=null;evidence=null;studying=null;message("Pesquisa suspensa; evidências recebidas preservadas.") }
+    fun cancel() { generation.incrementAndGet();http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };future?.cancel(true);future=null;evidence=null;studying=null;message("Pesquisa suspensa; evidências recebidas preservadas.") }
     private fun <T> launch(operation: ()->T,accept: (T)->Unit) {
         val token=generation.get();message("Pesquisa em andamento",true)
         future=executor.submit {
@@ -105,7 +107,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
                 models.review(candidate,reviewer.id,established)
             }) { reviewed->
                 val approvedReview=EpistemicQuarantine.approved(reviewed.row,checkNotNull(reviewed.researcher),checkNotNull(reviewed.verifier))
-                tables.review(reviewed,store().load()?.state?.tick ?: world.tick,approvedReview,settings.quotaMb*1048576L)
+                tables.review(reviewed,(store().load()?.state?.tick ?: world.tick)+1,approvedReview,(settings.quotaMb*1048576L-compact.bytes()).coerceAtLeast(0))
                 val entry=tables.entry(reviewed.intent.id)
                 if(entry!=null) tables.save(entry.copy(phase=if(approvedReview) ResearchPhase.REVIEWED else ResearchPhase.REJECTED,message=if(approvedReview) "Duas avaliações locais favoráveis; aguardando replay." else "A revisão não aprovou o trecho."))
                 studying=null
@@ -133,11 +135,11 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
                 WorldStore(app,database).use { read->read.research().similar(query.first,query.second,guardian::checkLocal) }
             } else emptyList()
             if(local.firstOrNull()?.second?.let { it>=.62f }==true) return@launch SearchResult.Local(local)
-            val found=seeker.discover(intent) { key->key in installed } ?: throw java.io.IOException("Nenhum dataset público elegível encontrado")
+            val found=seeker.discover(intent) { key->key in installed || installed.any { it.repo==key.repo && it.queryHash==key.queryHash && it.config.startsWith("file:") } } ?: throw java.io.IOException("Nenhum dataset público elegível encontrado")
             SearchResult.Download(seeker.acquire(found.first,found.second,intent))
         }) { result->
             when(result) {
-                is SearchResult.Download->{ val current=store().load() ?: point;tables.acquire(intent,result.batch,current,settings.quotaMb*1048576L) }
+                is SearchResult.Download->{ val current=store().load() ?: point;tables.acquire(intent,result.batch,current,(settings.quotaMb*1048576L-compact.bytes()).coerceAtLeast(0)) }
                 is SearchResult.Local->tables.save(ResearchEntry(intent,ResearchPhase.VALIDATED,"Evidência já disponível na biblioteca; nenhuma aquisição necessária.",result.matches.first().first.repo))
             }
         }
