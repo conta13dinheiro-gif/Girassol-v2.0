@@ -34,7 +34,7 @@ jobs:
       - name: Install declared Android toolchain
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
       - name: Unit tests, lint and all APK variants
-        run: ./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug :core:test :research:test :app:assembleRelease :app:assembleDebugAndroidTest --no-daemon
       - name: Production JNI learning and Shadow-Replay
         run: scripts/test-mind-jni.sh
       - name: ARM64 installable debug APK

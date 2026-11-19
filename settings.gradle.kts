@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "Girassol"
-include(":core", ":app")
+include(":core", ":research", ":app")

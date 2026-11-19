@@ -9,3 +9,6 @@ local.properties
 captures/
 
 .cxx/
+
+ci-apks/
+ci-device-reports/
