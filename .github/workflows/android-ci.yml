@@ -63,6 +63,9 @@ jobs:
       - name: Validate Gradle
         run: ./gradlew --version
 
+      - name: Run native C++ tests with ASan and UBSan
+        run: scripts/test-native.sh
+
       - name: Run unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug --no-daemon
 
