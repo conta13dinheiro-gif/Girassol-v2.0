@@ -22,3 +22,7 @@
 -keep class com.enhikyy.girassol.research.NonRootSwapArena { *; }
 
 -keep class com.enhikyy.girassol.physics.NativeSpatial { *; }
+
+# Shizuku loads this service by class name from a separate shell/root process.
+-keep class com.enhikyy.girassol.privileged.TelemetryUserService { public <init>(); }
+-keep interface com.enhikyy.girassol.privileged.IShizukuTelemetry { *; }
