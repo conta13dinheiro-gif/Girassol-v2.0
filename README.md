@@ -76,7 +76,7 @@ A memória persistida no checkpoint SQLite tem três representações:
 2. Reflexões estatísticas por atividade, destiladas durante o sono ou periodicamente. Esquecimento remove episódios antigos de baixa importância depois da consolidação.
 3. Rotinas com três sucessos validados, reutilizadas na decisão e transmitidas por conversas próximas, com professor/evento de origem.
 
-O HNSW nativo recupera candidatos por produto interno e ordena por similaridade, importância e recência. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
+O HNSW nativo recupera até oito candidatos por produto interno; a segunda fase os reordena por similaridade e utilidade Q persistida (adaptação compacta de MemRL). O retorno da próxima ação registrada atualiza apenas os episódios que foram recuperados, com crédito atrasado e determinístico. A similaridade cosseno é normalizada para pesos não negativos antes da média de recompensa. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
 
 ## Pedidos, Hugging Face & Biblioteca
 
@@ -112,7 +112,7 @@ Rejeitar todos os candidatos é um resultado válido. Pausa, troca de linha, des
 
 ## Contratos preservados
 
-WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção; evento5 acrescenta o resultado físico canônico legado; evento6 identifica os ticks da nova política espacial com planejamento GOAP, expansão procedural e genealogia. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
+WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção; evento5 acrescenta o resultado físico canônico legado; evento6 identifica ticks da política espacial com GOAP, expansão procedural e genealogia; evento7 combina o contrato cognitivo e espacial da regra v7. A utilidade MemRL integra o MemoryBank serializado no frame cognitivo existente, com defaults vazios omitidos para preservar estados antigos. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
 
 SQLite migra aditivamente até schema4: marcos, pesquisa e vetores, sem reescrever eventos/checkpoint anteriores. Auditoria confere IDs, ticks, hashes e vínculo ao checkpoint; não substitui assinatura autenticada contra reescrita integral do banco. Os diários completos são preservados; poda com âncoras criptográficas ainda não foi implementada.
 
@@ -130,6 +130,7 @@ As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, 
 - `app/src/main/java/`: serviço, armazenamento, importação, coordenação cognitiva, render e Compose.
 - `app/src/main/materials/`: fontes dos materiais PBR, vidro, contato e acabamento. Recompile com matc56: `FILAMENT_TOOLS_DIR=/caminho/filament/v1.56.0 scripts/compile-materials.sh`. A build verifica hashes dos fontes/ativos.
 - `docs/arquitetura.md`: referências, compatibilidade e limites de validação.
+- `docs/pesquisa-externa-2026-11-19.md`: síntese de pesquisa externa, licenças, algoritmos candidatos e decisões de integração.
 
 
 <!-- /coderabbit-ai-generated:v1 -->
