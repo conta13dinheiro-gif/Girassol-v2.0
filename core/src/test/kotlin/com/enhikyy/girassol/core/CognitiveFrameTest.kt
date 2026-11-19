@@ -77,4 +77,37 @@ class CognitiveFrameTest {
         assertEquals(inherited,MindState.inherit(world,child,one.id,two.id,first,second))
     }
 
+    @Test fun somaticPsycheIsBoundedInheritedAndDeterministic() {
+        val world=WorldActor.genesis()
+        val parentOne=world.agents[0]
+        val parentTwo=world.agents[1]
+        val first=SoulModel.initial(world,parentOne)
+        val second=SoulModel.initial(world,parentTwo).copy(
+            cortisol=.8,oxytocin=.75,dopamine=.7,pleasure=.5,arousal=.4,dominance=.3
+        )
+        assertTrue(first.valid())
+        assertTrue(second.valid())
+        val child=parentOne.copy(
+            id="child_psyche",
+            genome=Genome(parentOne.genome.curiosity,parentTwo.genome.sociability,2)
+        )
+        val inherited=SoulModel.inherit(world,child,first,second)
+        assertTrue(inherited.valid())
+        assertEquals(0.0,inherited.ageYears,0.0)
+        assertEquals(SoulModel.inherit(world,child,first,second),inherited)
+        assertFalse(inherited.copy(cortisol=Double.NaN).valid())
+        assertFalse(inherited.copy(bigFive=listOf(.5,.5)).valid())
+        assertFalse(inherited.copy(expectedSensory=List(16) { 2.0 }).valid())
+    }
+
+    @Test fun innerSpeechMustBelongToCurrentCitizenAndRemainBounded() {
+        val world=WorldActor.genesis()
+        val valid=frame(world).copy(innerSpeech=mapOf(world.agents.first().id to "Preciso comparar a previsão antes de agir."))
+        assertTrue(valid.applicable(world))
+        assertFalse(valid.copy(innerSpeech=mapOf("unknown-citizen" to "Pensamento privado.")).applicable(world))
+        assertFalse(valid.copy(innerSpeech=mapOf(world.agents.first().id to "x".repeat(241))).applicable(world))
+        assertFalse(valid.copy(innerSpeech=mapOf(world.agents.first().id to "texto\\u0001inválido")).applicable(world))
+        assertTrue(valid.snapshot().innerSpeech == valid.innerSpeech)
+    }
+
 }
