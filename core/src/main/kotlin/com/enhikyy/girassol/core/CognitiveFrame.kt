@@ -17,6 +17,39 @@ import kotlin.math.*
         learnedTick in -1..tick && novelty.isFinite() && novelty in 0.0..1.0 &&
         memory.valid(tick) && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
+
+        fun inherit(world: WorldState,citizen: Citizen,first: MindState,second: MindState): MindState {
+            val rng=Canonical.stream(world.seed,citizen.id,world.tick,"ltc-family-inherit-v1")
+            val parameters=List(248) { index ->
+                val blended=(first.parameters[index]+second.parameters[index])*.5+(rng.nextDouble()-.5)*.02
+                if(index in 168..175) blended.coerceIn(.2,8.0) else blended.coerceIn(-8.0,8.0)
+            }
+            val hidden=List(8) { index ->
+                ((first.hidden[index]+second.hidden[index])*.5+(rng.nextDouble()-.5)*.01).coerceIn(-1.0,1.0)
+            }
+            val personality=listOf(
+                citizen.genome.curiosity.express(),
+                (first.personality[1]+second.personality[1])*.5,
+                citizen.genome.sociability.express(),
+                (first.personality[3]+second.personality[3])*.5,
+                (first.personality[4]+second.personality[4])*.5
+            ).map { it.coerceIn(0.0,1.0) }
+            val exposure=List(8) { index ->
+                ((first.exposure[index].toLong()+second.exposure[index].toLong())/2).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            }
+            val inheritedMemory=first.memory.learnFrom(citizen.id,second.memory,world.tick)
+            val behaviors=(first.behaviors+second.behaviors).distinct().takeLast(64)
+            return MindState(
+                parameters=parameters,
+                hidden=hidden,
+                personality=personality,
+                exposure=exposure,
+                learnedTick=-1,
+                novelty=(first.novelty+second.novelty)*.5,
+                behaviors=behaviors,
+                memory=inheritedMemory
+            ).also { check(it.valid(world.tick)) }
+        }
         fun initial(world: WorldState,citizen: Citizen): MindState {
             val rng=Canonical.stream(world.seed,citizen.id,0,"ltc-genesis-v1")
             val p=MutableList(248) { (rng.nextDouble()-.5)*.6 }
