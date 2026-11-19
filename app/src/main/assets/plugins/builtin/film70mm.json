@@ -1,0 +1,12 @@
+{
+  "id": "render.film70mm",
+  "name": "Filme 70mm · Halation",
+  "version": 1,
+  "kind": "FILM_PROFILE",
+  "description": "Ativa o passe de película cinematográfica já compilado no Filament.",
+  "config": {
+    "amount": 1.0,
+    "grain": 0.35,
+    "halation": 0.42
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "research.huggingface",
+  "name": "Hugging Face Dataset Hub",
+  "version": 1,
+  "kind": "DATA_SOURCE",
+  "description": "Catálogo público de datasets com curadoria e quarentena epistêmica.",
+  "config": {
+    "endpoint": "https://huggingface.co/api/datasets"
+  }
+}
