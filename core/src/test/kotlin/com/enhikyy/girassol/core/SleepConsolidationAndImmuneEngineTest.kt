@@ -127,4 +127,50 @@ class SleepConsolidationAndImmuneEngineTest {
         assertTrue(rare > 0.0)
         assertTrue(SemanticCollapseGuard.normalizedPopulationEntropy(collapsed) < .55)
     }
+
+    private fun memoryBankForUtilityTests(): MemoryBank {
+        val citizen = WorldActor.genesis().agents.first()
+        val episodes = (1L..3L).map { id ->
+            Episode(id, id, Activity.STUDY, 0.0, citizen.x, citizen.z, 0.0, .5,
+                MemoryBank.embedding(citizen, Activity.STUDY, 0.0))
+        }
+        return MemoryBank(episodes = episodes)
+    }
+
+    @Test fun memRlTracksOnlyKnownRetrievedExperiences() {
+        val bank = memoryBankForUtilityTests()
+        val recalled = bank.recordRecall(listOf(1L, 999L, 1L, 2L), 4)
+        assertEquals(listOf(1L, 2L), recalled.pendingRecallEventIds)
+        assertEquals(1, recalled.utilities.first { it.eventId == 1L }.retrievals)
+        assertEquals(1, recalled.utilities.first { it.eventId == 2L }.retrievals)
+        assertFalse(recalled.utilities.any { it.eventId == 999L })
+        assertTrue(recalled.valid(4))
+    }
+
+    @Test fun memRlFeedbackUpdatesOnlyRecalledEpisodesAndClearsPendingCredit() {
+        val world = WorldActor.genesis().copy(tick = 5)
+        val citizen = world.agents.first().copy(
+            activity = Activity.STUDY,
+            memories = listOf(Memory(5, 5, Activity.STUDY, 1.0))
+        )
+        val bank = memoryBankForUtilityTests().recordRecall(listOf(1L, 2L), 4)
+        val learned = bank.observe(world, citizen, ActionRecord(citizen.id, Activity.STUDY, "OK"))
+        assertEquals(.2, learned.utilities.first { it.eventId == 1L }.qValue, 1e-10)
+        assertEquals(.2, learned.utilities.first { it.eventId == 2L }.qValue, 1e-10)
+        assertFalse(learned.utilities.any { it.eventId == 3L })
+        assertTrue(learned.pendingRecallEventIds.isEmpty())
+        assertTrue(learned.valid(5))
+    }
+
+    @Test fun memRlReranksSimilarityCandidatesUsingLearnedUtility() {
+        val bank = memoryBankForUtilityTests().copy(
+            utilities = listOf(
+                MemoryUtility(1, qValue = -5.0, retrievals = 1, lastRetrievedTick = 4, lastFeedbackTick = 4),
+                MemoryUtility(2, qValue = 5.0, retrievals = 1, lastRetrievedTick = 4, lastFeedbackTick = 4)
+            )
+        )
+        assertTrue(bank.utilityAdjustedScore(2, .70) > bank.utilityAdjustedScore(1, .85))
+        assertEquals(.85, bank.utilityAdjustedScore(1, .85, utilityWeight = 0.0), 1e-10)
+    }
+
 }
