@@ -20,6 +20,13 @@ int main() {
     assert(equalTuning.render(b.data(),frames,sr,equalParams));
     assert(customTuning.render(c.data(),frames,sr,customParams));
     assert(b!=c);
+    Synth independentPhase(85), collectivePhase(85);
+    Parameters individualParams=p, collectiveParams=p;
+    individualParams.synchrony=0.0f;
+    collectiveParams.synchrony=1.0f;
+    assert(independentPhase.render(b.data(),frames,sr,individualParams));
+    assert(collectivePhase.render(c.data(),frames,sr,collectiveParams));
+    assert(b!=c);
     // Callback size cannot change the signal for the same controls/sample rate.
     int done=0;
     while (done<frames) { const int n=std::min(193,frames-done); assert(two.render(b.data()+done*2,n,sr,p)); done+=n; }
