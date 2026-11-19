@@ -70,11 +70,12 @@ Limites atuais: navegação 2,5D no nível existente, colisões AABB derivadas d
 
 Cada cidadão possui rede LTC12×8 nativa, oito valores de ação, plasticidade Hebbiana/Oja modulada pelo resultado e Big Five observacional. Pesos e estado neural são persistidos no evento, sem alterar o modelo GGUF. Novidade usa distância a comportamentos efetivamente observados. Exploração Gumbel usa fluxo derivado da semente, identidade e ciclo; a temperatura depende de curiosidade/novidade e a decisão resultante é registrada no evento. Isso amplia escolhas dentro do vocabulário atual, sem prometer invenção de instituições ou algoritmos novos. A personalidade é inicializada de forma reprodutível; herança estrutural NEAT e reprodução ainda não existem.
 
-A memória persistida no checkpoint SQLite tem três representações:
+A memória persistida no checkpoint SQLite tem quatro representações:
 
 1. Episódios com ciclo/evento, posição, resultado, emoção, importância e vetor observacional normalizado16D.
 2. Reflexões estatísticas por atividade, destiladas durante o sono ou periodicamente. Esquecimento remove episódios antigos de baixa importância depois da consolidação.
 3. Rotinas com três sucessos validados, reutilizadas na decisão e transmitidas por conversas próximas, com professor/evento de origem.
+4. Utilidade Q por episódio recuperado, com contagem de acesso e feedback atrasado ligado ao próximo resultado de ação registrado.
 
 O HNSW nativo recupera até oito candidatos por produto interno; a segunda fase os reordena por similaridade e utilidade Q persistida (adaptação compacta de MemRL). O retorno da próxima ação registrada atualiza apenas os episódios que foram recuperados, com crédito atrasado e determinístico. A similaridade cosseno é normalizada para pesos não negativos antes da média de recompensa. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
 
