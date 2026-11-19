@@ -29,7 +29,8 @@ import kotlin.math.*
     val reflectedTick: Long = -1,
     // Omit empty defaults so legacy canonical event hashes remain byte-for-byte stable.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val utilities: List<MemoryUtility> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val pendingRecallEventIds: List<Long> = emptyList()
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val pendingRecallEventIds: List<Long> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val learning: List<SkillLearningTrace> = emptyList()
 ) {
     fun valid(tick: Long): Boolean = reflectedTick in -1..tick && episodes.all { e->
         e.tick in 0..tick && e.eventId in 1..tick && e.reward.isFinite() && e.reward in -5.0..5.0 && e.emotion.isFinite() && e.emotion in -1.0..1.0 &&
@@ -44,14 +45,17 @@ import kotlin.math.*
             utility.eventId in episodes.map { it.eventId }.toSet() && utility.qValue.isFinite() && utility.qValue in -5.0..5.0 &&
                 utility.retrievals>0 && utility.lastRetrievedTick in 0..tick && utility.lastFeedbackTick in -1..tick
         } && pendingRecallEventIds.distinct().size==pendingRecallEventIds.size && pendingRecallEventIds.size<=MAX_PENDING_RECALLS &&
-        pendingRecallEventIds.all { id -> utilities.any { it.eventId==id } }
+        pendingRecallEventIds.all { id -> utilities.any { it.eventId==id } } &&
+        learning.map { it.action }.distinct().size==learning.size && learning.size<=Activity.entries.size &&
+        learning.all { it.valid(tick) }
 
     fun snapshot() = copy(
         episodes=episodes.map { it.copy(embedding=it.embedding.toList()) },
         reflections=reflections.toList(),
         procedures=procedures.toList(),
         utilities=utilities.toList(),
-        pendingRecallEventIds=pendingRecallEventIds.toList()
+        pendingRecallEventIds=pendingRecallEventIds.toList(),
+        learning=learning.toList()
     )
 
     /**
@@ -64,6 +68,10 @@ import kotlin.math.*
         val learned = utilities.firstOrNull { it.eventId==eventId }?.qValue ?: 0.0
         return (1.0-utilityWeight)*similarity + utilityWeight*(learned/5.0).coerceIn(-1.0,1.0)
     }
+
+    /** Return the persisted learner for an activity, or its deterministic prior. */
+    fun learningFor(action: Activity): SkillLearningTrace =
+        learning.firstOrNull { it.action==action } ?: SkillLearningTrace(action)
 
     /** Record the selected memories so the next committed outcome can assign credit. */
     fun recordRecall(eventIds: List<Long>, tick: Long): MemoryBank {
@@ -93,7 +101,11 @@ import kotlin.math.*
             val importance=(.15+abs(reward)*1.8+if(failed) .2 else 0.0).coerceIn(0.0,1.0)
             val episode=Episode(world.tick,last?.eventId ?: world.tick,citizen.activity,reward,citizen.x,citizen.z,
                 (reward*2).coerceIn(-1.0,1.0),importance,embedding(citizen,citizen.activity,reward))
-            next=copy(episodes=episodes+episode)
+            val skill=learningFor(citizen.activity).observe(correct=last!=null,tick=world.tick)
+            next=copy(
+                episodes=episodes+episode,
+                learning=(learning.filterNot { it.action==citizen.activity }+skill).sortedBy { it.action.ordinal }
+            )
             // Delayed reward updates only memories actually selected before this outcome.
             if (pendingRecallEventIds.isNotEmpty()) {
                 val byId=next.utilities.associateBy { it.eventId }.toMutableMap()

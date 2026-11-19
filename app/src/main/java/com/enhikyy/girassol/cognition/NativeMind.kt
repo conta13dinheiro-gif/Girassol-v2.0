@@ -93,7 +93,9 @@ internal object NativeMind {
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
                 val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
-                scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-hypot(room.x-citizen.x,room.z-citizen.z)*.025
+                scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
+                    bank.learningFor(activity).practiceBonus(world.tick)+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-
+                    hypot(room.x-citizen.x,room.z-citizen.z)*.025
                 scores[i]+=when(activity) {
                     Activity.STUDY -> psyche.dopamine*.12+ignition*.45
                     Activity.TALK -> psyche.oxytocin*.12+maxOf(0.0,psyche.pleasure)*.04

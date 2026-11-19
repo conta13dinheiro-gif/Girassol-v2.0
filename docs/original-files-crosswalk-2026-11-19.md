@@ -43,7 +43,8 @@ Essas entregas não são equivalentes à implementação integral de todos os bl
 |---|---|
 | Quatro camadas de memória, nós associativos e Q-learning MemRL completo | Parcial: episódios/reflexões/procedimentos, consolidação ACT-R-style e Q de MemRL simplificado para reordenar memórias recuperadas estão integrados; grafo associativo completo, camadas semânticas/temporais/causais e ACT-R por nó ainda faltam. |
 | Crenças subjetivas por domínio, desconto de confiança entre anéis de Dunbar e fusão persistida | Parcial: motor de opinião/deduplicação existe; ledger e propagação na rede social faltam. |
-| BKT pedagógico e cliodinâmica/instituições de Ostrom/Turchin | Pendente. |
+| BKT/IRT e repetição espaçada | Parcial: BKT por atividade, curva DSR e estimador IRT 3PL simplificado persistem em `MemoryBank.learning` e influenciam o escore cognitivo; FSRS-6/7 completo e calibração de itens IRT permanecem pendentes. |
+| Cliodinâmica e instituições de Ostrom/Turchin | Pendente. |
 | PIANO, active inference/expected free energy e calibração Brier | Parcial/pendente: decisões neurais e shadow replay existem; PIANO e gate Brier não. |
 | Tsetlin proposicional treinado com aprovações LLM | Pendente. |
 | Jogos de nomeação, negociação lexical, divergência fonética e dialetos localizados | Parcial: vocabulário por linhagem existe; naming games e evolução linguística completa não. |
