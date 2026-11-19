@@ -394,6 +394,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     val w=ui.world!!; val t=w.telemetry()
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
+    var hardwareReport by remember { mutableStateOf<com.enhikyy.girassol.hardware.DeviceHardwareReport?>(null) }
+    LaunchedEffect(context) { hardwareReport = withContext(Dispatchers.IO) { com.enhikyy.girassol.hardware.HardwareAutoTuner.probe(context) } }
     var auditing by remember { mutableStateOf(false) }
     var auditResult by rememberSaveable { mutableStateOf<String?>(null) }
     LazyColumn(modifier.fillMaxSize(), contentPadding=PaddingValues(22.dp), verticalArrangement=Arrangement.spacedBy(22.dp)) {
@@ -461,6 +463,23 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     Text(if(name=="girassol.db") "Linha original" else "Alternativa ${name.removeSuffix(".db").takeLast(8)}",Modifier.weight(1f),fontSize=12.sp)
                     TextButton(onClick={ com.enhikyy.girassol.runtime.BiosphereService.switchWorld(context,name) },enabled=name!=active) { Text(if(name==active) "Ativa" else "Abrir") }
                 }
+            }
+        }
+        item {
+            SectionTitle("Auto-detecção de hardware")
+            val report = hardwareReport
+            if (report == null) Text("Lendo SoC, ABI, RAM e renderer gráfico…", color=Muted, fontSize=11.sp)
+            else {
+                KeyValue("Fabricante / SoC", "${report.socVendor} · ${report.socModel}")
+                KeyValue("Dispositivo", "${report.manufacturer} ${report.model}")
+                KeyValue("Arquitetura / ABI", "${report.architecture} · ${report.primaryAbi}")
+                KeyValue("ABIs suportadas", report.supportedAbis.joinToString())
+                KeyValue("GPU / renderer", report.gpuRenderer)
+                KeyValue("RAM física / CPUs visíveis", String.format(Locale.ROOT, "%.1f GB · %d", report.totalRamGb, report.logicalCpuCount))
+                KeyValue("Biblioteca OpenCL", if (report.openClLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrada nos caminhos padrão")
+                KeyValue("Loader Vulkan", if (report.vulkanLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrado nos caminhos padrão")
+                KeyValue("Backend GGUF neste build", "CPU · llama.cpp")
+                Text("Diagnóstico informativo. Encontrar uma biblioteca não comprova driver funcional; este build ainda não ativa seleção dinâmica OpenCL/Vulkan nem KleidiAI.", color=Muted, fontSize=10.sp)
             }
         }
         item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
