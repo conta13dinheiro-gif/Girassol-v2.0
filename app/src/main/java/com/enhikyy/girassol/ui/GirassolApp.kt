@@ -280,6 +280,24 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         items(agents, key = { it.id }) { a ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) { AgentRow(a, select); Spacer(Modifier.height(14.dp)); NeedsBars(a.needs); Spacer(Modifier.height(12.dp)); Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp) }
         }
+        if (world.genealogy.isNotEmpty()) {
+            item { SectionTitle("Genealogia", "${world.genealogy.size} nascimentos registrados") }
+            items(world.genealogy.asReversed(), key = { it.child }) { family ->
+                val child = world.agents.firstOrNull { it.id == family.child }
+                val parentOne = world.agents.firstOrNull { it.id == family.parentOne }
+                val parentTwo = world.agents.firstOrNull { it.id == family.parentTwo }
+                if (child != null && parentOne != null && parentTwo != null) {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { select(child.id) }.padding(16.dp)
+                    ) {
+                        Text(child.name, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Text("${parentOne.name} + ${parentTwo.name}", color = Gold, fontSize = 12.sp)
+                        Text("Geração ${child.genome.generation} · ciclo ${family.tick}", color = Muted, fontSize = 10.sp)
+                        Text("Genoma SHA-256 · ${family.genomeHash.take(16)}…", color = Muted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
     }
 }
 @Composable private fun NeedsBars(needs: Needs) {
