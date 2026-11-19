@@ -357,7 +357,7 @@ object NeuralSpeechEngine {
         return entries.any { it.endsWith("  model.onnx") } &&
             entries.any { it.endsWith("  voices.bin") } &&
             entries.any { it.endsWith("  tokens.txt") } &&
-            entries.any { it.endsWith("  espeak-ng-data/espeak-ng-data") }.not()
+            entries.count { it.contains("  espeak-ng-data/") } >= 20
     }
 
     private fun normalizeZipPath(path: String): String {
