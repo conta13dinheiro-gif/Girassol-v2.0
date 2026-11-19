@@ -133,7 +133,7 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
         }
         char piece[512];
         const auto bytes = llama_token_to_piece(vocab, token, piece, sizeof(piece), 0, true);
-        const std::size_t output_limit = task == Task::InnerSpeech ? 240 : 256;
+        const std::size_t output_limit = task == Task::InnerSpeech ? 512 : 256;
         if (bytes < 0 || output.size() + static_cast<std::size_t>(bytes) > output_limit) throw std::runtime_error("Saída GGUF excede o limite");
         output.append(piece, bytes);
         auto batch = llama_batch_get_one(&token, 1);
