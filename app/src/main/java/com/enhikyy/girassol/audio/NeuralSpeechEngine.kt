@@ -7,6 +7,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.net.Uri
 import android.os.Process
+import android.os.StatFs
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig
@@ -88,6 +89,10 @@ object NeuralSpeechEngine {
     fun importKokoroBundle(context: Context, uri: Uri) {
         initialize(context)
         stop()
+        val available = StatFs(context.applicationContext.filesDir.absolutePath).availableBytes
+        require(available >= 800L * 1024L * 1024L) {
+            "São necessários pelo menos 800 MiB livres para extrair o modelo FP32 com segurança"
+        }
         stateMutable.value = stateMutable.value.copy(busy = true, message = "Validando pacote Kokoro PT-BR…")
         staging.deleteRecursively()
         require(staging.mkdirs()) { "Não foi possível criar a área temporária da voz" }
@@ -339,9 +344,21 @@ object NeuralSpeechEngine {
         return OfflineTts(config = config)
     }
 
-    private fun isBundleValid(): Boolean =
-        File(root, "model.onnx").isFile && File(root, "voices.bin").isFile &&
-            File(root, "tokens.txt").isFile && File(root, "espeak-ng-data").isDirectory
+    private fun isBundleValid(): Boolean {
+        val model = File(root, "model.onnx")
+        val voices = File(root, "voices.bin")
+        val tokens = File(root, "tokens.txt")
+        val espeak = File(root, "espeak-ng-data")
+        val manifest = File(root, "bundle.sha256")
+        if (!model.isFile || model.length() !in (100L * 1024L * 1024L)..MODEL_LIMIT) return false
+        if (!voices.isFile || voices.length() < 1024L * 1024L) return false
+        if (!tokens.isFile || !espeak.isDirectory || !manifest.isFile) return false
+        val entries = runCatching { manifest.readLines().toSet() }.getOrNull() ?: return false
+        return entries.any { it.endsWith("  model.onnx") } &&
+            entries.any { it.endsWith("  voices.bin") } &&
+            entries.any { it.endsWith("  tokens.txt") } &&
+            entries.any { it.endsWith("  espeak-ng-data/espeak-ng-data") }.not()
+    }
 
     private fun normalizeZipPath(path: String): String {
         val clean = path.replace('\\', '/')
@@ -361,9 +378,9 @@ object NeuralSpeechEngine {
         }
         @Throws(IOException::class)
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-            val count = super.read(buffer, offset, length)
-            if (count > 0) count(count)
-            return count
+            val bytesRead = super.read(buffer, offset, length)
+            if (bytesRead > 0) count(bytesRead)
+            return bytesRead
         }
         private fun count(bytes: Int) {
             consumed = Math.addExact(consumed, bytes.toLong())
@@ -372,7 +389,7 @@ object NeuralSpeechEngine {
     }
 
     private class FileOutputStreamOrNull(file: File?) : AutoCloseable {
-        private val stream = file?.let(::FileOutputStream)
+        private val stream = file?.let { FileOutputStream(it) }
         fun write(bytes: ByteArray, offset: Int, length: Int) { stream?.write(bytes, offset, length) }
         override fun close() { stream?.close() }
     }
