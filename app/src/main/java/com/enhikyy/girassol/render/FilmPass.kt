@@ -2,6 +2,7 @@ package com.enhikyy.girassol.render
 
 import android.content.Context
 import com.google.android.filament.*
+import com.enhikyy.girassol.plugins.PluginRegistry
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -26,6 +27,7 @@ internal class FilmPass(private val engine: Engine, context: Context) : AutoClos
     private var height=0
     private var closed=false
     init {
+        PluginRegistry.initialize(context)
         val payload=context.assets.open("materials/girassol_dehancer_post.filamat").use { it.readBytes() }
         material=Material.Builder().payload(ByteBuffer.allocateDirect(payload.size).put(payload).apply { flip() },payload.size).build(engine)
         instance=material.createInstance()
@@ -59,7 +61,7 @@ internal class FilmPass(private val engine: Engine, context: Context) : AutoClos
         view.viewport=Viewport(0,0,w,h)
     }
     fun update(time: Float,enabled: Boolean) {
-        instance.setParameter("time",time); instance.setParameter("amount",if(enabled) 1f else 0f)
+        instance.setParameter("time",time); instance.setParameter("amount",if(enabled) PluginRegistry.filmAmount() else 0f)
     }
     private fun releaseTarget() {
         target?.let(engine::destroyRenderTarget); target=null
