@@ -29,7 +29,13 @@ internal object NativeMind {
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
         world.agents.forEach { citizen->
-            val old=world.minds[citizen.id] ?: MindState.initial(world,citizen)
+            val old=world.minds[citizen.id] ?: run {
+                val family=world.genealogy.lastOrNull { it.child==citizen.id }
+                val first=family?.let { world.minds[it.parentOne] }
+                val second=family?.let { world.minds[it.parentTwo] }
+                if(first!=null && second!=null) MindState.inherit(world,citizen,first,second)
+                else MindState.initial(world,citizen)
+            }
             val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
             val outcome=lastActions.firstOrNull { it.agentId==citizen.id }?.outcome
             val learn=world.tick>old.learnedTick && (memory!=null || outcome=="PRECONDITION_FAILED" || outcome=="RESERVED")
@@ -73,7 +79,7 @@ internal object NativeMind {
                 scores[i]+=-ln(-ln(u))*temperature
                 scores[i]+=policy[i]+expected*.4+technique*.15+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-hypot(room.x-citizen.x,room.z-citizen.z)*.025
                 if(activity==Activity.SLEEP && n.energy>.8) scores[i]-=1
-                if(activity==Activity.BUILD && (world.rooms.size>=10 || (world.balances["market/timber"] ?: 0)<4)) scores[i]-=3
+                if(activity==Activity.BUILD && ((world.balances["market/timber"] ?: 0)<4)) scores[i]-=3
                 if(activity==Activity.WRITE && (world.balances["market/paper"] ?: 0)==0) scores[i]-=3
                 if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0) scores[i]-=3
             }
