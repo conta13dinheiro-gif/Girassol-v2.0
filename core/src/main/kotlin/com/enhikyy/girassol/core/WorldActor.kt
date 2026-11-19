@@ -221,7 +221,9 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             x = (current.x + partner.x) / 2.0 + (rng.nextDouble() - .5) * .18,
             z = (current.z + partner.z) / 2.0 + (rng.nextDouble() - .5) * .18,
             needs = Needs(energy = .85, hydration = .85, glucose = .85, social = .65, curiosity = .7),
-            activity = Activity.SLEEP
+            activity = Activity.SLEEP,
+            skill = listOf(current.skill, partner.skill).filter { it.shareable }
+                .maxByOrNull { it.mastery }?.copy(lastPractice = tick) ?: Skill()
         )
 
         val existing = agents.toList()
