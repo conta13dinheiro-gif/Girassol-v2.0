@@ -11,7 +11,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         private set
     private var eventId = checkpoint.eventId
     private var previousHash = checkpoint.eventHash
-    init { require(rulesVersion in 1..7); require(state.version == 1); require(violations(state).isEmpty()) }
+    init { require(rulesVersion in 1..8); require(state.version == 1); require(violations(state).isEmpty()) }
     fun checkpoint() = Checkpoint(state, eventId, previousHash)
 
     /** Same admitted intentions used by the native planner and by execution. */
@@ -202,7 +202,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 12: Bounded social/memory outputs; immutable publication follows validation.
         val next = base.copy(socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
-        val raw = CanonicalEvent(version = if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        val raw = CanonicalEvent(version = if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -235,6 +235,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         words: MutableList<Word>,
         genealogy: MutableList<GenealogyRecord>
     ) {
+        if (rulesVersion >= 8 && agents.size >= MAX_LIVE_POPULATION) return
         if (current.id >= partner.id) return
         val firstTie = ties.firstOrNull { it.from == current.id && it.to == partner.id } ?: return
         val secondTie = ties.firstOrNull { it.from == partner.id && it.to == current.id } ?: return
@@ -242,16 +243,22 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         if (genealogy.any { it.parentOne == current.id && it.parentTwo == partner.id && tick - it.tick < 1440 }) return
 
         val generation = Math.addExact(maxOf(current.genome.generation, partner.genome.generation), 1)
-        val childId = "child_${tick}_${current.id}_${partner.id}"
+        val childId = if (rulesVersion >= 8) "child_" + Canonical.hash("$seed:$tick:${current.id}:${partner.id}")
+            else "child_${tick}_${current.id}_${partner.id}"
         if (agents.any { it.id == childId }) return
         val rng = Canonical.stream(seed, childId, tick, "inheritance")
 
-        fun inherit(one: Locus, two: Locus): Locus = Locus(
-            maternal = one.express(),
-            paternal = two.express(),
-            dominanceA = rng.nextDouble(),
-            dominanceB = rng.nextDouble()
-        )
+        fun inherit(one: Locus, two: Locus): Locus {
+            if (rulesVersion < 8) return Locus(one.express(), two.express(), rng.nextDouble(), rng.nextDouble())
+            val maternal = rng.nextDouble() < 0.5
+            val paternal = rng.nextDouble() < 0.5
+            return Locus(
+                if (maternal) one.maternal else one.paternal,
+                if (paternal) two.maternal else two.paternal,
+                if (maternal) one.dominanceA else one.dominanceB,
+                if (paternal) two.dominanceA else two.dominanceB
+            )
+        }
         val genome = Genome(
             curiosity = inherit(current.genome.curiosity, partner.genome.curiosity),
             sociability = inherit(current.genome.sociability, partner.genome.sociability),
@@ -327,7 +334,9 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
     }
 
     companion object {
-        const val CURRENT_RULES_VERSION = 7
+        const val CURRENT_RULES_VERSION = 8
+        // Admission budget, not a claim of measured 4 GB performance. Legacy replay is unchanged.
+        const val MAX_LIVE_POPULATION = 150
         val GENESIS_HASH = "0".repeat(64)
         fun genesis(seed: Long = 20261119): WorldState {
             val rooms = listOf(Room("salon", "Sala solar", 3.0, 3.0, 3.8, 2.6, 6), Room("bedroom", "Dormitório Aurora", 8.0, 2.5, 3.8, 2.5, 3), Room("cafe", "Café & fonte", 2.5, 6.5, 3.0, 2.0, 2), Room("market", "Mercado", 8.5, 6.5, 3.0, 2.0, 2), Room("library", "Biblioteca", 5.5, .6, 3.0, 1.4, 1), Room("workshop", "Oficina", 5.4, 9.0, 2.3, 1.8, 1))

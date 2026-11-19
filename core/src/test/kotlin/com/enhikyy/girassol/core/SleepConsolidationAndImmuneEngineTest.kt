@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SleepConsolidationAndImmuneEngineTest {
+    @Test fun agreeingDogmaticOpinionsRetainTheirCertainty() {
+        for (belief in listOf(0.0, 0.4, 1.0)) {
+            val opinion=SubjectiveOpinion(belief,1.0-belief,0.0)
+            assertEquals(opinion,SubjectiveOpinion.cumulativeFuseIndependent(opinion,opinion))
+        }
+    }
     @Test fun betaBeliefsRemainUncertainUntilEvidenceArrives() {
         val prior = SubjectiveOpinion.fromBeta(1.0, 1.0)
         assertEquals(0.0, prior.belief, 1e-10)

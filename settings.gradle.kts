@@ -9,4 +9,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Girassol"
-include(":core", ":research", ":app")
+include(":core", ":research", ":app", ":host-validation")

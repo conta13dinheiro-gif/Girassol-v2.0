@@ -49,7 +49,10 @@ data class SubjectiveOpinion(
             val baseRate = (first.baseRate + second.baseRate) / 2.0
             // Two dogmatic reports provide no independent uncertainty to resolve conflict.
             // Preserve uncertainty instead of manufacturing certainty from contradictory claims.
-            if (kappa <= 1e-12) return SubjectiveOpinion(0.0, 0.0, 1.0, baseRate)
+            if (kappa <= 1e-12) {
+                if (first == second) return first
+                return SubjectiveOpinion(0.0, 0.0, 1.0, baseRate)
+            }
 
             val belief = (first.belief * second.uncertainty + second.belief * first.uncertainty) / kappa
             val disbelief = (first.disbelief * second.uncertainty + second.disbelief * first.uncertainty) / kappa

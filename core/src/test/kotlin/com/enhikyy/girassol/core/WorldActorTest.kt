@@ -180,8 +180,14 @@ class WorldActorTest {
         )))
     }
 
-    @Test fun reciprocalTrustCreatesDeterministicDescendantAndReplaysGenealogy() {
-        val initial = WorldActor.genesis()
+    @Test fun reciprocalTrustCreatesDeterministicDescendantAndReplaysGenealogy() = verifyBirth(6, 6)
+    @Test fun rulesEightPreservesAllelesAndReplays() = verifyBirth(8, 6)
+    @Test fun rulesEightRefusesBirthAtCapacity() = verifyBirth(8, WorldActor.MAX_LIVE_POPULATION)
+
+    private fun verifyBirth(rules: Int, population: Int) {
+        val genesis = WorldActor.genesis()
+        val extras = (6 until population).map { i -> genesis.agents.last().copy(id="extra_$i", x=100.0, z=100.0) }
+        val initial = genesis.copy(agents=genesis.agents + extras)
         val room = initial.rooms.first { it.id == "salon" }
         val parents = initial.agents.take(2).mapIndexed { index, citizen ->
             citizen.copy(
@@ -199,8 +205,8 @@ class WorldActorTest {
                 if (tie.from in pair && tie.to in pair) tie.copy(affinity = .91) else tie
             }
         )
-        val actorA = WorldActor(Checkpoint(state, 0, WorldActor.GENESIS_HASH), 6)
-        val actorB = WorldActor(Checkpoint(state, 0, WorldActor.GENESIS_HASH), 6)
+        val actorA = WorldActor(Checkpoint(state, 0, WorldActor.GENESIS_HASH), rules)
+        val actorB = WorldActor(Checkpoint(state, 0, WorldActor.GENESIS_HASH), rules)
         val first = parents[0]
         val proposal = NeuralProposal(
             seed = state.seed,
@@ -230,12 +236,28 @@ class WorldActorTest {
             poses = poses
         )
         val transition = actorA.step(neural = proposal, spatial = frame)
+        if (rules >= 8 && population == WorldActor.MAX_LIVE_POPULATION) {
+            assertTrue(transition.state.genealogy.isEmpty())
+            assertEquals(population, transition.state.agents.size)
+            actorB.replay(transition.event)
+            assertEquals(actorA.checkpoint(), actorB.checkpoint())
+            return
+        }
         assertEquals(1, transition.state.genealogy.size)
         val record = transition.state.genealogy.single()
         val child = transition.state.agents.single { it.id == record.child }
         assertEquals(parents[0].id, record.parentOne)
         assertEquals(parents[1].id, record.parentTwo)
         assertEquals(2, child.genome.generation)
+        if (rules >= 8) {
+            assertEquals(8, transition.event.version)
+            assertEquals(70, child.id.length)
+            val inherited = child.genome.curiosity
+            val mother = parents[0].genome.curiosity
+            val father = parents[1].genome.curiosity
+            assertTrue(inherited.maternal in listOf(mother.maternal, mother.paternal))
+            assertTrue(inherited.paternal in listOf(father.maternal, father.paternal))
+        }
         assertTrue(child.lineage.contains(parents[0].lineage))
         assertTrue(child.lineage.contains(parents[1].lineage))
         assertEquals(0, transition.state.balances["${child.id}/coins"])
@@ -247,7 +269,7 @@ class WorldActorTest {
         })
         val restored = WorldActor(
             Checkpoint(Canonical.state(Canonical.state(actorA.checkpoint().state)), actorA.checkpoint().eventId, actorA.checkpoint().eventHash),
-            6
+            rules
         )
         assertEquals(actorA.state.genealogy, restored.state.genealogy)
         assertEquals(Canonical.state(actorA.state), Canonical.state(restored.state))

@@ -4,10 +4,8 @@ on:
   push:
     branches:
       - "**"
-  # Push already covers PR synchronize events. Keep PR events only for opening/reopening
-  # so a single commit does not launch two identical builds.
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -72,6 +70,9 @@ jobs:
 
       - name: Run native C++ tests with ASan and UBSan
         run: scripts/test-native.sh
+
+      - name: Run production JNI integration tests
+        run: scripts/test-mind-jni.sh
 
       - name: Run unit tests and lint
         id: validation

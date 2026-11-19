@@ -36,7 +36,7 @@ internal class RsiCoordinator : AutoCloseable {
             catch(e: Exception) { synchronized(this@RsiCoordinator) { if(generation.get()==token) RsiHub.mutable.value=RsiHub.mutable.value.copy(running=false,message="Experimento interrompido: ${e.message}") } }
         }
     }
-    @Synchronized fun take(world: WorldState): PolicyRevision? { val value=pending; pending=null; return value?.takeIf { it.applicable(world) } }
+    @Synchronized fun take(world: WorldState): PolicyRevision? { val value=pending; pending=null; return value?.takeIf { it.rulesVersion==WorldActor.CURRENT_RULES_VERSION && it.applicable(world) } }
     @Synchronized fun cancel() { generation.incrementAndGet(); future?.cancel(true); pending=null; queued=null; RsiHub.mutable.value=RsiHub.mutable.value.copy(running=false,message="Experimento suspenso; nenhuma alteração aplicada.") }
     override fun close() { cancel(); executor.shutdownNow() }
 }

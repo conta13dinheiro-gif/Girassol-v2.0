@@ -98,7 +98,7 @@ class DeterministicRng(private var state: Long) {
     @EncodeDefault(EncodeDefault.Mode.NEVER) val cognition: CognitiveFrame? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: SpatialFrame? = null) {
     fun computedHash(): String = Canonical.hash(Canonical.event(copy(hash = "")))
-    fun valid() = version in 1..7 && (when(version) { 1,2 -> neural==null && cognition==null && spatial==null; 3 -> neural!=null && cognition==null && spatial==null; 4 -> cognition!=null && spatial==null; 7 -> cognition!=null && spatial!=null; else -> spatial!=null }) && hash == computedHash()
+    fun valid() = version in 1..8 && (when(version) { 1,2 -> neural==null && cognition==null && spatial==null; 3 -> neural!=null && cognition==null && spatial==null; 4 -> cognition!=null && spatial==null; 7 -> cognition!=null && spatial!=null; else -> spatial!=null }) && hash == computedHash()
 }
 data class Transition(val state: WorldState, val event: CanonicalEvent)
 data class Checkpoint(val state: WorldState, val eventId: Long, val eventHash: String)

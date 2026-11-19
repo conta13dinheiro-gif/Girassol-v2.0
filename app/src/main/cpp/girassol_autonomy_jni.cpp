@@ -125,7 +125,7 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
     jlongArray idsArray,
     jfloatArray packedArray,
     jfloat couplingK
-) {
+) try {
     if (idsArray == nullptr || packedArray == nullptr || !std::isfinite(couplingK)) {
         throwIllegalArgument(env, "Entradas da dinâmica Anokhin ausentes ou inválidas");
         return std::numeric_limits<jfloat>::quiet_NaN();
@@ -162,7 +162,7 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
         for (std::size_t j = 0; j < actual.size(); ++j) actual[j] = values[kActualSensory + j];
         const float predictionError = citizen.ard.evaluateOutcome(actual);
         const float deltaTime = values[kDeltaTime];
-        citizen.ageYears = std::clamp(citizen.ageYears + deltaTime / (365.25f * 24.0f * 3600.0f), 0.0f, 120.0f);
+        // Kotlin owns age in double precision; float transport must not integrate time.
         citizen.hormones.stepODE(
             deltaTime,
             values[kThreat],
@@ -200,4 +200,12 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
     env->SetFloatArrayRegion(packedArray, 0, static_cast<jsize>(packed.size()), packed.data());
     if (env->ExceptionCheck()) return std::numeric_limits<jfloat>::quiet_NaN();
     return orderParameter;
+} catch (const std::bad_alloc&) {
+    jclass type = env->FindClass("java/lang/OutOfMemoryError");
+    if (type != nullptr) env->ThrowNew(type, "Native autonomy allocation failed");
+    return std::numeric_limits<jfloat>::quiet_NaN();
+} catch (const std::exception& error) {
+    jclass type = env->FindClass("java/lang/IllegalStateException");
+    if (type != nullptr) env->ThrowNew(type, error.what());
+    return std::numeric_limits<jfloat>::quiet_NaN();
 }
