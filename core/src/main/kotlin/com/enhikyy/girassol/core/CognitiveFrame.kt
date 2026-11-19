@@ -18,7 +18,7 @@ import kotlin.math.*
         memory.valid(tick) && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
 
-        fun inherit(world: WorldState,citizen: Citizen,first: MindState,second: MindState): MindState {
+        fun inherit(world: WorldState,citizen: Citizen,firstId: String,secondId: String,first: MindState,second: MindState): MindState {
             val rng=Canonical.stream(world.seed,citizen.id,world.tick,"ltc-family-inherit-v1")
             val parameters=List(248) { index ->
                 val blended=(first.parameters[index]+second.parameters[index])*.5+(rng.nextDouble()-.5)*.02
@@ -37,7 +37,14 @@ import kotlin.math.*
             val exposure=List(8) { index ->
                 ((first.exposure[index].toLong()+second.exposure[index].toLong())/2).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             }
-            val inheritedMemory=first.memory.learnFrom(citizen.id,second.memory,world.tick)
+            val inheritedProcedures=(first.memory.procedures.map { it.copy(teacher=firstId,lastTick=world.tick) } +
+                second.memory.procedures.map { it.copy(teacher=secondId,lastTick=world.tick) })
+                .groupBy { it.action }.values.map { group -> group.maxBy { it.successes } }
+                .sortedBy { it.action.ordinal }
+            val inheritedReflections=(first.memory.reflections+second.memory.reflections)
+                .groupBy { it.action }.values.map { group -> group.maxBy { it.observations } }
+                .sortedBy { it.action.ordinal }
+            val inheritedMemory=MemoryBank(reflections=inheritedReflections,procedures=inheritedProcedures,reflectedTick=world.tick)
             val behaviors=(first.behaviors+second.behaviors).distinct().takeLast(64)
             return MindState(
                 parameters=parameters,
