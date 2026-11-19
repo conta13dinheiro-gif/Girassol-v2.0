@@ -57,7 +57,7 @@ object ShizukuBridge {
             mutableState.value = mutableState.value.copy(
                 binderAvailable = Shizuku.pingBinder(),
                 permissionGranted = hasPermission(),
-                connected = client != null && service.pingBinder(),
+                connected = client != null && client.asBinder().pingBinder(),
                 remoteUid = runCatching { Shizuku.getUid() }.getOrNull(),
                 message = if (client != null && service.pingBinder())
                     "Telemetria privilegiada somente de leitura conectada"
