@@ -96,7 +96,7 @@ class SleepConsolidationAndImmuneEngineTest {
         val scarce = AllostaticThermalCoupling.assess(ThermalTier.SEVERE_OR_CRITICAL, false, .2)
         assertTrue(cool.localLlmAllowed)
         assertFalse(hot.localLlmAllowed)
-        assertFalse(hot.reflexFirst.not())
+        assertTrue(hot.reflexFirst)
         assertTrue(hot.neuralCostMultiplier > cool.neuralCostMultiplier)
         assertEquals(hot.neuralCostMultiplier * 2.0, scarce.neuralCostMultiplier, 1e-10)
         assertEquals(ThermalTier.MODERATE, AllostaticThermalCoupling.fromPlatformThermalStatus(2))
