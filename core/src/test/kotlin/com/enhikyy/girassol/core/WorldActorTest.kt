@@ -107,4 +107,57 @@ class WorldActorTest {
         val a = WorldActor(); repeat(100) { a.step() }
         assertEquals(genome, a.state.agents.first().genome)
     }
+    @Test fun goapPlansToEarnCoinsBeforePurchasingFood() {
+        val base = WorldActor.genesis()
+        val hungry = base.agents.first().copy(
+            needs = Needs(energy = 1.0, hydration = 1.0, glucose = .1, social = 1.0, curiosity = 1.0)
+        )
+        val world = base.copy(
+            agents = base.agents.map { if (it.id == hungry.id) hungry else it },
+            balances = base.balances + ("${hungry.id}/coins" to 0)
+        )
+        val before = Canonical.state(world)
+        assertEquals(Activity.WRITE, UtilityGoapPlanner.choose(world, hungry, Activity.STUDY))
+        assertEquals(before, Canonical.state(world))
+    }
+
+    @Test fun goapAvoidsAnUnavailableResourceAndUsesAnotherValidGoal() {
+        val base = WorldActor.genesis()
+        val citizen = base.agents.first().copy(
+            needs = Needs(energy = 1.0, hydration = .1, glucose = 1.0, social = .1, curiosity = 1.0)
+        )
+        val world = base.copy(
+            agents = base.agents.map { if (it.id == citizen.id) citizen else it },
+            balances = base.balances + mapOf(
+                "market/water" to 0,
+                "market/food" to 0,
+                "${citizen.id}/coins" to 0
+            )
+        )
+        assertEquals(Activity.TALK, UtilityGoapPlanner.choose(world, citizen, Activity.WATER))
+    }
+
+    @Test fun versionSixGoapEventsReplayWithoutChangingHistoricalRules() {
+        val origin = WorldActor.genesis()
+        val a = WorldActor(Checkpoint(origin, 0, WorldActor.GENESIS_HASH), 6)
+        val b = WorldActor(Checkpoint(origin, 0, WorldActor.GENESIS_HASH), 6)
+        val intents = a.intentions()
+        val poses = origin.agents.associate { agent ->
+            val point = SpatialPoint(agent.x, 0.0, agent.z)
+            agent.id to SpatialPose(point, 0.0, 0.0, 0.0, 0.0, false, listOf(point))
+        }
+        val frame = SpatialFrame(
+            sourceTick = origin.tick,
+            sourceHash = Canonical.hash(Canonical.state(origin)),
+            seed = origin.seed,
+            intentions = intents,
+            poses = poses
+        )
+        val transition = a.step(spatial = frame)
+        assertEquals(6, transition.event.version)
+        assertTrue(transition.event.valid())
+        b.replay(transition.event)
+        assertEquals(a.checkpoint(), b.checkpoint())
+    }
+
 }
