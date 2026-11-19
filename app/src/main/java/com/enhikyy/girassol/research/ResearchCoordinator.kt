@@ -59,7 +59,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     fun refresh() { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(settings=settings,entries=store().research().entries(),bytes=store().research().bytes()+compact.bytes()) }
     private fun message(value: String,busy: Boolean=false) { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(message=value,busy=busy) }
     fun cancel() { generation.incrementAndGet();http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };future?.cancel(true);future=null;evidence=null;studying=null;message("Pesquisa suspensa; evidências recebidas preservadas.") }
-    private fun <T> launch(operation: ()->T,accept: (T)->Unit,onComplete: ((Boolean)->Unit)?=null) {
+    private fun <T> launch(operation: ()->T,onComplete: ((Boolean)->Unit)?=null,accept: (T)->Unit) {
         val token=generation.get();message("Pesquisa em andamento",true)
         future=executor.submit {
             try {
