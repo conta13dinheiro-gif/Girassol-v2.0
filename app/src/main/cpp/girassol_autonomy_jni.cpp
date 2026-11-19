@@ -162,11 +162,16 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
         for (std::size_t j = 0; j < actual.size(); ++j) actual[j] = values[kActualSensory + j];
         const float predictionError = citizen.ard.evaluateOutcome(actual);
         const float deltaTime = values[kDeltaTime];
+        citizen.ageYears = std::clamp(citizen.ageYears + deltaTime / (365.25f * 24.0f * 3600.0f), 0.0f, 120.0f);
         citizen.hormones.stepODE(
             deltaTime,
             values[kThreat],
             values[kWarmth],
             std::max(values[kSurprise], predictionError)
+        );
+        citizen.biologicalHealth = std::clamp(
+            citizen.biologicalHealth - deltaTime * std::max(0.0f, citizen.hormones.cortisol - 0.8f) * 0.0001f,
+            0.0f, 1.0f
         );
 
         const float cortisol = citizen.hormones.cortisol;
