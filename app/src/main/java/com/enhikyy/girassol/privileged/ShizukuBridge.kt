@@ -59,7 +59,7 @@ object ShizukuBridge {
                 permissionGranted = hasPermission(),
                 connected = client != null && client.asBinder().pingBinder(),
                 remoteUid = runCatching { Shizuku.getUid() }.getOrNull(),
-                message = if (client != null && service.pingBinder())
+                message = if (client != null && client.asBinder().pingBinder())
                     "Telemetria privilegiada somente de leitura conectada"
                 else "Shizuku retornou um serviço inválido"
             )
