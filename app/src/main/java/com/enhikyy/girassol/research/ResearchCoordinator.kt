@@ -38,7 +38,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         hub = (PluginRegistry.activeDataSourceEndpoint()?.trimEnd('/') ?: "https://huggingface.co/api/datasets").plus("/").toHttpUrl(),
         compact = compact::acquire
     )
-    private val models=DualModelOrchestrator(app,ResearchGate { guardian.checkLocal() })
+    private val models=DualModelOrchestrator(app,ResearchGate { guardian.checkInference() })
     private val executor=Executors.newSingleThreadExecutor { task->Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);task.run() },"Girassol-Research") }
     private val generation=AtomicLong()
     private val reflectionGeneration=AtomicLong()
@@ -104,7 +104,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
             reflectionCooldown[agentId]=world.tick+60
             reflectionFuture=reflectionExecutor.submit {
                 try {
-                    guardian.checkLocal()
+                    guardian.checkInference()
                     val thought=models.innerSpeech(world,agentId,mind)
                     synchronized(reflectionLock) {
                         if(token==reflectionGeneration.get()) reflectionPending[agentId]=thought
