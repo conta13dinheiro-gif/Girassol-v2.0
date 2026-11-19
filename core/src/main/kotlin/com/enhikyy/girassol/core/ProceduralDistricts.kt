@@ -1,23 +1,38 @@
 package com.enhikyy.girassol.core
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
+import kotlin.math.floorDiv
+import kotlin.math.floorMod
 import kotlin.math.sqrt
 
-/** Deterministic outward square-spiral parcel allocator for modular city growth. */
+/** Deterministic spiral parcels backed by WFC district constraints. */
 object ProceduralDistricts {
-    fun nextAnnex(rooms: List<Room>): Room {
+    private const val CHUNK_SIZE = 17
+    private data class ChunkKey(val seed: Long, val x: Int, val z: Int)
+    private val plans = ConcurrentHashMap<ChunkKey, List<DistrictWaveFunctionCollapse.Kind>>()
+
+    fun nextAnnex(rooms: List<Room>, seed: Long): Room {
         val index = rooms.count { it.id.startsWith("annex_") }
         val (gx, gz) = spiral(index)
+        val chunkX = floorDiv(gx, CHUNK_SIZE)
+        val chunkZ = floorDiv(gz, CHUNK_SIZE)
+        val localX = floorMod(gx, CHUNK_SIZE)
+        val localZ = floorMod(gz, CHUNK_SIZE)
+        val layout = plans.computeIfAbsent(ChunkKey(seed, chunkX, chunkZ)) {
+            DistrictWaveFunctionCollapse.generate(seed, chunkX, chunkZ)
+        }
+        val kind = layout[localZ * CHUNK_SIZE + localX]
+        val (code, title) = when (kind) {
+            DistrictWaveFunctionCollapse.Kind.RESIDENTIAL -> "residential" to "Moradia modular"
+            DistrictWaveFunctionCollapse.Kind.AGRICULTURE -> "agriculture" to "Estufa agrícola"
+            DistrictWaveFunctionCollapse.Kind.RECYCLING -> "recycling" to "Reciclagem e reúso"
+            DistrictWaveFunctionCollapse.Kind.ENERGY -> "energy" to "Oficina de energia"
+            DistrictWaveFunctionCollapse.Kind.RESEARCH -> "research" to "Biblioteca de pesquisa"
+            DistrictWaveFunctionCollapse.Kind.CIVIC -> "civic" to "Ágora cívica"
+        }
         val x = 14.0 + gx * 2.0
         val z = 9.0 + gz * 2.0
-        val (code,title) = when(index % 6) {
-            0 -> "residential" to "Moradia modular"
-            1 -> "agriculture" to "Estufa agrícola"
-            2 -> "recycling" to "Reciclagem e reúso"
-            3 -> "energy" to "Oficina de energia"
-            4 -> "research" to "Biblioteca de pesquisa"
-            else -> "civic" to "Ágora cívica"
-        }
         return Room("annex_${index}_$code", "$title ${index + 1}", x, z, 1.7, 1.5, 2)
     }
 
