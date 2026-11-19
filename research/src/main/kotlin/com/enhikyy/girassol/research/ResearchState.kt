@@ -11,13 +11,13 @@ import kotlinx.serialization.json.Json
 }
 @Serializable enum class ResearchPhase(val title: String) {
     SEARCHING("Buscando"), STREAMING("Recebendo trechos"), QUARANTINED("Em quarentena"),
-    REVIEWING("Validação cruzada"), VALIDATED("Validado e indexado"), LEARNED("Pesos atualizados"),
+    REVIEWING("Validação cruzada"), REVIEWED("Revisões concluídas"), VALIDATED("Validado e indexado"), LEARNED("Pesos atualizados"),
     PAUSED("Suspenso"), REJECTED("Recusado"), FAILED("Não concluído")
 }
 @Serializable data class ResearchEntry(val intent: DatasetResearchIntent,val phase: ResearchPhase,val message: String,
     val repo: String?=null,val acquired: Int=0,val learned: Int=0,val pinned: Boolean=false)
 @Serializable data class KnowledgeCandidate(val id: String,val acquisitionHash: String,val intent: DatasetResearchIntent,
-    val repo: String,val license: String,val row: DatasetRow,val researcher: KnowledgeReview?=null,val verifier: KnowledgeReview?=null)
+    val repo: String,val license: String,val row: DatasetRow,val researcher: KnowledgeReview?=null,val verifier: KnowledgeReview?=null,val embedding: List<Float> = emptyList(),val embeddingModel: String="")
 object ResearchCodec {
     val json=Json { encodeDefaults=true; ignoreUnknownKeys=true }
     inline fun <reified T> encode(value: T): String = json.encodeToString(value)

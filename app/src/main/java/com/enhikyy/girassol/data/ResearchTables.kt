@@ -61,12 +61,21 @@ class ResearchTables(private val db: SQLiteDatabase) {
     fun snippets(intent: String): List<Pair<KnowledgeCandidate,String>> = db.rawQuery("SELECT payload,status FROM staging_knowledge WHERE intent_id=? ORDER BY id LIMIT 100",arrayOf(intent)).use { c->
         buildList { while(c.moveToNext()) add(ResearchCodec.decode<KnowledgeCandidate>(c.getString(0)) to c.getString(1)) }
     }
-    fun review(candidate: KnowledgeCandidate,tick: Long,approved: Boolean) {
+    fun review(candidate: KnowledgeCandidate,tick: Long,approved: Boolean,quota: Long=Long.MAX_VALUE) {
         verifyRow(candidate)
         val original=readCandidate(candidate.id)
-        check(candidate.copy(researcher=null,verifier=null)==original.copy(researcher=null,verifier=null))
-        if(approved) check(candidate.researcher!=null && candidate.verifier!=null && EpistemicQuarantine.approved(candidate.row,candidate.researcher,candidate.verifier))
+        check(candidate.copy(researcher=null,verifier=null,embedding=emptyList(),embeddingModel="")==original.copy(researcher=null,verifier=null,embedding=emptyList(),embeddingModel=""))
+        val researcher=candidate.researcher;val verifier=candidate.verifier
+        if(approved) check(researcher!=null && verifier!=null && EpistemicQuarantine.approved(candidate.row,researcher,verifier))
+        if(approved) {
+            check(candidate.embeddingModel.matches(Regex("[a-f0-9]{64}")) && candidate.embedding.size in 1..32768 && candidate.embedding.all { it.isFinite() })
+            check(kotlin.math.abs(candidate.embedding.sumOf { it.toDouble()*it }-1.0)<.01)
+        }
+        QuotaLru.victims(emptyList(),bytes(),(ResearchCodec.encode(candidate).toByteArray().size-ResearchCodec.encode(original).toByteArray().size).coerceAtLeast(0).toLong()+candidate.embedding.size*4L,quota)
         db.update("staging_knowledge",ContentValues().apply { put("payload",ResearchCodec.encode(candidate));put("review_tick",tick);put("status",if(approved) "VALIDATED" else "REJECTED") },"id=? AND status='QUARANTINED'",arrayOf(candidate.id)).also { check(it==1) }
+    }
+    fun rejectExperiment(id: String,tick: Long) {
+        db.update("staging_knowledge",ContentValues().apply { put("status","REPLAY_REJECTED");put("review_tick",tick) },"id=? AND status='VALIDATED'",arrayOf(id))
     }
     fun approvedFor(agent: String,known: Set<String>): KnowledgeCandidate? = db.rawQuery("SELECT payload FROM staging_knowledge WHERE status='VALIDATED' ORDER BY tick,id",null).use { c->
         var result: KnowledgeCandidate?=null
@@ -84,8 +93,34 @@ class ResearchTables(private val db: SQLiteDatabase) {
         val first=checkNotNull(c.researcher); val second=checkNotNull(c.verifier)
         check(EpistemicQuarantine.approved(c.row,first,second) && first.agent==lesson.researcher && second.agent==lesson.verifier && minOf(first.confidence,second.confidence)==lesson.confidence)
         db.update("staging_knowledge",ContentValues().apply { put("status","LEARNED");put("applied_tick",lesson.tick+1) },"id=? AND status='VALIDATED' AND review_tick<=?",arrayOf(c.id,lesson.tick.toString())).also { check(it==1) }
+        if(c.embedding.isNotEmpty()) {
+            val vector=java.nio.ByteBuffer.allocate(c.embedding.size*4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            c.embedding.forEach(vector::putFloat)
+            db.insertOrThrow("knowledge_vectors",null,ContentValues().apply { put("id",c.id);put("model_hash",c.embeddingModel);put("dimensions",c.embedding.size);put("embedding",vector.array());put("tick",lesson.tick+1) })
+        }
         db.execSQL("UPDATE epistemic_nodes SET mastery=MIN(1.0,mastery+?) WHERE domain=?",arrayOf(.02*lesson.confidence/100,lesson.domain))
         entry(c.intent.id)?.let { save(it.copy(phase=ResearchPhase.LEARNED,message="Trecho incorporado durante estudo na biblioteca.",learned=it.learned+1)) }
+    }
+    /** Bounded HNSW shards cover all compatible learned records without loading the whole library. */
+    fun similar(space: String,query: List<Float>,check: ()->Unit): List<Pair<KnowledgeCandidate,Float>> {
+        var after="";val best=mutableListOf<Pair<String,Float>>()
+        val shardSize=minOf(128,2*1024*1024/query.size.coerceAtLeast(1))
+        require(shardSize>0 && query.isNotEmpty())
+        while(true) {
+            check()
+            val shard=db.rawQuery("SELECT id,embedding FROM knowledge_vectors WHERE model_hash=? AND dimensions=? AND id>? ORDER BY id LIMIT ?",arrayOf(space,query.size.toString(),after,shardSize.toString())).use { cursor->
+                buildList { while(cursor.moveToNext()) {
+                    val buffer=java.nio.ByteBuffer.wrap(cursor.getBlob(1)).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    require(buffer.remaining()==query.size*4)
+                    add(cursor.getString(0) to List(query.size) { buffer.float })
+                } }
+            }
+            if(shard.isEmpty()) break
+            best+=com.enhikyy.girassol.cognition.NativeSemanticMemory.search(query,shard)
+            best.sortByDescending { it.second };while(best.size>8) best.removeAt(best.lastIndex)
+            after=shard.last().first
+        }
+        return best.map { readCandidate(it.first) to it.second }
     }
     private fun verifyRow(candidate: KnowledgeCandidate) {
         db.rawQuery("SELECT envelope,compressed FROM external_knowledge_journal WHERE hash=?",arrayOf(candidate.acquisitionHash)).use { source->
@@ -118,7 +153,12 @@ class ResearchTables(private val db: SQLiteDatabase) {
         else db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(tick.toString())).use { c-> check(c.moveToFirst());val event=Canonical.event(c.getString(0));check(event.valid() && event.hash==hash) }
     }
     companion object {
+        fun createVectors(db: SQLiteDatabase) {
+            db.execSQL("CREATE TABLE knowledge_vectors(id TEXT PRIMARY KEY,model_hash TEXT NOT NULL,dimensions INTEGER NOT NULL,embedding BLOB NOT NULL,tick INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX knowledge_vector_space ON knowledge_vectors(model_hash,dimensions,id)")
+        }
         fun create(db: SQLiteDatabase) {
+            createVectors(db)
             db.execSQL("CREATE TABLE epistemic_nodes(domain TEXT PRIMARY KEY,mastery REAL NOT NULL CHECK(mastery BETWEEN 0 AND 1),prerequisites TEXT NOT NULL)")
             Domain.entries.forEach { d->db.execSQL("INSERT INTO epistemic_nodes VALUES(?,0,?)",arrayOf(d.name,d.prerequisites.joinToString(",") { it.name })) }
             db.execSQL("CREATE TABLE research_intents(id TEXT PRIMARY KEY,tick INTEGER NOT NULL,payload TEXT NOT NULL)")
@@ -130,12 +170,13 @@ class ResearchTables(private val db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE installed_datasets(repo TEXT NOT NULL,config TEXT NOT NULL,split TEXT NOT NULL,query_hash TEXT NOT NULL,intent_id TEXT NOT NULL,tick INTEGER NOT NULL,PRIMARY KEY(repo,config,split,query_hash))")
         }
         fun fork(db: SQLiteDatabase,point: Checkpoint) {
+            db.execSQL("INSERT INTO knowledge_vectors SELECT * FROM origin.knowledge_vectors WHERE tick<=?",arrayOf(point.state.tick))
             db.execSQL("INSERT INTO research_intents SELECT * FROM origin.research_intents WHERE tick<=?",arrayOf(point.state.tick))
             db.execSQL("INSERT INTO external_knowledge_journal SELECT * FROM origin.external_knowledge_journal WHERE tick<=?",arrayOf(point.state.tick))
             db.execSQL("INSERT INTO staging_knowledge SELECT id,acquisition_hash,intent_id,payload,CASE WHEN review_tick>? THEN 'QUARANTINED' WHEN applied_tick>? THEN 'VALIDATED' ELSE status END,tick,CASE WHEN review_tick<=? THEN review_tick ELSE NULL END,CASE WHEN applied_tick<=? THEN applied_tick ELSE NULL END FROM origin.staging_knowledge WHERE tick<=?",Array(5) { point.state.tick })
             db.execSQL("INSERT INTO installed_datasets SELECT * FROM origin.installed_datasets WHERE tick<=?",arrayOf(point.state.tick))
             db.rawQuery("SELECT id,payload FROM staging_knowledge WHERE review_tick IS NULL",null).use { rows->
-                val reset=buildList { while(rows.moveToNext()) add(rows.getString(0) to ResearchCodec.decode<KnowledgeCandidate>(rows.getString(1)).copy(researcher=null,verifier=null)) }
+                val reset=buildList { while(rows.moveToNext()) add(rows.getString(0) to ResearchCodec.decode<KnowledgeCandidate>(rows.getString(1)).copy(researcher=null,verifier=null,embedding=emptyList(),embeddingModel="")) }
                 reset.forEach { (id,candidate)->db.update("staging_knowledge",ContentValues().apply { put("payload",ResearchCodec.encode(candidate)) },"id=?",arrayOf(id)) }
             }
             val tables=ResearchTables(db)

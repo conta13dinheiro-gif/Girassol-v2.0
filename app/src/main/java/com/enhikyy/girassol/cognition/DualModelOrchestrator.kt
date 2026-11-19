@@ -15,6 +15,18 @@ internal class DualModelOrchestrator(context: Context,private val gate: Research
     @Volatile private var request=0L
     fun cancel() { val id=request;if(id>0) runCatching { NativeCognition.cancel(id) } }
     fun available(): Boolean = runBlocking { CognitionWork.lock.withLock { files.current()!=null } }
+    fun embed(text: String): Pair<String,List<Float>> = runBlocking {
+        CognitionWork.lock.withLock {
+            gate.check()
+            val model=checkNotNull(files.current()) { "Um GGUF é necessário para busca semântica" }
+            val adapter=adapters.current()
+            val memory=android.app.ActivityManager.MemoryInfo().also { app.getSystemService(android.app.ActivityManager::class.java).getMemoryInfo(it) }
+            check(!memory.lowMemory && model.bytes+(adapter?.bytes ?: 0)<=(memory.availMem-512L*1048576)/2) { "RAM insuficiente para embeddings" }
+            val id=CognitionWork.requests.incrementAndGet();request=id
+            try { sha256("${model.hash}:${adapter?.hash ?: ""}".toByteArray()) to NativeCognition.embedding(model.file.absolutePath,text,id,adapter?.file?.absolutePath) }
+            finally { request=0 }
+        }
+    }
     fun review(candidate: KnowledgeCandidate,reviewer: String,priorKnowledge: List<String>): KnowledgeCandidate = runBlocking {
         CognitionWork.lock.withLock {
             check(Process.is64Bit()) { "Revisão GGUF requer processo de 64 bits" }
@@ -44,7 +56,13 @@ internal class DualModelOrchestrator(context: Context,private val gate: Research
             }
             require(reviewer!=candidate.intent.discoverer)
             // The second role never sees the first role's verdict.
-            candidate.copy(researcher=evaluate(candidate.intent.discoverer,false),verifier=evaluate(reviewer,true))
+            val reviewed=candidate.copy(researcher=evaluate(candidate.intent.discoverer,false),verifier=evaluate(reviewer,true))
+            if(EpistemicQuarantine.approved(reviewed.row,checkNotNull(reviewed.researcher),checkNotNull(reviewed.verifier))) {
+                gate.check()
+                val id=CognitionWork.requests.incrementAndGet();request=id
+                try { reviewed.copy(embedding=NativeCognition.embedding(model.file.absolutePath,reviewed.row.text,id,adapter?.file?.absolutePath),embeddingModel=sha256("${model.hash}:${adapter?.hash ?: ""}".toByteArray())) }
+                finally { request=0 }
+            } else reviewed
         }
     }
 }

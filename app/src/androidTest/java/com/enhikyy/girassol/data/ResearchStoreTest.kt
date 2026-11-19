@@ -26,7 +26,7 @@ class ResearchStoreTest {
             assertArrayEquals(raw,tables.restore(candidate.acquisitionHash));assertEquals(10,tables.mastery().size)
             repeat(3) { val before=actor.state;store.commit(actor.step(),before) }
             val first=KnowledgeReview(who,"a".repeat(64),row.digest,Verdict.APPROVE,95)
-            tables.review(candidate.copy(researcher=first,verifier=first.copy(agent=point.state.agents[1].id)),actor.state.tick,true)
+            tables.review(candidate.copy(researcher=first,verifier=first.copy(agent=point.state.agents[1].id),embedding=listOf(1f,0f),embeddingModel="f".repeat(64)),actor.state.tick,true)
             branch=store.fork(store.moments().last().id)
             WorldStore(context,branch!!).use { copy->
                 val historical=copy.research().candidates().single()

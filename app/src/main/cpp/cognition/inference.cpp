@@ -3,6 +3,8 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -63,7 +65,7 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
     if (!model) throw std::runtime_error("GGUF incompatível, incompleto ou sem memória para carregar");
     const auto* vocab = llama_model_get_vocab(model.get());
     std::string formatted = prompt;
-    if (const char* chat = llama_model_chat_template(model.get())) {
+    if (const char* chat = llama_model_chat_template(model.get()); chat && task!=Task::Embedding) {
         const llama_chat_message message{"user", prompt.c_str()};
         std::vector<char> buffer(16384);
         const auto count = llama_chat_apply_template(chat, &message, 1, true, buffer.data(), static_cast<int>(buffer.size()));
@@ -71,12 +73,14 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
         else throw std::runtime_error("Template de conversa não suportado");
     }
     const int count = -llama_tokenize(vocab, formatted.data(), static_cast<int>(formatted.size()), nullptr, 0, true, true);
-    if (count <= 0 || count > (reviewing ? 1792 : 416)) throw std::runtime_error("Contexto excede a janela desta tarefa");
+    if (count <= 0 || count > (task==Task::Activity ? 416 : 1792)) throw std::runtime_error("Contexto excede a janela desta tarefa");
     std::vector<llama_token> tokens(count);
     if (llama_tokenize(vocab, formatted.data(), static_cast<int>(formatted.size()), tokens.data(), count, true, true) != count)
         throw std::runtime_error("Falha ao tokenizar contexto");
     auto context_params = llama_context_default_params();
-    context_params.n_ctx = reviewing ? 2048 : 512; context_params.n_batch = 128; context_params.n_ubatch = 128;
+    context_params.n_ctx = task==Task::Activity ? 512 : 2048;
+    context_params.embeddings = task==Task::Embedding;
+    context_params.pooling_type = LLAMA_POOLING_TYPE_NONE; context_params.n_batch = 128; context_params.n_ubatch = 128;
     context_params.n_threads = 2; context_params.n_threads_batch = 2;
     context_params.offload_kqv = false;
     context_params.abort_callback = abort_decode; context_params.abort_callback_data = &request;
@@ -101,6 +105,19 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
         check_request(request);
         auto batch = llama_batch_get_one(tokens.data() + offset, std::min(128, count - offset));
         if (llama_decode(context.get(), batch) != 0) { check_request(request); throw std::runtime_error("Falha ao processar contexto GGUF"); }
+    }
+    if(task==Task::Embedding) {
+        check_request(request);
+        const int dimensions=llama_model_n_embd(model.get());
+        const auto* values=llama_get_embeddings_ith(context.get(),-1);
+        if(!values || dimensions<1 || dimensions>32768) throw std::runtime_error("Modelo não expõe embeddings compatíveis");
+        double norm=0;
+        for(int i=0;i<dimensions;++i) { if(!std::isfinite(values[i])) throw std::runtime_error("Embedding não finito");norm+=double(values[i])*values[i]; }
+        if(norm<1e-16) throw std::runtime_error("Embedding nulo");
+        norm=std::sqrt(norm);
+        std::string output(static_cast<size_t>(dimensions)*sizeof(float),'\0');
+        for(int i=0;i<dimensions;++i) { const float v=static_cast<float>(values[i]/norm);std::memcpy(output.data()+i*sizeof(float),&v,sizeof(v)); }
+        return output;
     }
     std::string output;
     for (int generated = 0; generated < 64; ++generated) {

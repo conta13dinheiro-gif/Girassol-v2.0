@@ -5,8 +5,9 @@
 #include <string>
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_com_enhikyy_girassol_cognition_NativeCognition_nativeInfer(JNIEnv* env, jobject, jstring path, jbyteArray prompt, jlong request, jstring adapter, jboolean review) {
+Java_com_enhikyy_girassol_cognition_NativeCognition_nativeInfer(JNIEnv* env, jobject, jstring path, jbyteArray prompt, jlong request, jstring adapter, jint mode) {
     try {
+        if(mode<0 || mode>2) throw std::runtime_error("Tarefa JNI inválida");
         if (!path || !prompt || env->GetArrayLength(prompt) > 4096 || env->GetStringUTFLength(path) > 4096)
             throw std::runtime_error("Parâmetros JNI inválidos");
         const char* utf = env->GetStringUTFChars(path, nullptr);
@@ -24,7 +25,7 @@ Java_com_enhikyy_girassol_cognition_NativeCognition_nativeInfer(JNIEnv* env, job
             if (!name) return nullptr;
             adapterPath=name; env->ReleaseStringUTFChars(adapter,name);
         }
-        const auto output = girassol::cognition::infer(filename, input, request,30000,adapterPath,review ? girassol::cognition::Task::KnowledgeReview : girassol::cognition::Task::Activity);
+        const auto output = girassol::cognition::infer(filename, input, request,30000,adapterPath,static_cast<girassol::cognition::Task>(mode));
         auto result = env->NewByteArray(static_cast<jsize>(output.size()));
         if (result) env->SetByteArrayRegion(result, 0, static_cast<jsize>(output.size()), reinterpret_cast<const jbyte*>(output.data()));
         return result;

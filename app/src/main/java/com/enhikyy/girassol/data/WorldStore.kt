@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
-class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 3) {
+class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 4) {
     private val app=context.applicationContext
     init { require(name.matches(Regex("girassol(?:-branch-[a-f0-9-]{36})?\\.db"))); setWriteAheadLoggingEnabled(true) }
     override fun onConfigure(db: SQLiteDatabase) { super.onConfigure(db); db.execSQL("PRAGMA synchronous=FULL") }
@@ -18,9 +18,9 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         ResearchTables.create(db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..2 && newVersion==3)
+        check(oldVersion in 1..3 && newVersion==4)
         if(oldVersion<2) createHistory(db)
-        ResearchTables.create(db)
+        if(oldVersion<3) ResearchTables.create(db) else ResearchTables.createVectors(db)
     }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, tick INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, cause TEXT NOT NULL, agents TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, event_hash TEXT NOT NULL)")

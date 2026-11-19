@@ -32,6 +32,10 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     private var evidence: StudyEvidence?=null
     private var studying: KnowledgeCandidate?=null
     private val curriculum=EpistemicCurriculumEngine()
+    private sealed interface SearchResult {
+        data class Download(val batch: DatasetBatch): SearchResult
+        data class Local(val matches: List<Pair<KnowledgeCandidate,Float>>): SearchResult
+    }
     init { guardian.onRevoked { http.cancel();models.cancel();handler.post { cancel() } };configure(settings) }
     private fun loadSettings()=ResearchSettings(prefs.getBoolean("auto",false),prefs.getBoolean("wifi",true),prefs.getBoolean("review",true),prefs.getInt("quota",512).takeIf { it in listOf(256,512,1024,2048,4096) } ?: 512)
     fun configure(value: ResearchSettings) {
@@ -83,7 +87,7 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
             val citizen=world.agents.first { it.id==approved.intent.discoverer }
             if(!citizen.acting || citizen.activity!=Activity.STUDY) return
             launch({ KnowledgeExperiment.evaluate(point,actions,approved) { Thread.currentThread().isInterrupted || !guardian.green() } }) { result->
-                if(result==null) { message("Aprendizado recusado pelo replay sem regressão");cooldown=world.tick+240;studying=null }
+                if(result==null) { tables.rejectExperiment(approved.id,store().load()?.state?.tick ?: world.tick);message("Aprendizado recusado pelo replay sem regressão");cooldown=world.tick+240;studying=null }
                 else { evidence=result;message("Experimento aprovado; aguardando estudo na biblioteca") }
             }
             return
@@ -93,15 +97,17 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
             if(!settings.quarantine) { message("Quarentena preservada; revisão cruzada automática desativada");return }
             studying=candidate
             val reviewer=world.agents.filter { it.id!=candidate.intent.discoverer }.maxByOrNull { world.minds[it.id]?.personality?.get(1) ?: 0.0 } ?: return
-            val established=world.knowledge.takeLast(3).mapNotNull { k->tables.snippets(candidate.intent.id).firstOrNull { it.first.id==k.id }?.first?.row?.text }
+            val database=store().databaseName!!
             launch({
                 check(models.available()) { "Quarentena preservada: importe um modelo GGUF para revisão cruzada" }
+                val query=models.embed(candidate.intent.queryEn)
+                val established=WorldStore(app,database).use { read->read.research().similar(query.first,query.second,guardian::checkLocal).take(3).map { it.first.row.text } }
                 models.review(candidate,reviewer.id,established)
             }) { reviewed->
                 val approvedReview=EpistemicQuarantine.approved(reviewed.row,checkNotNull(reviewed.researcher),checkNotNull(reviewed.verifier))
-                tables.review(reviewed,store().load()?.state?.tick ?: world.tick,approvedReview)
+                tables.review(reviewed,store().load()?.state?.tick ?: world.tick,approvedReview,settings.quotaMb*1048576L)
                 val entry=tables.entry(reviewed.intent.id)
-                if(entry!=null) tables.save(entry.copy(phase=if(approvedReview) ResearchPhase.VALIDATED else ResearchPhase.REJECTED,message=if(approvedReview) "Duas avaliações locais favoráveis; aguardando replay." else "A revisão não aprovou o trecho."))
+                if(entry!=null) tables.save(entry.copy(phase=if(approvedReview) ResearchPhase.REVIEWED else ResearchPhase.REJECTED,message=if(approvedReview) "Duas avaliações locais favoráveis; aguardando replay." else "A revisão não aprovou o trecho."))
                 studying=null
             }
             return
@@ -120,12 +126,20 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
         tables.save(ResearchEntry(intent,ResearchPhase.SEARCHING,"Procurando dados textuais licenciados"));refresh();cooldown=world.tick+240
         try { guardian.check() } catch(e: ResearchPaused) { message(e.message ?: "Aguardando conexão");return }
         val installed=tables.installedKeys()
+        val database=store().databaseName!!
         launch({
+            val local=if(models.available()) {
+                val query=models.embed(intent.queryEn)
+                WorldStore(app,database).use { read->read.research().similar(query.first,query.second,guardian::checkLocal) }
+            } else emptyList()
+            if(local.firstOrNull()?.second?.let { it>=.62f }==true) return@launch SearchResult.Local(local)
             val found=seeker.discover(intent) { key->key in installed } ?: throw java.io.IOException("Nenhum dataset público elegível encontrado")
-            seeker.acquire(found.first,found.second,intent)
-        }) { batch->
-            val current=store().load() ?: point
-            tables.acquire(intent,batch,current,settings.quotaMb*1048576L)
+            SearchResult.Download(seeker.acquire(found.first,found.second,intent))
+        }) { result->
+            when(result) {
+                is SearchResult.Download->{ val current=store().load() ?: point;tables.acquire(intent,result.batch,current,settings.quotaMb*1048576L) }
+                is SearchResult.Local->tables.save(ResearchEntry(intent,ResearchPhase.VALIDATED,"Evidência já disponível na biblioteca; nenhuma aquisição necessária.",result.matches.first().first.repo))
+            }
         }
     }
     override fun close() { cancel();executor.shutdownNow();guardian.close() }

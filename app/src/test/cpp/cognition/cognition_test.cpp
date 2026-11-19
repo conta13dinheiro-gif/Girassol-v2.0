@@ -1,6 +1,8 @@
 #include "../../../main/cpp/cognition/inference.hpp"
 #include <chrono>
 #include <cstdio>
+#include <cmath>
+#include <cstring>
 #include <future>
 #include <stdexcept>
 #include <string>
@@ -37,6 +39,12 @@ int main(int argc, char** argv) {
     const auto review = infer(model,"Evaluate this fact as educational evidence. Water freezes at zero degrees Celsius at standard pressure. Return JSON {\"verdict\":\"APPROVE\",\"confidence\":95}.",10,30000,"",girassol::cognition::Task::KnowledgeReview);
     if(review.find("\"verdict\"")==std::string::npos || review.find("\"confidence\"")==std::string::npos || review.find("activity")!=std::string::npos)
         throw std::runtime_error("Knowledge review grammar was not applied");
+    const auto embedding=infer(model,"An isolated physical system conserves energy.",11,30000,"",girassol::cognition::Task::Embedding);
+    if(embedding.empty() || embedding.size()%sizeof(float)!=0) throw std::runtime_error("Missing model embedding");
+    double norm=0;
+    for(size_t i=0;i<embedding.size();i+=sizeof(float)) { float value;std::memcpy(&value,embedding.data()+i,sizeof(value));if(!std::isfinite(value)) throw std::runtime_error("Invalid embedding");norm+=double(value)*value; }
+    if(std::abs(norm-1)>.001) throw std::runtime_error("Embedding not normalized");
+    std::printf("Model embedding: %zu normalized dimensions\n",embedding.size()/sizeof(float));
     std::printf("Knowledge review output: %s\n",review.c_str());
     std::printf("Recovery output: %s\nInvalid model, size limit, pre-cancel, deadline, active cancellation and recovery passed.\n", subsequent.c_str());
 }
