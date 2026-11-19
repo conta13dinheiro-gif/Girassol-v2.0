@@ -41,6 +41,14 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     private val models=DualModelOrchestrator(app,ResearchGate { guardian.checkLocal() })
     private val executor=Executors.newSingleThreadExecutor { task->Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);task.run() },"Girassol-Research") }
     private val generation=AtomicLong()
+    private val reflectionGeneration=AtomicLong()
+    private val reflectionLock=Any()
+    private val reflectionPending=linkedMapOf<String,String>()
+    private val reflectionCooldown=ConcurrentHashMap<String,Long>()
+    private val reflectionExecutor=Executors.newSingleThreadExecutor { task->
+        Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND); task.run() },"Girassol-Inner-Speech")
+    }
+    @Volatile private var reflectionFuture: Future<*>?=null
     @Volatile private var future: Future<*>?=null
     private var cooldown=0L
     private var retryAt=0L
@@ -63,7 +71,54 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     fun control(id: String,pinned: Boolean,enabled: Boolean) { cancel();store().research().control(id,pinned,enabled);refresh() }
     fun refresh() { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(settings=settings,entries=store().research().entries(),bytes=store().research().bytes()+compact.bytes()) }
     private fun message(value: String,busy: Boolean=false) { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(message=value,busy=busy) }
-    fun cancel() { generation.incrementAndGet();http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };future?.cancel(true);future=null;evidence=null;studying=null;message("Pesquisa suspensa; evidências recebidas preservadas.") }
+    fun cancel() {
+        generation.incrementAndGet()
+        reflectionGeneration.incrementAndGet()
+        http.cancel();models.cancel()
+        runCatching { NonRootSwapArena.cancelAll() }
+        future?.cancel(true);future=null
+        reflectionFuture?.cancel(true);reflectionFuture=null
+        synchronized(reflectionLock) { reflectionPending.clear() }
+        evidence=null;studying=null
+        message("Pesquisa suspensa; evidências recebidas preservadas.")
+    }
+
+    /**
+     * The GNW threshold schedules a single low-priority GGUF reflection. Its result
+     * returns as bounded canonical input on a later tick; no inference blocks the
+     * world writer or mutates the state from the worker thread.
+     */
+    fun deliberate(world: WorldState,frame: CognitiveFrame): CognitiveFrame {
+        val completed=synchronized(reflectionLock) {
+            val ready=reflectionPending.toMap()
+            reflectionPending.clear()
+            ready
+        }
+        val candidate=frame.minds.entries
+            .filter { (id,mind) -> mind.psyche.ignitionIndex>.65 && world.tick >= (reflectionCooldown[id] ?: 0L) }
+            .sortedWith(compareByDescending<Map.Entry<String,MindState>> { it.value.psyche.ignitionIndex }.thenBy { it.key })
+            .firstOrNull()
+        if(candidate!=null && (reflectionFuture==null || reflectionFuture?.isDone==true)) {
+            val token=reflectionGeneration.get()
+            val agentId=candidate.key
+            val mind=candidate.value
+            reflectionCooldown[agentId]=world.tick+60
+            reflectionFuture=reflectionExecutor.submit {
+                try {
+                    guardian.checkLocal()
+                    val thought=models.innerSpeech(world,agentId,mind)
+                    synchronized(reflectionLock) {
+                        if(token==reflectionGeneration.get()) reflectionPending[agentId]=thought
+                    }
+                } catch(_: CancellationException) {
+                    // The next owner tick will decide whether to retry.
+                } catch(_: Exception) {
+                    reflectionCooldown[agentId]=world.tick+120
+                }
+            }
+        }
+        return if(completed.isEmpty()) frame else frame.copy(innerSpeech=completed)
+    }
     private fun <T> launch(operation: ()->T,onComplete: ((Boolean)->Unit)?=null,accept: (T)->Unit) {
         val token=generation.get();message("Pesquisa em andamento",true)
         future=executor.submit {
