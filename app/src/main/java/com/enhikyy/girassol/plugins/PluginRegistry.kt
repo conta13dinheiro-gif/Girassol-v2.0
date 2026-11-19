@@ -228,7 +228,8 @@ object PluginRegistry {
             PluginKind.DATA_SOURCE -> {
                 val endpoint = config["endpoint"]?.jsonPrimitive?.content ?: error("Endpoint ausente")
                 val uri = java.net.URI(endpoint)
-                require(uri.scheme == "https" && uri.host in allowedHosts && uri.userInfo == null)
+                require(uri.scheme == "https" && uri.host == "huggingface.co" &&
+                    uri.path.trimEnd('/') == "/api/datasets" && uri.userInfo == null)
             }
             PluginKind.FILM_PROFILE -> {
                 number("amount", 0f, 1f)
@@ -238,7 +239,7 @@ object PluginRegistry {
             PluginKind.AUDIO_SCALE -> {
                 number("rootMultiplier", .5f, 2f)
                 val ratios = config["ratios"] as? JsonArray ?: error("Escala musical ausente")
-                require(ratios.size in 5..24)
+                require(ratios.size == 8) { "A escala Trautonium atual requer exatamente 8 razões" }
                 require(ratios.all { it.jsonPrimitive.floatOrNull?.let { value -> value.isFinite() && value in .25f..4f } == true })
             }
             PluginKind.BIOME_RULE -> {
