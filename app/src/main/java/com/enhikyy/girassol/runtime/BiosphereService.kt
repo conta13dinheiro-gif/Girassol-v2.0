@@ -46,7 +46,7 @@ class BiosphereService : Service() {
                 if(thermal>0 || memory.lowMemory) rsi.cancel()
                 val revision=rsi.take(prior)
                 val mind=research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions).copy(evolution=revision))
-                val candidate=WorldActor(actor!!.checkpoint(),5)
+                val candidate=WorldActor(actor!!.checkpoint(),6)
                 val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(prior,candidate.intentions(proposal,mind))
                 val transition = candidate.step(proposal,mind,spatial)
                 if (proposal != null) neuralResult = if (transition.event.neural != null)
@@ -77,7 +77,7 @@ class BiosphereService : Service() {
         startForeground(10, notification())
         handler.post {
             try {
-                if (actor == null) { actor = store.load()?.let { WorldActor(it,5) } ?: WorldActor(rulesVersion=5); lastActions=store.lastActions() }
+                if (actor == null) { actor = store.load()?.let { WorldActor(it,6) } ?: WorldActor(rulesVersion=6); lastActions=store.lastActions() }
                 research.refresh()
                 when (intent?.action) {
                     ACTION_DATASET -> {
@@ -162,7 +162,7 @@ class BiosphereService : Service() {
         try {
             val point=checkNotNull(replacement.load())
             replacement.audit()
-            val next=WorldActor(point,5)
+            val next=WorldActor(point,6)
             val actions=replacement.lastActions()
             if(!prefs.edit().putString("world_database",name).commit()) {
                 prefs.edit().putString("world_database",oldName).commit()
