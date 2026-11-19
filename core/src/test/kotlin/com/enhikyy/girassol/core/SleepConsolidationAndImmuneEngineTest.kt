@@ -173,6 +173,17 @@ class SleepConsolidationAndImmuneEngineTest {
         assertEquals(.85, bank.utilityAdjustedScore(1, .85, utilityWeight = 0.0), 1e-10)
     }
 
+    @Test fun memRlUtilityAndPendingCreditSurviveCanonicalWorldSerialization() {
+        val base = WorldActor.genesis()
+        val citizen = base.agents.first()
+        val bank = memoryBankForUtilityTests().recordRecall(listOf(1L, 2L), 4)
+        val mind = MindState.initial(base, citizen).copy(memory = bank)
+        val world = base.copy(tick = 4, minds = mapOf(citizen.id to mind))
+        val restored = Canonical.state(Canonical.state(world))
+        assertEquals(bank, restored.minds.getValue(citizen.id).memory)
+        assertTrue(restored.minds.getValue(citizen.id).valid(4))
+    }
+
     @Test fun cosineSimilarityMapsToNonNegativeRewardWeight() {
         assertEquals(0.0, MemoryBank.cosineWeight(-1.0), 1e-10)
         assertEquals(0.5, MemoryBank.cosineWeight(0.0), 1e-10)
