@@ -16,7 +16,7 @@ public:
     std::mutex control; // Control thread only. The callback never acquires it.
     AAudioStream* stream=nullptr;
     Synth synth;
-    std::atomic<float> volume{0},left{0},right{0},mastery{0},social{0},weather{0},tension{0},milestone{0},pitch{1};
+    std::atomic<float> volume{0},left{0},right{0},mastery{0},social{0},weather{0},tension{0},milestone{0},pitch{1},synchrony{0};
     std::array<std::atomic<float>,8> ratios{{1.0f,1.067f,1.125f,1.2f,1.333f,1.5f,1.6f,1.8f}};
     std::atomic<int> error{0};
     int sample_rate=48000;
@@ -31,7 +31,7 @@ public:
         p.right_steps=a.right.load(std::memory_order_relaxed); p.mastery=a.mastery.load(std::memory_order_relaxed);
         p.social=a.social.load(std::memory_order_relaxed); p.weather=a.weather.load(std::memory_order_relaxed);
         p.tension=a.tension.load(std::memory_order_relaxed); p.milestone=a.milestone.load(std::memory_order_relaxed);
-        p.pitch=a.pitch.load(std::memory_order_relaxed);
+        p.pitch=a.pitch.load(std::memory_order_relaxed); p.synchrony=a.synchrony.load(std::memory_order_relaxed);
         for(std::size_t i=0;i<p.ratios.size();++i) p.ratios[i]=a.ratios[i].load(std::memory_order_relaxed);
         return a.synth.render(static_cast<float*>(output),frames,a.sample_rate,p) ?
             AAUDIO_CALLBACK_RESULT_CONTINUE : AAUDIO_CALLBACK_RESULT_STOP;
@@ -74,7 +74,7 @@ Java_com_enhikyy_girassol_audio_NativeAudio_stop(JNIEnv*,jobject) {
     std::lock_guard guard(audio.control); audio.stop();
 }
 extern "C" JNIEXPORT jint JNICALL
-Java_com_enhikyy_girassol_audio_NativeAudio_nativeUpdate(JNIEnv* env,jobject,jfloat volume,jfloat left,jfloat right,jfloat mastery,jfloat social,jfloat weather,jfloat tension,jfloat milestone,jfloat pitch,jfloatArray ratios) {
+Java_com_enhikyy_girassol_audio_NativeAudio_nativeUpdate(JNIEnv* env,jobject,jfloat volume,jfloat left,jfloat right,jfloat mastery,jfloat social,jfloat weather,jfloat tension,jfloat milestone,jfloat pitch,jfloatArray ratios,jfloat synchrony) {
     if(!ratios || env->GetArrayLength(ratios)!=8) return AAUDIO_ERROR_ILLEGAL_ARGUMENT;
     jfloat values[8]{};
     env->GetFloatArrayRegion(ratios,0,8,values);
@@ -83,7 +83,7 @@ Java_com_enhikyy_girassol_audio_NativeAudio_nativeUpdate(JNIEnv* env,jobject,jfl
     audio.volume.store(volume,std::memory_order_relaxed); audio.left.store(left,std::memory_order_relaxed);
     audio.right.store(right,std::memory_order_relaxed); audio.mastery.store(mastery,std::memory_order_relaxed);
     audio.social.store(social,std::memory_order_relaxed);
-    audio.weather.store(weather,std::memory_order_relaxed); audio.tension.store(tension,std::memory_order_relaxed); audio.milestone.store(milestone,std::memory_order_relaxed); audio.pitch.store(std::isfinite(pitch)?std::clamp(pitch,.5f,2.0f):1.0f,std::memory_order_relaxed);
+    audio.weather.store(weather,std::memory_order_relaxed); audio.tension.store(tension,std::memory_order_relaxed); audio.milestone.store(milestone,std::memory_order_relaxed); audio.pitch.store(std::isfinite(pitch)?std::clamp(pitch,.5f,2.0f):1.0f,std::memory_order_relaxed); audio.synchrony.store(std::isfinite(synchrony)?std::clamp(synchrony,0.0f,1.0f):0.0f,std::memory_order_relaxed);
     for(std::size_t i=0;i<8;++i) audio.ratios[i].store(std::isfinite(values[i])?std::clamp(values[i],.25f,4.0f):1.0f,std::memory_order_relaxed);
     const int error=audio.error.load(std::memory_order_relaxed);
     return error!=AAUDIO_OK ? error : (audio.stream ? AAUDIO_OK : AAUDIO_ERROR_INVALID_STATE);
