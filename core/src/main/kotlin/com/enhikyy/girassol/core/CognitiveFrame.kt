@@ -161,16 +161,18 @@ import kotlin.math.*
     val minds: Map<String,MindState>,val decisions: Map<String,Activity>,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lesson: KnowledgeLesson? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val innerSpeech: Map<String,String> = emptyMap()) {
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
         exposure=m.exposure.toList(),behaviors=m.behaviors.map { it.toList() },memory=m.memory.snapshot(),
         psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList())) },
-        decisions=decisions.toMap(),evolution=evolution?.snapshot())
+        decisions=decisions.toMap(),evolution=evolution?.snapshot(),innerSpeech=innerSpeech.toMap())
     fun applicable(world: WorldState): Boolean {
         val ids=world.agents.map { it.id }.toSet()
         return sourceTick==world.tick && sourceHash==Canonical.hash(Canonical.state(world)) && minds.keys==ids &&
             socialSynchrony.isFinite() && socialSynchrony in 0.0..1.0 &&
+            innerSpeech.keys.all { it in ids } && innerSpeech.values.all { text -> text.isNotBlank() && text.length<=240 && text.none { it.isISOControl() } } &&
             (evolution==null || evolution.applicable(world)) && (lesson==null || lesson.applicable(world)) && decisions.keys==ids && minds.values.all { it.valid(world.tick) }
     }
 }
