@@ -1,6 +1,9 @@
 package com.enhikyy.girassol.research
 
 import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.text.Html
 import android.os.Handler
 import android.os.Process
 import com.enhikyy.girassol.core.*
@@ -9,6 +12,12 @@ import com.enhikyy.girassol.cognition.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.*
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipInputStream
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.concurrent.atomic.AtomicLong
 
 internal data class ResearchStatus(val settings: ResearchSettings=ResearchSettings(),val entries: List<ResearchEntry> = emptyList(),
@@ -49,16 +58,20 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
     fun refresh() { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(settings=settings,entries=store().research().entries(),bytes=store().research().bytes()+compact.bytes()) }
     private fun message(value: String,busy: Boolean=false) { ResearchHub.mutable.value=ResearchHub.mutable.value.copy(message=value,busy=busy) }
     fun cancel() { generation.incrementAndGet();http.cancel();models.cancel();runCatching { NonRootSwapArena.cancelAll() };future?.cancel(true);future=null;evidence=null;studying=null;message("Pesquisa suspensa; evidências recebidas preservadas.") }
-    private fun <T> launch(operation: ()->T,accept: (T)->Unit) {
+    private fun <T> launch(operation: ()->T,accept: (T)->Unit,onComplete: ((Boolean)->Unit)?=null) {
         val token=generation.get();message("Pesquisa em andamento",true)
         future=executor.submit {
             try {
                 guardian.checkLocal();val result=operation();guardian.checkLocal()
-                handler.post { if(generation.get()==token) { future=null;try { accept(result);refresh();message("Biblioteca atualizada") } catch(e: Exception) { message(e.message ?: "Aquisição não gravada") } } }
+                handler.post { if(generation.get()==token) {
+                    future=null
+                    try { accept(result);refresh();message("Biblioteca atualizada");onComplete?.invoke(true) }
+                    catch(e: Exception) { message(e.message ?: "Aquisição não gravada");onComplete?.invoke(false) }
+                } }
             } catch(e: LinkageError) {
-                handler.post { if(generation.get()==token) { future=null;message("Backend nativo indisponível: ${e.message}");retryAt=android.os.SystemClock.elapsedRealtime()+60000 } }
+                handler.post { if(generation.get()==token) { future=null;message("Backend nativo indisponível: ${e.message}");retryAt=android.os.SystemClock.elapsedRealtime()+60000;onComplete?.invoke(false) } }
             } catch(e: Exception) {
-                handler.post { if(generation.get()==token) { future=null;message(e.message ?: "Pesquisa interrompida");retryAt=android.os.SystemClock.elapsedRealtime()+60000 } }
+                handler.post { if(generation.get()==token) { future=null;message(e.message ?: "Pesquisa interrompida");retryAt=android.os.SystemClock.elapsedRealtime()+60000;onComplete?.invoke(false) } }
             }
         }
     }
@@ -144,5 +157,129 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
             }
         }
     }
+    private data class LocalDocument(val name: String,val bytes: ByteArray,val text: String)
+
+    /**
+     * Import a user-selected TXT/Markdown/CSV/JSON or EPUB through Android SAF.
+     * The original bytes are bounded by the immutable acquisition journal's
+     * current 2 MiB record limit; imported text enters the same quarantine and
+     * hash-chain as remote HF acquisitions.
+     */
+    fun importDocument(uri: Uri,onComplete: (Boolean)->Unit) {
+        val point=store().load() ?: throw IllegalStateException("A biosfera ainda não tem checkpoint")
+        val world=point.state
+        val discoverer=world.agents.firstOrNull()?.id ?: throw IllegalStateException("A biosfera não tem habitantes")
+        launch(
+            operation={
+                val document=readLocalDocument(uri)
+                val cleaned=document.text.replace("\u0000","").trim()
+                require(cleaned.length>=16) { "O documento não contém texto suficiente para estudo" }
+                val chunks=cleaned.chunked(12000).take(100).filter { it.length>=16 }
+                require(chunks.isNotEmpty()) { "Nenhum trecho utilizável foi extraído" }
+                val rowElements=chunks.mapIndexed { index,chunk ->
+                    JsonObject(mapOf(
+                        "row_idx" to JsonPrimitive(index),
+                        "row" to JsonObject(mapOf("text" to JsonPrimitive(chunk)))
+                    ))
+                }
+                val raw=JsonObject(mapOf("rows" to JsonArray(rowElements))).toString().toByteArray(Charsets.UTF_8)
+                require(raw.size<=2*1024*1024) { "O conteúdo textual excede a cota por aquisição do diário atual" }
+                val sourceHash=sha256(document.bytes)
+                val queryHash=sha256("${document.name.lowercase()}:$sourceHash".toByteArray())
+                val intentId=sha256("local:${world.seed}:${world.tick}:$discoverer:$queryHash".toByteArray())
+                val intent=DatasetResearchIntent(
+                    id=intentId,
+                    discoverer=discoverer,
+                    tick=world.tick,
+                    domain=Domain.LANGUAGE,
+                    reason="Arquivo entregue pelo usuário via Storage Access Framework: ${document.name}",
+                    queryPt="conteúdo e conhecimento do documento ${document.name}",
+                    queryEn="document content and knowledge from ${document.name}",
+                    queryHash=queryHash
+                )
+                val endpoint="https://local.girassol.invalid/import?offset=0"
+                val repo=DatasetRepo(
+                    id="local/${sourceHash.take(24)}",
+                    revision=sourceHash,
+                    downloads=0,
+                    license="user-provided",
+                    tasks=listOf("text"),
+                    score=1.0
+                )
+                val rows=DatasetText.rows(raw,0)
+                require(rows.isNotEmpty())
+                val batch=DatasetBatch(
+                    repo=repo,
+                    subset=DatasetSplit("local","document"),
+                    queryHash=queryHash,
+                    endpoint=endpoint,
+                    receivedAt=System.currentTimeMillis(),
+                    payloadHash=sha256(raw),
+                    raw=raw,
+                    rows=rows
+                )
+                intent to batch
+            },
+            accept={ (intent,batch)->
+                val current=store().load() ?: point
+                require(current.state.agents.any { it.id==intent.discoverer }) { "O cidadão solicitante não existe mais nesta linha temporal" }
+                store().research().acquire(intent,batch,current,settings.quotaMb*1048576L)
+                message("Documento recebido e colocado em quarentena: ${batch.rows.size} trechos")
+            },
+            onComplete=onComplete
+        )
+    }
+
+    private fun readLocalDocument(uri: Uri): LocalDocument {
+        val name=app.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { cursor ->
+            if(cursor.moveToFirst()) cursor.getString(0) else null
+        } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "documento"
+        val input=app.contentResolver.openInputStream(uri) ?: throw java.io.IOException("Não foi possível abrir o arquivo")
+        val bytes=ByteArrayOutputStream()
+        input.use { stream ->
+            val buffer=ByteArray(8192)
+            while(true) {
+                val read=stream.read(buffer)
+                if(read<0) break
+                require(bytes.size().toLong()+read<=2L*1024*1024) { "Arquivo maior que o limite atual do diário imutável (2 MiB)" }
+                bytes.write(buffer,0,read)
+            }
+        }
+        val data=bytes.toByteArray()
+        val extension=name.substringAfterLast('.', "").lowercase()
+        val text=when(extension) {
+            "txt","md","markdown","csv","json" -> data.toString(Charsets.UTF_8)
+            "epub" -> extractEpub(data)
+            else -> throw IllegalArgumentException("Formato ainda não suportado: .$extension. Use TXT, MD, CSV, JSON ou EPUB.")
+        }
+        return LocalDocument(name,data,text)
+    }
+
+    private fun extractEpub(bytes: ByteArray): String {
+        val output=StringBuilder()
+        var expanded=0L
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            while(true) {
+                val entry=zip.nextEntry ?: break
+                val name=entry.name.lowercase()
+                if(!entry.isDirectory && (name.endsWith(".xhtml") || name.endsWith(".html") || name.endsWith(".htm"))) {
+                    val buffer=ByteArrayOutputStream()
+                    val chunk=ByteArray(8192)
+                    while(true) {
+                        val read=zip.read(chunk)
+                        if(read<0) break
+                        expanded+=read
+                        require(expanded<=2L*1024*1024) { "EPUB descompactado excede a cota por aquisição" }
+                        buffer.write(chunk,0,read)
+                    }
+                    val markup=buffer.toString(Charsets.UTF_8.name())
+                    output.append(Html.fromHtml(markup,Html.FROM_HTML_MODE_COMPACT)).append('\n')
+                }
+                zip.closeEntry()
+            }
+        }
+        return output.toString()
+    }
+
     override fun close() { cancel();executor.shutdownNow();guardian.close() }
 }
