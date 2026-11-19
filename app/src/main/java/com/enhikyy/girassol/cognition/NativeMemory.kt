@@ -7,7 +7,8 @@ import java.nio.ByteOrder
 internal object NativeMemory {
     init { System.loadLibrary("girassol_projection") }
     private external fun rank(input: ByteBuffer,count: Int,limit: Int,output: ByteBuffer): Int
-    data class Hit(val episode: Episode,val score: Float)
+    /** score is a non-negative aggregation weight; similarity preserves the raw cosine value for ranking. */
+    data class Hit(val episode: Episode,val score: Float,val similarity: Float = score)
     fun recall(bank: MemoryBank,citizen: Citizen,tick: Long,limit: Int=8): List<Hit> {
         require(limit>=0)
         if(bank.episodes.isEmpty() || limit==0) return emptyList()
@@ -17,12 +18,16 @@ internal object NativeMemory {
         bank.episodes.forEach { e-> e.embedding.forEach(input::putFloat); input.putFloat((tick-e.tick).coerceAtLeast(0).toFloat()); input.putFloat(e.importance.toFloat()) }
         val output=ByteBuffer.allocateDirect(size*8).order(ByteOrder.nativeOrder())
         val found=rank(input,count,size,output); check(found in 0..size) { "Falha na recuperação de memórias" }
-        // Native cosine search defines the candidate pool; persistent MemRL utility re-ranks it.
-        return List(found) { i-> Hit(bank.episodes[output.getInt(i*8)],output.getFloat(i*8+4)) }
-            .sortedWith(
-                compareByDescending<Hit> { hit -> bank.utilityAdjustedScore(hit.episode.eventId, hit.score.toDouble()) }
-                    .thenByDescending { it.episode.importance }
-                    .thenBy { it.episode.eventId }
-            )
+        // HNSW inner-product similarity spans [-1, 1]. Keep it for MemRL ranking,
+        // but map it to [0, 1] before using it as a weighted reward average.
+        return List(found) { i ->
+            val episode=bank.episodes[output.getInt(i*8)]
+            val similarity=output.getFloat(i*8+4).coerceIn(-1f,1f)
+            Hit(episode,((similarity+1f)*.5f).coerceIn(0f,1f),similarity)
+        }.sortedWith(
+            compareByDescending<Hit> { hit -> bank.utilityAdjustedScore(hit.episode.eventId, hit.similarity.toDouble()) }
+                .thenByDescending { it.episode.importance }
+                .thenBy { it.episode.eventId }
+        )
     }
 }
