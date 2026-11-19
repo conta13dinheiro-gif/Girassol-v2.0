@@ -66,7 +66,8 @@ object PluginRegistry {
             .mapNotNull { name ->
                 runCatching {
                     val bytes = context.assets.open("plugins/builtin/$name").use { it.readBytes() }
-                    parse(bytes, builtIn = true, enabled = prefs.getBoolean("enabled:${name.substringBeforeLast('.')}", true))
+                    val plugin = parse(bytes, builtIn = true, enabled = true)
+                    plugin.copy(enabled = prefs.getBoolean("enabled:${plugin.id}", true))
                 }.getOrNull()
             }
         val custom = File(context.filesDir, "plugins").listFiles().orEmpty()
@@ -75,11 +76,9 @@ object PluginRegistry {
                 runCatching {
                     val file = File(directory, "manifest.json")
                     require(file.isFile)
-                    parse(
-                        file.readBytes(),
-                        builtIn = false,
-                        enabled = prefs.getBoolean("enabled:${directory.name}", true)
-                    )
+                    val plugin = parse(file.readBytes(), builtIn = false, enabled = true)
+                    require(plugin.id == directory.name) { "Plugin ID não corresponde ao diretório" }
+                    plugin.copy(enabled = prefs.getBoolean("enabled:${plugin.id}", true))
                 }.getOrNull()
             }
         mutable.value = (builtins + custom).distinctBy { it.id }.sortedWith(compareBy<InstalledPlugin> { it.kind.ordinal }.thenBy { it.name })
