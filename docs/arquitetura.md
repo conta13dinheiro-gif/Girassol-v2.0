@@ -90,3 +90,8 @@ O host pode executar código de produção Kotlin/JNI para testar aprendizagem e
 
 
 <!-- /coderabbit-ai-generated:v1 -->
+
+## Formato GRS e áreas da interface
+
+- `GirassolRecordCodec` implementa .grs versão1 com header validado, SHA-256, Float32, INT8 delta-varint e ternário de2bits. `AdaptiveQuantizerEngine` seleciona por RMSE/bytes. O codec é puro e testado; migração da persistência SQLite/HNSW antiga e compressão Zstd não foram conectadas, portanto nenhum histórico é reescrito.
+- A navegação Compose organiza cinco áreas: Biosfera, Gênesis/Cidadãos, Pedidos/Biblioteca (intenções reais do diário), Hugging Face/Plugins (pesquisa atual) e Marcos/Laboratório/Sistema. A visualização da genealogia está na área Gênesis; o inbox exibe os pedidos de currículo que já existem no armazenamento.

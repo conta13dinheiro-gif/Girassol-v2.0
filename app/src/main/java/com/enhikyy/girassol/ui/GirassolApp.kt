@@ -76,7 +76,6 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var economy by rememberSaveable { mutableStateOf(false) }
     var renderError by remember { mutableStateOf<String?>(null) }
     var historical by remember { mutableStateOf<WorldState?>(null) }
-    var systemSection by rememberSaveable { mutableIntStateOf(0) }
     var historySection by rememberSaveable { mutableIntStateOf(0) }
     val research by com.enhikyy.girassol.research.ResearchHub.state.collectAsStateWithLifecycle()
     val world=historical ?: ui.world
@@ -129,33 +128,31 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     } else {
                         SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start=10.dp,end=10.dp,bottom=92.dp).fillMaxWidth().fillMaxHeight(.72f)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text(listOf("","Cidadãos & sociedade","História viva","Sistema & cognição")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
+                                Text(listOf("","Gênesis & Cidadãos","Pedidos & Biblioteca","Hugging Face & Plugins","Marcos, Laboratório & Sistema")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
                                 IconButton(onClick={ tab=0 }) { Icon(Icons.Outlined.Close,"Voltar ao mundo") }
                             }
                             when(tab) {
                                 1->Citizens(world,Modifier.weight(1f)) { selectedId=it }
-                                2->{
+                                2->ResearchRequests(Modifier.weight(1f))
+                                3->if(historical==null) ResearchLibrary(Modifier.weight(1f))
+                                   else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                4->{
                                     TabRow(historySection,containerColor=Color.Transparent) {
-                                        listOf("Marcos","Cultura").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
+                                        listOf("Marcos","Cultura","Sistema").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
                                     }
-                                    if(historySection==0) Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
-                                    else Culture(world,Modifier.weight(1f))
-                                }
-                                3->{
-                                    TabRow(systemSection,containerColor=Color.Transparent) {
-                                        listOf("Sistema & RSI","Biblioteca").forEachIndexed { i,label->Tab(systemSection==i,{ systemSection=i },text={ Text(label) }) }
+                                    when(historySection) {
+                                        0->Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
+                                        1->Culture(world,Modifier.weight(1f))
+                                        else->SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
                                     }
-                                    if(systemSection==0) SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
-                                    else if(historical==null) ResearchLibrary(Modifier.weight(1f))
-                                    else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
                                 }
                             }
                         }
                     }
                     SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
-                            listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
+                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.Inbox,Icons.Outlined.CloudDownload,Icons.Outlined.Tune)
+                            listOf("Biosfera","Gênesis","Pedidos","HF & Plugins","Marcos/Sistema").forEachIndexed { i,label->
                                 Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
                                     Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)

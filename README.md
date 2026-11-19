@@ -24,7 +24,7 @@ As suítes JVM/nativas/instrumentadas permanecem no código para execução futu
 
 ## Experiência
 
-- Mundo 3D em tela inteira, HUD compacto, pausa/1×/2×/4×, dock Biosfera/Cidadãos/Marcos/Sistema, modo cinema e mapa tático com camadas observacionais.
+- Mundo 3D em tela inteira, HUD compacto, pausa/1×/2×/4×, navegação em cinco áreas — Biosfera, Gênesis/Cidadãos, Pedidos/Biblioteca, Hugging Face/Plugins e Marcos/Laboratório/Sistema, modo cinema e mapa tático com camadas observacionais.
 - Toque no habitante ou edifício para inspeção; arraste para orbitar, pinça para zoom e gesto de dois dedos para translação. A câmera tem amortecimento, inércia e acompanhamento de habitantes.
 - Economia mostra saldos efetivos, contas de consumo/arquivo/estruturas e distribuição das atividades; não inventa séries históricas.
 - Marcos surgem de construções, práticas comprovadas, primeira obra, crises, início da cognição, políticas promovidas e dias concluídos. Flashback carrega o estado integral verificado; bifurcação copia o prefixo do diário para um banco independente. Sistema permite voltar à linha original.
@@ -66,11 +66,11 @@ A memória persistida no checkpoint SQLite tem três representações:
 
 O HNSW nativo recupera candidatos por produto interno e ordena por similaridade, importância e recência. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
 
-## Hugging Face & Biblioteca
+## Pedidos, Hugging Face & Biblioteca
 
 Pesquisa autônoma PT/EN, currículo de dez domínios, busca/curadoria no Hub, streaming de trechos, quarentena com duas avaliações GGUF, replay nativo e estudo físico na biblioteca. Diário comprimido encadeado por SHA256, embeddings GGUF completos e busca HNSW por modelo, cache textual direto JSON/JSONL/CSV com Range/mmap, cota/LRU/fixação e cancelamento por memória/temperatura. Controles em Sistema → Biblioteca.
 
-Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: treino LoRA e decoder direto Parquet continuam pendentes; avaliações do modelo não comprovam verdade factual.
+Os pedidos dos habitantes aparecem em uma aba própria, lendo as mesmas intenções persistidas no diário epistêmico. Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: ingestão local nativa de PDF/EPUB/áudio e decoder direto Parquet continuam pendentes; treino LoRA real também não existe. Avaliações do modelo não comprovam verdade factual.
 
 ## GGUF e LoRA
 
@@ -81,6 +81,10 @@ Backend [llama.cpp b4514](https://github.com/ggml-org/llama.cpp/tree/ec7f3ac9ab3
 O LoRA é aplicado com `llama_adapter_lora_init`/`llama_set_adapter_lora`, usando o mesmo modelo base daquela inferência; é removido/liberado antes do contexto. Não há treinamento automático de adaptadores nem atualização online dos pesos do GGUF. Falha de compatibilidade é informada e preserva a simulação. O teste host cobre rejeição de adaptadores inválidos; aplicação positiva requer um adaptador treinado compatível ainda não verificado.
 
 Teste GGUF host: `scripts/test-cognition.sh /caminho/modelo.gguf`. O smoke realizado usa SmolLM2-135M-Instruct Q4_K_M, revisão bartowski09816acd5d99df7be770d85ea30822623dab342c, SHA2562e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d. Cards bartowski e HuggingFaceTB declaram Apache2.0; os pesos não são redistribuídos.
+
+## Formato binário .grs e quantização adaptativa
+
+O núcleo agora oferece `GirassolRecordCodec` versão1: matrizes com dimensões verificadas, header little-endian, SHA-256 sobre metadados e payload, Float32, INT8 simétrico com delta-varint zig-zag e vetores ternários {-1,0,+1} compactados em2bits. `AdaptiveQuantizerEngine` compara os três formatos e escolhe o menor que respeita o RMSE solicitado. O formato tem testes de round-trip e rejeição de corrupção. Ainda não há migração automática do SQLite/HNSW antigo para .grs nem compressão Zstd; o codec não reescreve os registros históricos.
 
 ## RSI por Shadow-Replay
 
@@ -98,7 +102,7 @@ SQLite migra aditivamente até schema4: marcos, pesquisa e vetores, sem reescrev
 
 ## Estado e pendências
 
-Este incremento **não conclui toda a especificação**. A cidade ainda começa com seis fundadores; regras6 já permitem construir acima de dez ambientes, mas não há expansão geográfica ilimitada por blocos. Permanecem: Recast/Detour, RVO2 e navegação em múltiplos andares; WFC/Earcut para distritos especializados; mortalidade/expectativa de vida e NEAT estrutural; instituições, leis e comércio emergentes completos; transmissão cultural e Big Five integral; cognição linguística generativa livre e treinamento LoRA; decodificação Parquet direta; compactação/poda auditável; direção cinematográfica automática; Shizuku/modo dedicado, DGM/runtime de código, OpenCL e dois GGUF residentes; treino contínuo real do modelo; dimensionamento por hardware4/8/12GB; validação visual, áudio, memória, temperatura e60FPS em aparelho.
+Este incremento **não conclui toda a especificação**. A cidade ainda começa com seis fundadores; regras6 já permitem construir acima de dez ambientes, mas não há expansão geográfica ilimitada por blocos. Permanecem: Recast/Detour, RVO2 e navegação em múltiplos andares; triangulação Earcut e expansão geográfica por streaming de blocos; mortalidade/expectativa de vida e NEAT estrutural; instituições, leis e comércio emergentes completos; transmissão cultural e Big Five integral; cognição linguística generativa livre e treinamento LoRA; decodificação Parquet direta; migração automática de memória/diário para .grs, compressão Zstd e poda auditável; hot-load de plugins ZIP; direção cinematográfica automática; Shizuku/modo dedicado, DGM/runtime de código, OpenCL e dois GGUF residentes; treino contínuo real do modelo; dimensionamento por hardware4/8/12GB; validação visual, áudio, memória, temperatura e60FPS em aparelho.
 
 As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. O planner GOAP atual é uma implementação determinística própria no módulo `core`, não um wrapper de GPGOAP. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC, hnswlib, OkHttp e RapidJSON, com versões/licenças preservadas.
 
