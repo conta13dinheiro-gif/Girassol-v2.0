@@ -29,7 +29,7 @@ object GirassolRecordCodec {
     private const val PREFIX_BYTES = 22
     private const val DIGEST_BYTES = 32
     private const val HEADER_BYTES = PREFIX_BYTES + DIGEST_BYTES
-    private val MAGIC = byteArrayOf(71, 82, 83, 49)
+    private val MAGIC = byteArrayOf(71.toByte(), 82.toByte(), 83.toByte(), 49.toByte())
 
     fun encode(matrix: GrsMatrix, encoding: GrsEncoding): ByteArray {
         val maximum = matrix.values.maxOf { abs(it) }
