@@ -99,7 +99,7 @@ internal object UtilityGoapPlanner {
                 marketCoins = if (earnsWage) s.marketCoins - 1 else s.marketCoins
             )
         } else null
-        Activity.BUILD -> if (s.rooms < 10 && s.timber >= 4 && s.curiosity < 10) {
+        Activity.BUILD -> if (s.timber >= 4 && s.curiosity < 10) {
             val earnsWage = s.marketCoins > 0 && s.coins < Int.MAX_VALUE
             s.copy(
                 curiosity = min(10, s.curiosity + 2),
