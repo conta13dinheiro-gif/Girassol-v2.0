@@ -45,7 +45,7 @@ class BiosphereService : Service() {
                 val prior=actor!!.state
                 if(thermal>0 || memory.lowMemory) rsi.cancel()
                 val revision=rsi.take(prior)
-                val mind=research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions).copy(evolution=revision))
+                val mind=research.deliberate(prior,research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions).copy(evolution=revision)))
                 val candidate=WorldActor(actor!!.checkpoint(),7)
                 val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(prior,candidate.intentions(proposal,mind))
                 val transition = candidate.step(proposal,mind,spatial)
