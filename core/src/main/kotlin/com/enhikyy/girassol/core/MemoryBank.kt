@@ -30,7 +30,8 @@ import kotlin.math.*
     // Omit empty defaults so legacy canonical event hashes remain byte-for-byte stable.
     @EncodeDefault(EncodeDefault.Mode.NEVER) val utilities: List<MemoryUtility> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val pendingRecallEventIds: List<Long> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val learning: List<SkillLearningTrace> = emptyList()
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val learning: List<SkillLearningTrace> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val workingMemory: WorkingMemoryState = WorkingMemoryState()
 ) {
     fun valid(tick: Long): Boolean = reflectedTick in -1..tick && episodes.all { e->
         e.tick in 0..tick && e.eventId in 1..tick && e.reward.isFinite() && e.reward in -5.0..5.0 && e.emotion.isFinite() && e.emotion in -1.0..1.0 &&
@@ -47,7 +48,8 @@ import kotlin.math.*
         } && pendingRecallEventIds.distinct().size==pendingRecallEventIds.size && pendingRecallEventIds.size<=MAX_PENDING_RECALLS &&
         pendingRecallEventIds.all { id -> utilities.any { it.eventId==id } } &&
         learning.map { it.action }.distinct().size==learning.size && learning.size<=Activity.entries.size &&
-        learning.all { it.valid(tick) }
+        learning.all { it.valid(tick) } &&
+        workingMemory.valid(tick,episodes.map { it.eventId }.toSet())
 
     fun snapshot() = copy(
         episodes=episodes.map { it.copy(embedding=it.embedding.toList()) },
@@ -55,7 +57,8 @@ import kotlin.math.*
         procedures=procedures.toList(),
         utilities=utilities.toList(),
         pendingRecallEventIds=pendingRecallEventIds.toList(),
-        learning=learning.toList()
+        learning=learning.toList(),
+        workingMemory=workingMemory.copy(slots=workingMemory.slots.toList())
     )
 
     /**
@@ -73,11 +76,23 @@ import kotlin.math.*
     fun learningFor(action: Activity): SkillLearningTrace =
         learning.firstOrNull { it.action==action } ?: SkillLearningTrace(action)
 
+    /** Bounded cognitive priming from currently active episodic items. */
+    fun workingMemoryBonus(action: Activity, tick: Long): Double {
+        val ids=episodes.filter { it.action==action }.map { it.eventId }.toSet()
+        val known=episodes.map { it.eventId }.toSet()
+        return 0.045*workingMemory.activationFor(ids,tick,known)
+    }
+
     /** Record the selected memories so the next committed outcome can assign credit. */
     fun recordRecall(eventIds: List<Long>, tick: Long): MemoryBank {
         require(tick>=0)
-        val known = eventIds.distinct().filter { id -> episodes.any { it.eventId==id } }.take(MAX_PENDING_RECALLS)
-        if (known.isEmpty()) return this
+        val validEpisodeIds=episodes.map { it.eventId }.toSet()
+        val known = eventIds.distinct().filter { id -> id in validEpisodeIds }.take(MAX_PENDING_RECALLS)
+        var nextWorking=workingMemory.decay(tick,validEpisodeIds)
+        if (known.isEmpty()) {
+            return if(nextWorking==workingMemory) this else copy(workingMemory=nextWorking)
+        }
+        known.forEach { id -> nextWorking=nextWorking.activate(id,tick,0.65,validEpisodeIds) }
         val byId = utilities.associateBy { it.eventId }.toMutableMap()
         known.forEach { id ->
             val old = byId[id] ?: MemoryUtility(id)
@@ -89,7 +104,7 @@ import kotlin.math.*
             .sortedBy { it.eventId }
         val retainedIds = retainedUtilities.map { it.eventId }.toSet()
         val pending = (pendingRecallEventIds + known).distinct().filter { it in retainedIds }.takeLast(MAX_PENDING_RECALLS)
-        return copy(utilities=retainedUtilities,pendingRecallEventIds=pending)
+        return copy(utilities=retainedUtilities,pendingRecallEventIds=pending,workingMemory=nextWorking)
     }
 
     fun observe(world: WorldState,citizen: Citizen,record: ActionRecord?): MemoryBank {
@@ -102,9 +117,14 @@ import kotlin.math.*
             val episode=Episode(world.tick,last?.eventId ?: world.tick,citizen.activity,reward,citizen.x,citizen.z,
                 (reward*2).coerceIn(-1.0,1.0),importance,embedding(citizen,citizen.activity,reward))
             val skill=learningFor(citizen.activity).observe(correct=last!=null,tick=world.tick)
+            val episodeIds=episodes.map { it.eventId }.toSet()+episode.eventId
+            val active=workingMemory.activate(
+                episode.eventId,world.tick,(0.55+episode.importance*0.30).coerceIn(0.0,1.0),episodeIds
+            )
             next=copy(
                 episodes=episodes+episode,
-                learning=(learning.filterNot { it.action==citizen.activity }+skill).sortedBy { it.action.ordinal }
+                learning=(learning.filterNot { it.action==citizen.activity }+skill).sortedBy { it.action.ordinal },
+                workingMemory=active
             )
             // Delayed reward updates only memories actually selected before this outcome.
             if (pendingRecallEventIds.isNotEmpty()) {
@@ -148,7 +168,8 @@ import kotlin.math.*
                 reflectedTick=world.tick,
                 episodes=retainedEpisodes,
                 utilities=next.utilities.filter { it.eventId in retainedIds },
-                pendingRecallEventIds=next.pendingRecallEventIds.filter { it in retainedIds }
+                pendingRecallEventIds=next.pendingRecallEventIds.filter { it in retainedIds },
+                workingMemory=next.workingMemory.retain(world.tick,retainedIds)
             )
         }
         if (due || next.episodes.size > HippocampalSleepConsolidator.MAX_NODES_PER_AGENT) {
