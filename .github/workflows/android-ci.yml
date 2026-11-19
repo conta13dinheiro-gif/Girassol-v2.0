@@ -57,6 +57,9 @@ jobs:
       - name: Compile Filament materials and shaders
         run: scripts/compile-materials.sh
 
+      - name: Fetch pinned Sherpa-ONNX Android runtime
+        run: bash scripts/fetch-sherpa-onnx-aar.sh
+
       - name: Grant Gradle permission
         run: chmod +x gradlew
 

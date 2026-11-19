@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":research"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(files("libs/sherpa-onnx-1.10.41.aar"))
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation(platform("androidx.compose:compose-bom:2025.02.00"))
@@ -84,4 +85,10 @@ val verifyFilamentMaterial by tasks.registering {
         }
     }
 }
-tasks.named("preBuild") { dependsOn(verifyFilamentMaterial) }
+val fetchSherpaOnnxAar by tasks.registering(Exec::class) {
+    val aar = file("libs/sherpa-onnx-1.10.41.aar")
+    outputs.file(aar)
+    onlyIf { !aar.isFile }
+    commandLine("bash", rootProject.file("scripts/fetch-sherpa-onnx-aar.sh").absolutePath)
+}
+tasks.named("preBuild") { dependsOn(verifyFilamentMaterial, fetchSherpaOnnxAar) }
