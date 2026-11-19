@@ -122,7 +122,7 @@ class AmbientAudio(context: Context, private val lifecycle: Lifecycle) : Default
         AudioOutput.submit(outputLease) {
             val result=if (!NativeAudio.available) -1 else {
                 NativeAudio.update(volume,observation.left,observation.right,observation.mastery,observation.social,observation.weather,observation.tension,observation.milestone,PluginRegistry.audioRootMultiplier())
-                if (start) NativeAudio.start(worldSeed) else NativeAudio.update(volume,observation.left,observation.right,observation.mastery,observation.social,observation.weather,observation.tension,observation.milestone)
+                if (start) NativeAudio.start(worldSeed) else NativeAudio.update(volume,observation.left,observation.right,observation.mastery,observation.social,observation.weather,observation.tension,observation.milestone,PluginRegistry.audioRootMultiplier())
             }
             main.post {
                 if (!closed && token==revision) {
