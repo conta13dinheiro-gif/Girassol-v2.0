@@ -176,7 +176,7 @@ bool disjoint(const void* a, std::size_t na, const void* b, std::size_t nb) {
 }
 
 bool city_mesh(const void* input, std::size_t bytes, std::size_t count, std::uint64_t seed, Mesh& out, bool surroundings, bool buildings) {
-    if (count>64 || count>bytes/sizeof(RoomSpec) || (count && !input)) return false;
+    if (count>bytes/sizeof(RoomSpec) || (count && !input)) return false;
     std::vector<RoomSpec> rooms(count);
     if (count) std::memcpy(rooms.data(),input,count*sizeof(RoomSpec));
     for (auto r : rooms) {
