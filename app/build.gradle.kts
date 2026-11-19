@@ -7,6 +7,7 @@ android {
     ndkVersion = "27.0.12077973"
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     defaultConfig {
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         applicationId = "com.enhikyy.girassol"
         minSdk = 33
         targetSdk = 35
@@ -18,20 +19,32 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "x86_64")
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    buildTypes { release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
+    buildTypes {
+        debug { signingConfig = signingConfigs.getByName("debug") }
+        release {
+            isMinifyEnabled = true
+            // CI development artifact: valid Android signature, not a Play upload key.
+            // Replace with a private, persistent upload keystore before public distribution.
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
 }
 dependencies {
     implementation(project(":core"))
     implementation(project(":research"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation(platform("androidx.compose:compose-bom:2025.02.00"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3")
@@ -73,4 +86,10 @@ val verifyFilamentMaterial by tasks.registering {
         }
     }
 }
-tasks.named("preBuild") { dependsOn(verifyFilamentMaterial) }
+val fetchSherpaOnnxAar by tasks.registering(Exec::class) {
+    val aar = file("libs/sherpa-onnx-2.0.1.aar")
+    outputs.file(aar)
+    onlyIf { !aar.isFile }
+    commandLine("bash", rootProject.file("scripts/fetch-sherpa-onnx-aar.sh").absolutePath)
+}
+tasks.named("preBuild") { dependsOn(verifyFilamentMaterial, fetchSherpaOnnxAar) }

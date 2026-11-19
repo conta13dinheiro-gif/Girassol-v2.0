@@ -28,6 +28,13 @@ void quiet_log(ggml_log_level, const char*, void*) {}
 void check_request(const Request& request) {
     if (request.stopped()) throw std::runtime_error("Inferência cancelada ou limite de tempo atingido");
 }
+std::size_t utf8_codepoints(const std::string& text) noexcept {
+    std::size_t count = 0;
+    for (const unsigned char byte : text) {
+        if ((byte & 0xC0u) != 0x80u) ++count;
+    }
+    return count;
+}
 constexpr const char* grammar = R"GBNF(root ::= "{" ws "\"activity\"" ws ":" ws activity ws "}" ws
 activity ::= "\"WATER\"" | "\"COFFEE\"" | "\"EAT\"" | "\"SLEEP\"" | "\"TALK\"" | "\"WRITE\"" | "\"STUDY\"" | "\"BUILD\""
 ws ::= [ \t\n\r]{0,4}
@@ -36,6 +43,9 @@ constexpr const char* review_grammar = R"GBNF(root ::= "{" ws "\"verdict\"" ws "
 verdict ::= "\"APPROVE\"" | "\"REJECT\"" | "\"UNCERTAIN\""
 confidence ::= "100" | [1-9] [0-9]? | "0"
 ws ::= [ \t\n\r]{0,4}
+)GBNF";
+constexpr const char* inner_speech_grammar = R"GBNF(root ::= character+
+character ::= [A-Za-z0-9 .,!?;:'"()áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ-]
 )GBNF";
 }
 void cancel_through(std::int64_t request) noexcept {
@@ -97,7 +107,8 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
     }
     auto sampler_params = llama_sampler_chain_default_params();
     std::unique_ptr<llama_sampler, decltype(&llama_sampler_free)> sampler(llama_sampler_chain_init(sampler_params), llama_sampler_free);
-    auto* constrained = llama_sampler_init_grammar(vocab, reviewing ? review_grammar : grammar, "root");
+    const char* selected_grammar = reviewing ? review_grammar : (task == Task::InnerSpeech ? inner_speech_grammar : grammar);
+    auto* constrained = llama_sampler_init_grammar(vocab, selected_grammar, "root");
     if (!sampler || !constrained) { if (constrained) llama_sampler_free(constrained); throw std::runtime_error("Falha na gramática de ações"); }
     llama_sampler_chain_add(sampler.get(), constrained);
     llama_sampler_chain_add(sampler.get(), llama_sampler_init_greedy());
@@ -129,8 +140,11 @@ std::string infer(const std::string& path, const std::string& prompt, std::int64
         }
         char piece[512];
         const auto bytes = llama_token_to_piece(vocab, token, piece, sizeof(piece), 0, true);
-        if (bytes < 0 || output.size() + bytes > 256) throw std::runtime_error("Saída GGUF excede o limite");
-        output.append(piece, bytes);
+        const std::size_t output_limit = task == Task::InnerSpeech ? 512 : 256;
+        if (bytes < 0 || output.size() + static_cast<std::size_t>(bytes) > output_limit) throw std::runtime_error("Saída GGUF excede o limite");
+        output.append(piece, static_cast<std::size_t>(bytes));
+        if (task == Task::InnerSpeech && utf8_codepoints(output) > 240)
+            throw std::runtime_error("Fala interna excede 240 caracteres");
         auto batch = llama_batch_get_one(&token, 1);
         if (llama_decode(context.get(), batch) != 0) { check_request(request); throw std::runtime_error("Falha ao gerar proposta GGUF"); }
     }

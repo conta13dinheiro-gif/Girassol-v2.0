@@ -42,7 +42,7 @@ object NeuralProtocol {
             "Needs satisfied (0=urgent, 100=full): energy=${pct(n.energy)}, water=${pct(n.hydration)}, " +
             "food=${pct(n.glucose)}, social=${pct(n.social)}, curiosity=${pct(n.curiosity)}. " +
             "Current=${citizen.activity.name}. Skill=${pct(citizen.skill.mastery)}. " +
-            "Rooms=${world.rooms.size}/10. Building consumes timber; writing consumes paper. " +
+            "Rooms=${world.rooms.size}. Building consumes timber and uses a generated parcel; writing consumes paper. " +
             "Timber=${world.balances["market/timber"] ?: 0}; paper=${world.balances["market/paper"] ?: 0}. " +
             "Recent actions=${citizen.memories.takeLast(3).joinToString(",") { it.action.name }}. " +
             "Prefer unmet needs and varied productive activity."

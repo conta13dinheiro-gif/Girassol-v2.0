@@ -6,11 +6,11 @@
 
 # Girassol v2.0
 
-Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição deste incremento é **0.9.0**. A arquitetura ARM64 não exige conta, rede ou modelo para a simulação local. Este incremento de física ainda não foi compilado ou executado, por orientação do usuário.
+Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição declarada do aplicativo permanece **0.9.0**; as alterações desta branch são incrementais e ainda não constituem uma nova versão publicada. A arquitetura ARM64 não exige conta, rede ou modelo para a simulação local.
 
 ## Compilação manual
 
-O workflow `.github/workflows/android.yml` executa somente por **Actions → Run workflow**. Gera Debug e Release ARM64; não instala APK, não inicia emulador e não executa testes. Nenhuma compilação foi acionada para esta alteração, conforme solicitado. O release não tem assinatura de distribuição configurada.
+O workflow `.github/workflows/android-ci.yml` executa automaticamente em push, pull request e acionamento manual. Instala JDK17, SDK35, NDK27 e CMake3.22.1; compila os materiais Filament1.56.0; executa `scripts/test-native.sh`, `test` (suítes JVM de core/research/app), `testDebugUnitTest` e `lintDebug`; compila Debug/Release ARM64 e publica artefatos separados `Girassol-debug` e `Girassol-release`. O workflow `.github/workflows/android.yml` continua disponível para compilação manual. Nenhum emulador é iniciado. O CI assina Debug e Release com o debug keystore temporário do runner e verifica ambos com apksigner. A assinatura é válida para instalação de desenvolvimento, mas não é uma chave de upload Play nem garante atualizações entre execuções; para distribuição pública é necessário um keystore privado persistente.
 
 Toolchain: JDK17, SDK35, Build Tools35.0.0, NDK27.0.12077973, CMake3.22.1, Gradle8.11.1 e Kotlin2.1.10. O workflow baixa o matc oficial1.56.0 por SHA256 e compila todos os materiais antes do APK. Para compilação local futura:
 
@@ -24,11 +24,30 @@ As suítes JVM/nativas/instrumentadas permanecem no código para execução futu
 
 ## Experiência
 
-- Mundo 3D em tela inteira, HUD compacto, pausa/1×/2×/4×, dock Biosfera/Cidadãos/Marcos/Sistema, modo cinema e mapa tático com camadas observacionais.
+- Mundo 3D em tela inteira, HUD compacto, pausa/1×/2×/4×, navegação em cinco áreas — Biosfera, Gênesis/Cidadãos, Pedidos/Biblioteca, Hugging Face/Plugins e Marcos/Laboratório/Sistema, modo cinema e mapa tático com camadas observacionais.
 - Toque no habitante ou edifício para inspeção; arraste para orbitar, pinça para zoom e gesto de dois dedos para translação. A câmera tem amortecimento, inércia e acompanhamento de habitantes.
 - Economia mostra saldos efetivos, contas de consumo/arquivo/estruturas e distribuição das atividades; não inventa séries históricas.
 - Marcos surgem de construções, práticas comprovadas, primeira obra, crises, início da cognição, políticas promovidas e dias concluídos. Flashback carrega o estado integral verificado; bifurcação copia o prefixo do diário para um banco independente. Sistema permite voltar à linha original.
 
+## Planejamento, expansão urbana e genealogia — regras canônicas v6
+
+- `UtilityGoapPlanner` avalia sequências determinísticas de até três ações no vocabulário existente, considerando necessidades, recursos, estoque e pré-condições. `WorldActor` continua revalidando cada ação e mantendo a autoridade sobre o estado; regras e replay históricos1–5 não são reexecutados sob regras novas.
+- A construção em regras6 não para no décimo ambiente. `ProceduralDistricts` aloca anexos em espiral quadrada determinística e o `DistrictWaveFunctionCollapse` resolve blocos17×17 com seis arquétipos, compatibilidade de vizinhança e bordas cívicas para conexão entre blocos. `city_mesh`, JNI e os buffers Kotlin não impõem mais o limite de64 ambientes nem os tetos fixos anteriores de vértices/índices; a grade de colisão adapta a densidade para um orçamento de índice de32MiB. A geometria nativa ainda mantém limites de coordenadas e precisa de estratégia por blocos para expansão geográfica de escala muito grande.
+- Quando dois cidadãos têm confiança recíproca>=0,90, a conversa pode registrar um descendente para o par. Loci expressos dos dois pais são recombinados com fluxo determinístico; a nova identidade, linhagem, vocabulário, relações, eventual habilidade compartilhável e hash do genoma entram no estado. Um par tem intervalo mínimo de1440 ciclos entre nascimentos. O registro de genealogia é validado contra os cidadãos e seus genomas e participa do hash do estado.
+- A aba Cidadãos exibe pais, descendentes, geração, ciclo do nascimento e prefixo do hash genético. Isso não equivale ainda a mortalidade/expectativa de vida, NEAT estrutural, Big Five integral hereditário ou transmissão cultural institucional completa.
+
+## Dinâmica afetiva, previsão somática e sincronização — regras canônicas v7
+
+O tick cognitivo chama o núcleo C++20 cognitive/anokhin_gnw_core.hpp por girassol_autonomy_jni.cpp. Para cada habitante, o pack JNI tem 56 valores float: estado afetivo/biológico, contexto de ameaça e calor social, dt e observação sensorial16D. O contrato usa NativeAutonomy em Kotlin e valida dimensões, identidades únicas, finitude e intervalos antes de alterar qualquer estado.
+
+- **АРД / aceitador de resultados de ação:** compara o vetor sensorial previsto no tick anterior com o vetor observado, calcula erro RMS de 16 dimensões e alimenta surpresa. A previsão seguinte deriva da decisão escolhida e do alvo espacial estimado; é uma aproximação heurística, não uma previsão fisiológica.
+- **Dinâmica hormonal:** cortisol, oxitocina e dopamina usam as três EDOs do blueprint, com dt limitado a0,1s e clamp em[0,1]. O PAD derivado mantém prazer, ativação e dominância em[-1,1]. Big Five e padrão de apego são serializados e recombinados deterministicamente na herança.
+- **Ignição GNW:** a sigmoide usa erro preditivo, saliência e viés somático; acima de0,65 a reflexão deliberativa pode ser solicitada. A decisão local continua funcionando sem modelo. Com GGUF compatível, um worker de baixa prioridade usa o mesmo lock de inferência, deadline/cancelamento e GBNF restrito; a fala privada tem limite de240 codepoints/64tokens, entra como artefato canônico no tick seguinte e nunca executa comandos nem altera o mundo diretamente.
+- **Kuramoto:** o parâmetro de ordem R é calculado para todos os cidadãos e fica em CognitiveFrame.socialSynchrony/WorldState.socialSynchrony. R≥0,90, com pelo menos quatro habitantes na Ágora cívica, pode produzir artefato e diálogo ritual com cooldown240ticks. R modula o blend de razões harmônicas da síntese Trautonium AAudio por parâmetro atômico; o callback não recebe locks nem alocações novas.
+
+O contrato de evento7 registra CognitiveFrame e SpatialFrame juntos; replay1–6 preserva os envelopes anteriores. O estado somático novo é omitido quando está no default para não mudar hashes históricos.
+
+**Interpretação científica:** estes componentes são modelos computacionais inspirados em teorias neuropsicológicas, não demonstração de experiência subjetiva, consciência ou equivalência com cérebro humano. O “Ignition Index” do artigo de 2026 sobre sondas lineares de LLM é outra métrica, não esta sigmoide. A literatura recente também debate e testa criticamente previsões do GNWT/IIT. Referências: [Anokhin — acceptor of action results](https://www.lib.ipran.ru/upload/papers/paper_48581973.pdf), [Global Neuronal Workspace review](https://pmc.ncbi.nlm.nih.gov/articles/PMC8770991/), [adversarial GNWT/IIT study](https://www.nature.com/articles/s41586-025-08888-1), [PAD dimensions](https://journals.sagepub.com/doi/10.2466/pms.1974.38.1.283), [Kuramoto review](https://journals.aps.org/rmp/abstract/10.1103/RevModPhys.77.137), [LLM Ignition Index](https://arxiv.org/abs/2608.05160).
 ## Apresentação nativa
 
 Filament1.56.0: materiais PBR procedurais para solo, pedra, madeira, metal, água e vegetação; vidro separado translúcido; normais analíticas, telhados, interiores e detalhes urbanos; habitantes articulados, acessórios e animação procedural. Ambiente com céu solar, estrelas/lua, irradiância difusa e mipmaps especulares GGX gerados em worker. Sombras direcionais DPCF com duas cascatas, SSAO, ACES, bloom, MSAA/FXAA.
@@ -45,25 +64,28 @@ Cada ciclo usa30subpassos fixos de1/60s, gravidade−9,81m/s² e apoio amostrado
 
 A câmera e a apresentação seguem os pontos físicos, evitando interpolação reta através de quinas. A fase dos passos acumula distância efetivamente apresentada; sem deslocamento, a marcha para e resta a respiração do tronco. O pivô da sola é normalizado paraY0. Sombras de contato translúcidas por cidadão acompanham o piso e perdem densidade com a altura, somadas a SSAO e DPCF.
 
-Limites atuais: navegação 2,5D no nível existente, colisões conservadoras AABB derivadas das faces, separação por steering/reserva local; não são Recast/Detour ou RVO2. Corredores muito congestionados podem exigir resolução de impasses mais completa. Não existe ainda inventário de objetos físicos soltos nem empilhamento dinâmico. O solver e os materiais novos aguardam compilação e validação pelo usuário.
+Limites atuais: navegação 2,5D no nível existente, colisões AABB derivadas das faces e separação local por steering/reserva; Recast/Detour, RVO2 e navegação em múltiplos andares ainda não estão integrados. Corredores congestionados podem exigir resolução de impasses mais completa. Não existe ainda inventário de objetos físicos soltos nem empilhamento dinâmico. A validação visual e de desempenho sustentado ainda exige aparelho ARM64.
 
 ## Aprendizagem e memória
 
 Cada cidadão possui rede LTC12×8 nativa, oito valores de ação, plasticidade Hebbiana/Oja modulada pelo resultado e Big Five observacional. Pesos e estado neural são persistidos no evento, sem alterar o modelo GGUF. Novidade usa distância a comportamentos efetivamente observados. Exploração Gumbel usa fluxo derivado da semente, identidade e ciclo; a temperatura depende de curiosidade/novidade e a decisão resultante é registrada no evento. Isso amplia escolhas dentro do vocabulário atual, sem prometer invenção de instituições ou algoritmos novos. A personalidade é inicializada de forma reprodutível; herança estrutural NEAT e reprodução ainda não existem.
 
-A memória persistida no checkpoint SQLite tem três representações:
+A memória persistida no checkpoint SQLite tem quatro representações:
 
 1. Episódios com ciclo/evento, posição, resultado, emoção, importância e vetor observacional normalizado16D.
 2. Reflexões estatísticas por atividade, destiladas durante o sono ou periodicamente. Esquecimento remove episódios antigos de baixa importância depois da consolidação.
 3. Rotinas com três sucessos validados, reutilizadas na decisão e transmitidas por conversas próximas, com professor/evento de origem.
+4. Utilidade Q por episódio recuperado, com contagem de acesso e feedback atrasado ligado ao próximo resultado de ação registrado.
 
-O HNSW nativo recupera candidatos por produto interno e ordena por similaridade, importância e recência. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
+O HNSW nativo recupera até oito candidatos por produto interno; a segunda fase os reordena por similaridade e utilidade Q persistida (adaptação compacta de MemRL). O retorno da próxima ação registrada atualiza apenas os episódios que foram recuperados, com crédito atrasado e determinístico. A similaridade cosseno é normalizada para pesos não negativos antes da média de recompensa. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
 
-## Hugging Face & Biblioteca
+A memória também mantém um `SkillLearningTrace` por atividade observada: BKT bayesiano estima domínio, uma curva DSR determinística agenda revisão em ticks e um estimador IRT 3PL simplificado atualiza habilidade latente. Esses valores entram no mesmo `MemoryBank` persistido e acrescentam somente um bônus pequeno ao escore cognitivo; GOAP e o `WorldActor` continuam validando toda execução. A agenda usa a curva (R(t,S)=(1+(19/81)t/S)^{-0.5}) especificada nos prompts. **Não é uma implementação completa de FSRS-6/7**: parâmetros IRT não são calibrados por banco de itens e a atualização de estabilidade é uma heurística documentada. Veja [contrato e fórmulas de aprendizagem](docs/aprendizagem-bkt-dsr-irt.md).
+
+## Pedidos, Hugging Face & Biblioteca
 
 Pesquisa autônoma PT/EN, currículo de dez domínios, busca/curadoria no Hub, streaming de trechos, quarentena com duas avaliações GGUF, replay nativo e estudo físico na biblioteca. Diário comprimido encadeado por SHA256, embeddings GGUF completos e busca HNSW por modelo, cache textual direto JSON/JSONL/CSV com Range/mmap, cota/LRU/fixação e cancelamento por memória/temperatura. Controles em Sistema → Biblioteca.
 
-Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: treino LoRA e decoder direto Parquet continuam pendentes; avaliações do modelo não comprovam verdade factual.
+Os pedidos dos habitantes aparecem em uma aba própria, lendo as mesmas intenções persistidas no diário epistêmico. O picker SAF aceita TXT, Markdown, CSV, JSON e EPUB; extrai o texto, cria lotes verificados por SHA-256 e os grava na quarentena do journal imutável. PDF e áudio ainda não têm extratores integrados. Veja [arquitetura da biblioteca](docs/biblioteca.md) para contratos e limitações: ingestão local nativa de PDF/EPUB/áudio e decoder direto Parquet continuam pendentes; treino LoRA real também não existe. Avaliações do modelo não comprovam verdade factual.
 
 ## GGUF e LoRA
 
@@ -75,6 +97,14 @@ O LoRA é aplicado com `llama_adapter_lora_init`/`llama_set_adapter_lora`, usand
 
 Teste GGUF host: `scripts/test-cognition.sh /caminho/modelo.gguf`. O smoke realizado usa SmolLM2-135M-Instruct Q4_K_M, revisão bartowski09816acd5d99df7be770d85ea30822623dab342c, SHA2562e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d. Cards bartowski e HuggingFaceTB declaram Apache2.0; os pesos não são redistribuídos.
 
+## Shizuku opcional e telemetria somente de leitura
+
+A área Sistema permite pedir autorização explícita e conectar um UserService Shizuku. Quando o serviço está disponível, ele lê `/proc/meminfo`, a primeira zona térmica e estatísticas de zRAM e informa o UID do processo remoto. O contrato AIDL não expõe shell, execução de comandos, escrita em sysfs, ajuste de prioridades ou acesso arbitrário ao armazenamento. Sem Shizuku, sem permissão ou após a morte do Binder, a simulação permanece no processo normal com telemetria local. A pessoa precisa iniciar Shizuku por ADB/depuração sem fio e autorizar o app; isto não contorna root nem garante execução após reinicializações.
+
+## Formato binário .grs e quantização adaptativa
+
+O núcleo agora oferece `GirassolRecordCodec` versão1: matrizes com dimensões verificadas, header little-endian, SHA-256 sobre metadados e payload, Float32, INT8 simétrico com delta-varint zig-zag e vetores ternários {-1,0,+1} compactados em2bits. `AdaptiveQuantizerEngine` compara os três formatos e escolhe o menor que respeita o RMSE solicitado. O formato tem testes de round-trip e rejeição de corrupção. Ainda não há migração automática do SQLite/HNSW antigo para .grs nem compressão Zstd; o codec não reescreve os registros históricos.
+
 ## RSI por Shadow-Replay
 
 Descobertas e crises disparam um worker de baixa prioridade. O CMA-ES nativo adapta média, matriz de covariância completa e tamanho de passo de **oito vieses compartilhados de atividade**. A implementação C++ é própria, baseada no [tutorial de Hansen](https://arxiv.org/abs/1604.00772); não vincula libcmaes.
@@ -85,15 +115,15 @@ Rejeitar todos os candidatos é um resultado válido. Pausa, troca de linha, des
 
 ## Contratos preservados
 
-WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção; evento5 acrescenta o resultado físico canônico. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
+WorldActor é a única autoridade lógica; percepção comum, arbitragem rotativa, revalidação e conservação de recursos permanecem. Serviço adota/publica a transição somente depois do commit SQLite WAL/FULL. Eventos1/2 preservam bytes e regras; evento3 registra a proposta GGUF; evento4 registra entradas cognitivas, pesos, memória e eventual promoção; evento5 acrescenta o resultado físico canônico legado; evento6 identifica ticks da política espacial com GOAP, expansão procedural e genealogia; evento7 combina o contrato cognitivo e espacial da regra v7. A utilidade MemRL integra o MemoryBank serializado no frame cognitivo existente, com defaults vazios omitidos para preservar estados antigos. O replay usa os registros, sem executar o GGUF, o otimizador ou as redes nativas. Inferência e aprendizagem em hardwares distintos não são prometidas como bit a bit idênticas.
 
 SQLite migra aditivamente até schema4: marcos, pesquisa e vetores, sem reescrever eventos/checkpoint anteriores. Auditoria confere IDs, ticks, hashes e vínculo ao checkpoint; não substitui assinatura autenticada contra reescrita integral do banco. Os diários completos são preservados; poda com âncoras criptográficas ainda não foi implementada.
 
-## Estado e pendências
+## Estado e pendências — regras canônicas v7
 
-Este incremento **não conclui toda a especificação**. A cidade lógica ainda possui seis fundadores e construção até dez ambientes. Permanecem: navegação de multidões Recast/Detour e planejamento GPGOAP; distritos WFC/Earcut e crescimento urbano aberto; reprodução/morte/genealogia e mutação estrutural NEAT; instituições/leis/comércio emergentes completos; cognição linguística generativa e treinamento LoRA; compactação com poda auditável; direção cinematográfica automática; Shizuku/modo dedicado, DGM/runtime de código, OpenCL e dois GGUF residentes, treino contínuo real; dimensionamento por hardware8/12GB; validação visual, de áudio, memória e60FPS.
+Este incremento **não conclui toda a especificação**. A cidade ainda começa com seis fundadores; regras6 já permitem construir acima de dez ambientes, mas não há expansão geográfica ilimitada por blocos. Permanecem: Recast/Detour, RVO2 e navegação em múltiplos andares; triangulação Earcut e expansão geográfica por streaming de blocos; mortalidade/expectativa de vida e NEAT estrutural; instituições, leis e comércio emergentes completos; transmissão cultural e Big Five integral; voz neural offline Kokoro/Piper, conversa falada espontânea e treino LoRA real; decodificação Parquet direta; migração automática de memória/diário para .grs, compressão Zstd e poda auditável; hot-load de plugins ZIP; direção cinematográfica automática; Shizuku UserService de telemetria read-only já integrado; continuam pendentes modo dedicado, DGM/runtime de código, OpenCL e dois GGUF residentes; treino contínuo real do modelo; dimensionamento por hardware4/8/12GB; validação visual, áudio, memória, temperatura e60FPS em aparelho. A síntese atual modula panorama/escala por observações; HRTF/propagação Steam Audio ainda não está integrada.
 
-As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC, hnswlib, OkHttp e RapidJSON, com versões/licenças preservadas.
+As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, Earcut e libcmaes foram referências pesquisadas; não são apresentadas como integradas. O planner GOAP atual é uma implementação determinística própria no módulo `core`, não um wrapper de GPGOAP. Código efetivamente incorporado: Filament, llama.cpp, tinymind LTC, hnswlib, OkHttp e RapidJSON, com versões/licenças preservadas.
 
 ## Organização
 
@@ -103,6 +133,7 @@ As bibliotecas ALIEN, MultiNEAT, EvolutionNet, GPGOAP, Recast, sqlite-vec, WFC, 
 - `app/src/main/java/`: serviço, armazenamento, importação, coordenação cognitiva, render e Compose.
 - `app/src/main/materials/`: fontes dos materiais PBR, vidro, contato e acabamento. Recompile com matc56: `FILAMENT_TOOLS_DIR=/caminho/filament/v1.56.0 scripts/compile-materials.sh`. A build verifica hashes dos fontes/ativos.
 - `docs/arquitetura.md`: referências, compatibilidade e limites de validação.
+- `docs/pesquisa-externa-2026-11-19.md`: síntese de pesquisa externa, licenças, algoritmos candidatos e decisões de integração.
 
 
 <!-- /coderabbit-ai-generated:v1 -->

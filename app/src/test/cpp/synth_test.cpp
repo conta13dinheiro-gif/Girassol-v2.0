@@ -13,6 +13,20 @@ int main() {
     Synth one(42),two(42),three(43);
     Parameters p{1,1,0,.6f,.4f};
     assert(one.render(a.data(),frames,sr,p));
+    // The active Trautonium ratios change the generated spectrum deterministically.
+    Synth equalTuning(71), customTuning(71);
+    Parameters equalParams=p, customParams=p;
+    customParams.ratios={1.0f,1.2f,1.4f,1.6f,1.8f,2.0f,2.2f,2.4f};
+    assert(equalTuning.render(b.data(),frames,sr,equalParams));
+    assert(customTuning.render(c.data(),frames,sr,customParams));
+    assert(b!=c);
+    Synth independentPhase(85), collectivePhase(85);
+    Parameters individualParams=p, collectiveParams=p;
+    individualParams.synchrony=0.0f;
+    collectiveParams.synchrony=1.0f;
+    assert(independentPhase.render(b.data(),frames,sr,individualParams));
+    assert(collectivePhase.render(c.data(),frames,sr,collectiveParams));
+    assert(b!=c);
     // Callback size cannot change the signal for the same controls/sample rate.
     int done=0;
     while (done<frames) { const int n=std::min(193,frames-done); assert(two.render(b.data()+done*2,n,sr,p)); done+=n; }

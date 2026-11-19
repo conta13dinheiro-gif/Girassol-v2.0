@@ -1,0 +1,11 @@
+{
+  "id": "audio.trautonium",
+  "name": "Escala Trautonium",
+  "version": 1,
+  "kind": "AUDIO_SCALE",
+  "description": "Afinação microtonal para a síntese procedural AAudio.",
+  "config": {
+    "rootMultiplier": 1.0,
+    "ratios": [1.0, 1.067, 1.125, 1.2, 1.333, 1.5, 1.6, 1.8]
+  }
+}

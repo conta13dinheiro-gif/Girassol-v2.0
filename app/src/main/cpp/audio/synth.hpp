@@ -4,7 +4,8 @@
 
 namespace girassol::audio {
 struct Parameters {
-    float volume=0, left_steps=0, right_steps=0, mastery=0, social=0, weather=0, tension=0, milestone=0;
+    float volume=0, left_steps=0, right_steps=0, mastery=0, social=0, weather=0, tension=0, milestone=0, pitch=1, synchrony=0;
+    std::array<float,8> ratios{1.0f,1.067f,1.125f,1.2f,1.333f,1.5f,1.6f,1.8f};
 };
 // Owned solely by the audio callback. No allocations, locks, logging or Android calls in render.
 class Synth {

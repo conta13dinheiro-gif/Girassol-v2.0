@@ -47,6 +47,7 @@ import com.enhikyy.girassol.runtime.BiosphereUi
 import com.enhikyy.girassol.render.NativeProjection
 import com.enhikyy.girassol.render.FilamentWorldView
 import com.enhikyy.girassol.audio.AudioStatus
+import com.enhikyy.girassol.audio.NeuralSpeechEngine
 import com.enhikyy.girassol.cognition.CognitionStatus
 import java.util.Locale
 import kotlin.math.*
@@ -76,8 +77,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var economy by rememberSaveable { mutableStateOf(false) }
     var renderError by remember { mutableStateOf<String?>(null) }
     var historical by remember { mutableStateOf<WorldState?>(null) }
-    var systemSection by rememberSaveable { mutableIntStateOf(0) }
     var historySection by rememberSaveable { mutableIntStateOf(0) }
+    var hfSection by rememberSaveable { mutableIntStateOf(0) }
     val research by com.enhikyy.girassol.research.ResearchHub.state.collectAsStateWithLifecycle()
     val world=historical ?: ui.world
     val selected=world?.agents?.firstOrNull { it.id==selectedId }
@@ -129,33 +130,40 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     } else {
                         SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start=10.dp,end=10.dp,bottom=92.dp).fillMaxWidth().fillMaxHeight(.72f)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text(listOf("","Cidadãos & sociedade","História viva","Sistema & cognição")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
+                                Text(listOf("","Gênesis & Cidadãos","Pedidos & Biblioteca","Hugging Face & Plugins","Marcos, Laboratório & Sistema")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
                                 IconButton(onClick={ tab=0 }) { Icon(Icons.Outlined.Close,"Voltar ao mundo") }
                             }
                             when(tab) {
                                 1->Citizens(world,Modifier.weight(1f)) { selectedId=it }
-                                2->{
-                                    TabRow(historySection,containerColor=Color.Transparent) {
-                                        listOf("Marcos","Cultura").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
-                                    }
-                                    if(historySection==0) Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
-                                    else Culture(world,Modifier.weight(1f))
-                                }
+                                2->ResearchRequests(Modifier.weight(1f))
                                 3->{
-                                    TabRow(systemSection,containerColor=Color.Transparent) {
-                                        listOf("Sistema & RSI","Biblioteca").forEachIndexed { i,label->Tab(systemSection==i,{ systemSection=i },text={ Text(label) }) }
+                                    TabRow(hfSection,containerColor=Color.Transparent) {
+                                        listOf("Pesquisa","Plugins").forEachIndexed { i,label->
+                                            Tab(hfSection==i,{ hfSection=i },text={ Text(label) })
+                                        }
                                     }
-                                    if(systemSection==0) SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
-                                    else if(historical==null) ResearchLibrary(Modifier.weight(1f))
-                                    else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                    if(hfSection==0) {
+                                        if(historical==null) ResearchLibrary(Modifier.weight(1f))
+                                        else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                    } else PluginsPage(Modifier.weight(1f))
+                                }
+                                4->{
+                                    TabRow(historySection,containerColor=Color.Transparent) {
+                                        listOf("Marcos","Cultura","Sistema").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
+                                    }
+                                    when(historySection) {
+                                        0->Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
+                                        1->Culture(world,Modifier.weight(1f))
+                                        else->SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
+                                    }
                                 }
                             }
                         }
                     }
                     SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
-                            listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
+                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.Inbox,Icons.Outlined.CloudDownload,Icons.Outlined.Tune)
+                            listOf("Biosfera","Gênesis","Pedidos","HF & Plugins","Marcos/Sistema").forEachIndexed { i,label->
                                 Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
                                     Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
@@ -272,13 +280,69 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 
 @Composable private fun Citizens(world: WorldState, modifier: Modifier, select: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    NeuralSpeechEngine.initialize(context)
+    val speechStatus by NeuralSpeechEngine.state.collectAsStateWithLifecycle()
     val agents = world.agents.filter { it.name.contains(query, true) || it.lineage.contains(query, true) }
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item { PageHeading("INDIVÍDUOS, HISTÓRIAS E VÍNCULOS", "Quem habita este mundo", "Cada habitante tem necessidades, experiências e um perfil genético próprio.") }
         item { OutlinedTextField(query, { query = it }, label = { Text("Buscar nome ou linhagem") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) }) }
         if (agents.isEmpty()) item { Text("Nenhum habitante encontrado.", color = Muted) }
         items(agents, key = { it.id }) { a ->
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) { AgentRow(a, select); Spacer(Modifier.height(14.dp)); NeedsBars(a.needs); Spacer(Modifier.height(12.dp)); Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp) }
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) {
+                AgentRow(a, select)
+                Spacer(Modifier.height(14.dp))
+                NeedsBars(a.needs)
+                Spacer(Modifier.height(12.dp))
+                Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp)
+                world.minds[a.id]?.psyche?.let { soul ->
+                    Text(
+                        "PAD ${"%.2f".format(soul.pleasure)} / ${"%.2f".format(soul.arousal)} / ${"%.2f".format(soul.dominance)} · cortisol ${"%.2f".format(soul.cortisol)} · oxitocina ${"%.2f".format(soul.oxytocin)}",
+                        color=Muted,fontSize=9.sp
+                    )
+                    Text(
+                        "GNW ${(soul.ignitionIndex*100).toInt()}% · erro ARD ${"%.2f".format(soul.lastPredictionError)} · vínculo ${soul.attachment.name.lowercase()}",
+                        color=if(soul.ignitionIndex>.65) Solar.Amber else Muted,fontSize=9.sp
+                    )
+                }
+                world.artifacts.lastOrNull { it.author==a.id && it.title=="Fala interna" }?.let { thought ->
+                    Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                        Text("REFLEXÃO PRIVADA · ${thought.text}",color=Solar.Cognitive,fontSize=10.sp)
+                        OutlinedButton(
+                            enabled=speechStatus.installed && !speechStatus.busy,
+                            onClick={
+                                runCatching {
+                                    NeuralSpeechEngine.speak(
+                                        thought.text,
+                                        voiceId=speechStatus.voiceId,
+                                        pan=((a.x-a.z)/30.0).toFloat().coerceIn(-1f,1f)
+                                    )
+                                }.onFailure {
+                                    android.widget.Toast.makeText(context,it.message ?: "Falha na síntese de voz",android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        ) { Text("Ouvir reflexão") }
+                    }
+                }
+            }
+        }
+        if (world.genealogy.isNotEmpty()) {
+            item { SectionTitle("Genealogia", "${world.genealogy.size} nascimentos registrados") }
+            items(world.genealogy.asReversed(), key = { it.child }) { family ->
+                val child = world.agents.firstOrNull { it.id == family.child }
+                val parentOne = world.agents.firstOrNull { it.id == family.parentOne }
+                val parentTwo = world.agents.firstOrNull { it.id == family.parentTwo }
+                if (child != null && parentOne != null && parentTwo != null) {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { select(child.id) }.padding(16.dp)
+                    ) {
+                        Text(child.name, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Text("${parentOne.name} + ${parentTwo.name}", color = Gold, fontSize = 12.sp)
+                        Text("Geração ${child.genome.generation} · ciclo ${family.tick}", color = Muted, fontSize = 10.sp)
+                        Text("Genoma SHA-256 · ${family.genomeHash.take(16)}…", color = Muted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
         }
     }
 }
@@ -330,6 +394,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     val w=ui.world!!; val t=w.telemetry()
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
+    var hardwareReport by remember { mutableStateOf<com.enhikyy.girassol.hardware.DeviceHardwareReport?>(null) }
+    LaunchedEffect(context) { hardwareReport = withContext(Dispatchers.IO) { com.enhikyy.girassol.hardware.HardwareAutoTuner.probe(context) } }
     var auditing by remember { mutableStateOf(false) }
     var auditResult by rememberSaveable { mutableStateOf<String?>(null) }
     LazyColumn(modifier.fillMaxSize(), contentPadding=PaddingValues(22.dp), verticalArrangement=Arrangement.spacedBy(22.dp)) {
@@ -399,7 +465,26 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 }
             }
         }
+        item {
+            SectionTitle("Auto-detecção de hardware")
+            val report = hardwareReport
+            if (report == null) Text("Lendo SoC, ABI, RAM e renderer gráfico…", color=Muted, fontSize=11.sp)
+            else {
+                KeyValue("Fabricante / SoC", "${report.socVendor} · ${report.socModel}")
+                KeyValue("Dispositivo", "${report.manufacturer} ${report.model}")
+                KeyValue("Arquitetura / ABI", "${report.architecture} · ${report.primaryAbi}")
+                KeyValue("ABIs suportadas", report.supportedAbis.joinToString())
+                KeyValue("GPU / renderer", report.gpuRenderer)
+                KeyValue("RAM física / CPUs visíveis", String.format(Locale.ROOT, "%.1f GB · %d", report.totalRamGb, report.logicalCpuCount))
+                KeyValue("Biblioteca OpenCL", if (report.openClLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrada nos caminhos padrão")
+                KeyValue("Loader Vulkan", if (report.vulkanLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrado nos caminhos padrão")
+                KeyValue("Backend GGUF neste build", "CPU · llama.cpp")
+                Text("Diagnóstico informativo. Encontrar uma biblioteca não comprova driver funcional; este build ainda não ativa seleção dinâmica OpenCL/Vulkan nem KleidiAI.", color=Muted, fontSize=10.sp)
+            }
+        }
         item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
+        item { SectionTitle("Voz neural offline"); Spacer(Modifier.height(10.dp)); NeuralSpeechPanel() }
+        item { SectionTitle("Shizuku · telemetria de sistema"); Spacer(Modifier.height(10.dp)); ShizukuPanel() }
         item {
             SectionTitle("Recursos do mercado"); Spacer(Modifier.height(12.dp))
             w.initialTotals.forEach { (item, total) ->

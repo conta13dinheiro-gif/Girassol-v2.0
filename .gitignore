@@ -12,3 +12,6 @@ captures/
 
 ci-apks/
 ci-device-reports/
+
+# Downloaded, SHA-256 pinned optional TTS runtime
+app/libs/sherpa-onnx-2.0.1.aar

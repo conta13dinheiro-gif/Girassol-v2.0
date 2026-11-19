@@ -5,7 +5,7 @@
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_enhikyy_girassol_render_NativeCityMesh_nativeBuild(JNIEnv* env, jobject, jobject input,
         jint count, jlong seed, jint mode, jint color, jobject vertices, jobject indices) {
-    if (count<0 || count>64 || (mode<0 || mode>3)) return 0;
+    if (count<0 || (mode<0 || mode>3)) return 0;
     try {
         girassol::Mesh mesh;
         if (mode!=1) {

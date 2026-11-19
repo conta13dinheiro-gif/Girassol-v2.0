@@ -9,8 +9,8 @@ internal object NativeAudio {
     val available get() = NativeProjection.available
     external fun start(seed: Long): Int
     external fun stop()
-    private external fun nativeUpdate(volume: Float,left: Float,right: Float,mastery: Float,social: Float,weather: Float,tension: Float,milestone: Float): Int
-    fun update(volume: Float,left: Float,right: Float,mastery: Float,social: Float,weather: Float=0f,tension: Float=0f,milestone: Float=0f): Int = nativeUpdate(volume,left,right,mastery,social,weather,tension,milestone)
+    private external fun nativeUpdate(volume: Float,left: Float,right: Float,mastery: Float,social: Float,weather: Float,tension: Float,milestone: Float,pitch: Float,ratios: FloatArray,synchrony: Float): Int
+    fun update(volume: Float,left: Float,right: Float,mastery: Float,social: Float,weather: Float=0f,tension: Float=0f,milestone: Float=0f,pitch: Float=1f,ratios: FloatArray=floatArrayOf(1f,1.067f,1.125f,1.2f,1.333f,1.5f,1.6f,1.8f),synchrony: Float=0f): Int = nativeUpdate(volume,left,right,mastery,social,weather,tension,milestone,pitch,ratios,synchrony)
 }
 
 /** One stream in the process; obsolete Activity operations cannot stop a newer owner's audio. */

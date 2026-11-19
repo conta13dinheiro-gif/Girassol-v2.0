@@ -45,8 +45,9 @@ class BiosphereService : Service() {
                 val prior=actor!!.state
                 if(thermal>0 || memory.lowMemory) rsi.cancel()
                 val revision=rsi.take(prior)
-                val mind=research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions).copy(evolution=revision))
-                val candidate=WorldActor(actor!!.checkpoint(),5)
+                val thermalTier = AllostaticThermalCoupling.fromPlatformThermalStatus(thermal)
+                val mind=research.deliberate(prior,research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions,thermalTier=thermalTier).copy(evolution=revision)))
+                val candidate=WorldActor(actor!!.checkpoint(),7)
                 val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(prior,candidate.intentions(proposal,mind))
                 val transition = candidate.step(proposal,mind,spatial)
                 if (proposal != null) neuralResult = if (transition.event.neural != null)
@@ -77,7 +78,7 @@ class BiosphereService : Service() {
         startForeground(10, notification())
         handler.post {
             try {
-                if (actor == null) { actor = store.load()?.let { WorldActor(it,5) } ?: WorldActor(rulesVersion=5); lastActions=store.lastActions() }
+                if (actor == null) { actor = store.load()?.let { WorldActor(it,7) } ?: WorldActor(rulesVersion=7); lastActions=store.lastActions() }
                 research.refresh()
                 when (intent?.action) {
                     ACTION_DATASET -> {
@@ -128,6 +129,17 @@ class BiosphereService : Service() {
                         }
                         if(wasRunning) startLoop() else { if(wakeLock.isHeld) wakeLock.release(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
                     }
+                    ACTION_IMPORT_DOCUMENT -> {
+                        val uri=checkNotNull(intent.data) { "Arquivo de origem ausente" }
+                        research.importDocument(uri) {
+                            if(!prefs.getBoolean("running",false)) {
+                                if(wakeLock.isHeld) wakeLock.release()
+                                stopForeground(STOP_FOREGROUND_REMOVE)
+                                stopSelf(startId)
+                            }
+                        }
+                        if(prefs.getBoolean("running",false)) startLoop()
+                    }
                     ACTION_PROPOSAL -> {
                         if (running) {
                             val activity = intent.getStringExtra("activity")?.let { runCatching { com.enhikyy.girassol.core.Activity.valueOf(it) }.getOrNull() }
@@ -162,7 +174,7 @@ class BiosphereService : Service() {
         try {
             val point=checkNotNull(replacement.load())
             replacement.audit()
-            val next=WorldActor(point,5)
+            val next=WorldActor(point,7)
             val actions=replacement.lastActions()
             if(!prefs.edit().putString("world_database",name).commit()) {
                 prefs.edit().putString("world_database",oldName).commit()
@@ -198,6 +210,15 @@ class BiosphereService : Service() {
         super.onDestroy()
     }
     companion object {
+        const val ACTION_IMPORT_DOCUMENT="com.enhikyy.girassol.IMPORT_DOCUMENT"
+        fun importDocument(context: Context,uri: android.net.Uri) {
+            context.startForegroundService(
+                Intent(context,BiosphereService::class.java)
+                    .setAction(ACTION_IMPORT_DOCUMENT)
+                    .setData(uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+        }
         const val ACTION_DATASET="com.enhikyy.girassol.DATASET"
         fun datasetControl(context: Context,id: String,pinned: Boolean,enabled: Boolean) {
             context.startForegroundService(Intent(context,BiosphereService::class.java).setAction(ACTION_DATASET).putExtra("researchId",id).putExtra("pinned",pinned).putExtra("enabled",enabled))

@@ -112,9 +112,11 @@ class CognitionController(context: Context, private val lifecycle: Lifecycle) : 
                     CognitionWork.lock.withLock {
                         check(Process.is64Bit()) { "Inferência requer processo Android de 64 bits" }
                         val power = app.getSystemService(PowerManager::class.java)
-                        check(power.currentThermalStatus < PowerManager.THERMAL_STATUS_MODERATE) { "Aguarde o aparelho esfriar para inferir" }
                         val memory = ActivityManager.MemoryInfo().also { app.getSystemService(ActivityManager::class.java).getMemoryInfo(it) }
-                        check(!memory.lowMemory && installed.bytes+(selectedAdapter?.bytes ?: 0) <= (memory.availMem-512L*1048576)/2) { "RAM livre insuficiente para este GGUF" }
+                        val tier = AllostaticThermalCoupling.fromPlatformThermalStatus(power.currentThermalStatus)
+                        val budget = AllostaticThermalCoupling.assess(tier, memory.lowMemory, citizen.needs.energy)
+                        check(budget.localLlmAllowed) { if (memory.lowMemory) "RAM indisponível para deliberação" else "Aguarde o aparelho esfriar para inferir" }
+                        check(installed.bytes+(selectedAdapter?.bytes ?: 0) <= (memory.availMem-512L*1048576)/2) { "RAM livre insuficiente para este GGUF" }
                         NeuralProtocol.parse(NativeCognition.infer(installed.file.absolutePath,
                             NeuralProtocol.prompt(world, citizen).toByteArray(Charsets.UTF_8), id,selectedAdapter?.file?.absolutePath).toString(Charsets.UTF_8))
                     }
