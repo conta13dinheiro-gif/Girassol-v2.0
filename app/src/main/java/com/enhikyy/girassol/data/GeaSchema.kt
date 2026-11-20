@@ -122,7 +122,7 @@ internal object GeaSchema {
             }
             val aim = rule.aim.name
             val institutionId = Canonical.hash(
-                "$attribute|$deontic|$aim|\${rule.condition}|\${rule.objectOrElse}"
+                "$attribute|$deontic|$aim|${rule.condition}|${rule.objectOrElse}"
             ).take(32)
             db.insertOrThrow("adico_institutions", null, ContentValues().apply {
                 put("event_id", eventId)
