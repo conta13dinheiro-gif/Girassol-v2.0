@@ -132,7 +132,8 @@ internal object NativeMind {
         }
         return CognitiveFrame(
             world.tick,Canonical.hash(Canonical.state(world)),minds,decisions,
-            socialSynchrony=autonomy.orderParameter
+            socialSynchrony=autonomy.orderParameter,
+            rsiPromotionGate=autonomy.engineSignals.values.map { it[7] }.average() >= 0.75
         )
     }
 }
