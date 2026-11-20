@@ -22,7 +22,7 @@ for suite in projection city_mesh synth plasticity vector_memory semantic_index 
   if [[ "$suite" == dataset_decoder ]]; then extra+=(app/src/main/cpp/research/swap_arena.cpp); fi
   c++ "${extra[@]}" -std=c++20 -Wall -Wextra -Werror -fno-omit-frame-pointer -fsanitize=address,undefined -ldl \
     -Iapp/src/main/cpp -isystem app/src/main/cpp/third_party/hnswlib -isystem app/src/main/cpp/third_party/rapidjson/include \
-    "${sources[@]}" "app/src/test/cpp/${suite}_test.cpp" -o "$build_root/$suite"
+    "${sources[@]}" "app/src/test/cpp/${suite}_test.cpp" -ldl -o "$build_root/$suite"
   "$build_root/$suite"
   printf '%s passed (ASan/UBSan)\n' "$suite"
 done
