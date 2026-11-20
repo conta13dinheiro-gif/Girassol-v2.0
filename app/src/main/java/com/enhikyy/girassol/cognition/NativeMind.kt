@@ -71,10 +71,20 @@ internal object NativeMind {
             }
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
             bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
-            val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
+            val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive,
+                nativeEngineTrace=autonomy.nativeEngineStates.getValue(citizen.id))
             check(next.valid(world.tick))
             minds[citizen.id]=next
             val scores=values(272,8).toMutableList()
+            val engine=autonomy.engineSignals.getValue(citizen.id)
+            val reflexConfidence=engine[0].coerceIn(0.0,1.0)
+            val tttCuriosity=engine[1].coerceIn(0.0,1.0)
+            val episodicQ=engine[2].coerceIn(-1.0,1.0)
+            val subjectiveProbability=engine[3].coerceIn(0.0,1.0)
+            val variationalFreeEnergy=engine[4].coerceIn(0.0,1.0)
+            val expectedFreeEnergy=engine[5].coerceIn(0.0,1.0)
+            val brierScore=engine[6].coerceIn(0.0,1.0)
+            val rsiPromotionGate=engine[7].coerceIn(0.0,1.0)
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
             val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
             Activity.entries.forEachIndexed { i,activity->
@@ -87,13 +97,15 @@ internal object NativeMind {
                 // Seeded Gumbel exploration scales with curiosity and lack of novelty; outputs are journaled.
                 val thermalCost = AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier, 1.0, n.energy)
                 val policyScale = 1.0 / (1.0 + thermalCost)
-                val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
+                val temperature=(.04+.20*old.personality[0]*(1-novelty))*(1.0-.45*reflexConfidence)*policyScale
                 val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
                 scores[i]+=-ln(-ln(u))*temperature
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
                 val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
                 scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
+                    tttCuriosity*.08+episodicQ*.10+(subjectiveProbability-.5)*(if(activity==Activity.TALK) .12 else 0.0)-
+                    variationalFreeEnergy*.06-expectedFreeEnergy*.04-brierScore*.05+rsiPromotionGate*.015+
                     bank.learningFor(activity).practiceBonus(world.tick)+bank.workingMemoryBonus(activity,world.tick)+
                     needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-
                     hypot(room.x-citizen.x,room.z-citizen.z)*.025
