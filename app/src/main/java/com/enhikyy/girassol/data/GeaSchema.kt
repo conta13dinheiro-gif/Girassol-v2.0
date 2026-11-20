@@ -188,7 +188,7 @@ internal object GeaSchema {
                 citizen.genome.symbiosis.dominanceB
             )
             val candidate = AuroraCandidate(
-                id = "aurora-" + Canonical.hash("\${citizen.id}:\${event.eventId}".toByteArray()).take(24),
+                id = "aurora-" + Canonical.hash("${citizen.id}:${event.eventId}").take(24),
                 eventId = event.eventId,
                 sourceEventHash = event.hash,
                 descriptor = descriptor,
@@ -202,7 +202,7 @@ internal object GeaSchema {
             ) {
                 archive = update.state
                 val cell = update.cell
-                val structureId = "aurora-cell-\${cell.first}-\${cell.second}-\${cell.third}"
+                val structureId = "aurora-cell-${cell.first}-${cell.second}-${cell.third}"
                 changedCells[structureId] = candidate to citizen.id
             }
             if (tick % 30L == 0L) projector = projector.observe(features)
