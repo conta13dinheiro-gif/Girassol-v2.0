@@ -18,7 +18,7 @@ internal data class LocalModel(val file: File, val hash: String) {
 /** Called under CognitionWork.lock on IO. A failed/cancelled import preserves the installed model. */
 internal class ModelFiles(context: Context,slot: String="models") {
     private val resolver = context.contentResolver
-    private val directory = File(context.noBackupFilesDir,slot.also { require(it=="models" || it=="review-models" || it=="adapters) }).apply { mkdirs() }
+    private val directory = File(context.noBackupFilesDir,slot.also { require(it=="models" || it=="review-models" || it=="adapters") }).apply { mkdirs() }
     private val index = AtomicFile(File(directory, "current"))
     fun current(): LocalModel? {
         val hash = try { index.readFully().toString(Charsets.US_ASCII) } catch (_: java.io.FileNotFoundException) { return null }
