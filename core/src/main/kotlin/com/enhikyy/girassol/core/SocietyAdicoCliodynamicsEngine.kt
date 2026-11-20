@@ -7,6 +7,12 @@ enum class DunbarRing { INNER_5, CLOSE_15, COMMUNITY_50, PUBLIC_150, OUTER }
 enum class AdicoDeontic { MUST, MAY, MUST_NOT }
 data class DunbarRelationship(val otherAgentId: String, val rank: Int, val ring: DunbarRing, val trust: Double)
 data class AdicoRuleDecision(val attributes: String, val deontic: AdicoDeontic, val aim: Activity, val condition: String, val objectOrElse: String, val conditionMet: Boolean, val utility: Double)
+class SocialGraphIndex internal constructor(
+    internal val outgoingBySource: Map<String, List<SocialTie>>,
+    internal val directedEdges: Map<Pair<String, String>, SocialTie>,
+    val cliodynamicsPsi: Double
+)
+
 data class SocietyCognitionResult(
     val relationships: List<DunbarRelationship>, val generalDomainTrust: Double,
     val deffuantOpinion: Double, val friedkinJohnsenOpinion: Double, val heiderFrustration: Double,
@@ -16,6 +22,16 @@ data class SocietyCognitionResult(
 
 /** Deterministic social-policy projection; WorldActor remains the sole canonical state writer. */
 object SocietyAdicoCliodynamicsEngine {
+    fun buildGraphIndex(world: WorldState): SocialGraphIndex = SocialGraphIndex(
+        outgoingBySource = world.ties.groupBy { it.from },
+        directedEdges = world.ties.associateBy { it.from to it.to },
+        cliodynamicsPsi = cliodynamicsPsi(world)
+    )
+
+    fun evaluate(world: WorldState, citizen: Citizen): SocietyCognitionResult =
+        evaluate(world, citizen, buildGraphIndex(world))
+
+    fun evaluate(world: WorldState, citizen: Citizen, graph: SocialGraphIndex): SocietyCognitionResult {
     fun classifyDunbarRing(rank: Int): DunbarRing {
         require(rank > 0)
         return when {
@@ -44,9 +60,9 @@ object SocietyAdicoCliodynamicsEngine {
         return (susceptibility * sociallyInfluencedOpinion + (1.0 - susceptibility) * intrinsicOpinion).coerceIn(-1.0, 1.0)
     }
 
-    fun evaluate(world: WorldState, citizen: Citizen): SocietyCognitionResult {
         require(world.agents.any { it.id == citizen.id }) { "Citizen is not part of this world" }
-        val outgoing = world.ties.filter { it.from == citizen.id }.sortedWith(compareByDescending<SocialTie> { betaTrust(it) }.thenBy { it.to })
+        val outgoing = graph.outgoingBySource[citizen.id].orEmpty()
+            .sortedWith(compareByDescending<SocialTie> { betaTrust(it) }.thenBy { it.to })
         val relationships = outgoing.mapIndexed { index, tie -> DunbarRelationship(tie.to, index + 1, classifyDunbarRing(index + 1), betaTrust(tie)) }
         val trust = outgoing.map(::betaTrust).average().let { if (it.isFinite()) it.coerceIn(0.0, 1.0) else 0.5 }
         val intrinsic = (citizen.genome.sociability.express() * 2.0 - 1.0).coerceIn(-1.0, 1.0)
@@ -54,8 +70,8 @@ object SocietyAdicoCliodynamicsEngine {
         for (tie in outgoing) deffuant = deffuantStep(deffuant, tie.affinity * 2.0 - 1.0, betaTrust(tie))
         val susceptibility = (0.25 + 0.5 * citizen.genome.curiosity.express()).coerceIn(0.0, 1.0)
         val fjOpinion = friedkinJohnson(deffuant, intrinsic, susceptibility)
-        val heider = heiderFrustration(world, citizen.id)
-        val psi = cliodynamicsPsi(world)
+        val heider = heiderFrustration(graph, citizen.id)
+        val psi = graph.cliodynamicsPsi
         val peerPresent = world.agents.any { it.id != citizen.id && hypot(it.x - citizen.x, it.z - citizen.z) <= 2.5 }
         fun stock(name: String) = (world.balances["market/$name"] ?: 0).coerceAtLeast(0)
         val coins = (world.balances[citizen.id + "/coins"] ?: 0).coerceAtLeast(0)
@@ -98,17 +114,18 @@ object SocietyAdicoCliodynamicsEngine {
         val beta = tie.beta.coerceAtLeast(1e-9)
         return (alpha / (alpha + beta)).coerceIn(0.0, 1.0)
     }
-    private fun heiderFrustration(world: WorldState, source: String): Double {
-        val first = world.ties.filter { it.from == source }
+    private fun heiderFrustration(graph: SocialGraphIndex, source: String): Double {
+        val first = graph.outgoingBySource[source].orEmpty()
         if (first.isEmpty()) return 0.0
-        val edges = world.ties.associateBy { it.from to it.to }
         var total = 0
         var imbalanced = 0
-        for (ij in first) for (jk in world.ties) {
-            if (jk.from != ij.to || jk.to == source) continue
-            val ik = edges[source to jk.to] ?: continue
-            total++
-            if (ij.affinity * jk.affinity * ik.affinity < 0.0) imbalanced++
+        for (ij in first) {
+            for (jk in graph.outgoingBySource[ij.to].orEmpty()) {
+                if (jk.to == source) continue
+                val ik = graph.directedEdges[source to jk.to] ?: continue
+                total++
+                if (ij.affinity * jk.affinity * ik.affinity < 0.0) imbalanced++
+            }
         }
         return if (total == 0) 0.0 else imbalanced.toDouble() / total
     }

@@ -42,6 +42,7 @@ internal object NativeMind {
             }
             citizen.id to mind
         }
+        val socialGraphIndex = SocietyAdicoCliodynamicsEngine.buildGraphIndex(world)
         val autonomy=NativeAutonomy.evaluate(world,lastActions,prepared)
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
         world.agents.forEach { citizen->
@@ -93,7 +94,7 @@ internal object NativeMind {
                 learnedValues = bank.reflections.associate { it.action to (it.expectedReward / 5.0).coerceIn(-1.0, 1.0) }
             )
             val activeWorkspace = activeInference.globalWorkspaceTopThree.map { it.activity }.toSet()
-            val society = SocietyAdicoCliodynamicsEngine.evaluate(world, citizen)
+            val society = SocietyAdicoCliodynamicsEngine.evaluate(world, citizen, socialGraphIndex)
             val scores=values(272,8).toMutableList()
             scores[citizen.activity.ordinal]+=reflexVote*0.015
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
