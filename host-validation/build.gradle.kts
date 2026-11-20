@@ -7,7 +7,7 @@ dependencies {
 kotlin.sourceSets.main {
     kotlin.srcDir("../app/src/main/java")
     kotlin.include(
-        "**/cognition/GeaNativeBridge.kt", "**/cognition/NativeMind.kt", "**/cognition/NativeAutonomy.kt",
+        "**/cognition/GeaNativeBridge.kt", "**/cognition/TsetlinReflexEngine.kt", "**/cognition/NativeMind.kt", "**/cognition/NativeAutonomy.kt",
         "**/cognition/NativeMemory.kt", "**/cognition/NativeCmaes.kt",
         "**/cognition/ShadowReplay.kt", "**/physics/NativeSpatial.kt",
         "**/render/NativeCityMesh.kt", "**/render/NativeProjection.kt"
