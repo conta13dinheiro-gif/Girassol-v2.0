@@ -95,12 +95,13 @@ import kotlin.math.*
     val personality: List<Double>,val exposure: List<Int> = List(8) { 0 },
     val learnedTick: Long = -1,val novelty: Double = 0.0,val behaviors: List<List<Double>> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val memory: MemoryBank = MemoryBank(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel()) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val nativeEngineTrace: List<Double> = List(8) { 0.0 }) {
     fun valid(tick: Long): Boolean = parameters.size==248 && parameters.all { it.isFinite() && abs(it)<=8 } &&
         parameters.subList(168,176).all { it in .2..8.0 } && hidden.size==8 && hidden.all { it.isFinite() && abs(it)<=1.00001 } &&
         personality.size==5 && personality.all { it.isFinite() && it in 0.0..1.0 } && exposure.size==8 && exposure.all { it>=0 } &&
         learnedTick in -1..tick && novelty.isFinite() && novelty in 0.0..1.0 &&
-        memory.valid(tick) && psyche.valid() && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
+        memory.valid(tick) && psyche.valid() && nativeEngineTrace.size == 8 && nativeEngineTrace.all { it.isFinite() && it in 0.0..1.0 } && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
 
         fun inherit(world: WorldState,citizen: Citizen,firstId: String,secondId: String,first: MindState,second: MindState): MindState {
@@ -140,7 +141,8 @@ import kotlin.math.*
                 novelty=(first.novelty+second.novelty)*.5,
                 behaviors=behaviors,
                 memory=inheritedMemory,
-                psyche=SoulModel.inherit(world,citizen,first.psyche,second.psyche)
+                psyche=SoulModel.inherit(world,citizen,first.psyche,second.psyche),
+                nativeEngineTrace=List(8) { i -> ((first.nativeEngineTrace[i] + second.nativeEngineTrace[i]) / 2.0).coerceIn(0.0,1.0) }
             ).also { check(it.valid(world.tick)) }
         }
         fun initial(world: WorldState,citizen: Citizen): MindState {
@@ -166,7 +168,7 @@ import kotlin.math.*
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
         exposure=m.exposure.toList(),behaviors=m.behaviors.map { it.toList() },memory=m.memory.snapshot(),
-        psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList())) },
+        psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList()),nativeEngineTrace=m.nativeEngineTrace.toList()) },
         decisions=decisions.toMap(),evolution=evolution?.snapshot(),innerSpeech=innerSpeech.toMap())
     fun applicable(world: WorldState): Boolean {
         val ids=world.agents.map { it.id }.toSet()
