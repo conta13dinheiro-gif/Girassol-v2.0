@@ -147,7 +147,9 @@ object EpistemicImmunityEngine {
                 .thenBy { it.sourceAgentId }
                 .thenBy { it.opinion.projectedProbability() }
         )
-        val unique = ordered.distinctBy { it.sourceEventHash }
+        // Same agent repeating the same source event is a duplicate. Different agents
+        // reviewing the same acquisition remain correlated and are combined by averaging.
+        val unique = ordered.distinctBy { it.sourceEventHash to it.sourceAgentId }
         var fused = unique.first().opinion
         unique.drop(1).forEach { witness ->
             fused = SubjectiveOpinion.averagingFuseCorrelated(fused, witness.opinion)
@@ -155,7 +157,7 @@ object EpistemicImmunityEngine {
         return EpistemicFusionResult(
             claimHash = claimHashes.single(),
             opinion = fused,
-            acceptedSourceEventHashes = unique.map { it.sourceEventHash },
+            acceptedSourceEventHashes = unique.map { it.sourceEventHash }.distinct(),
             ignoredDuplicateCount = ordered.size - unique.size
         )
     }
