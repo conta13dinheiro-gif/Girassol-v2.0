@@ -23,11 +23,12 @@ internal object TsetlinReflexEngine {
     fun evaluate(agentId: String, features: ByteArray, outcome: String?): Int {
         require(agentId.isNotBlank() && features.size == FEATURE_COUNT && features.all { it == 0.toByte() || it == 1.toByte() })
         val model = handle(agentId)
+        val vote = GeaNativeBridge.nativeTsetlinPredictVote(model, features)
         when (outcome) {
             "OK" -> check(GeaNativeBridge.nativeTsetlinTrainStep(model, features, true))
             "PRECONDITION_FAILED" -> check(GeaNativeBridge.nativeTsetlinTrainStep(model, features, false))
         }
-        return GeaNativeBridge.nativeTsetlinPredictVote(model, features)
+        return vote
     }
 
     fun snapshots(): Map<String, ByteArray> = handles.entries
