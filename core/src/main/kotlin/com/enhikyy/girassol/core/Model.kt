@@ -50,7 +50,14 @@ class DeterministicRng(private var state: Long) {
     init { require(listOf(maternal, paternal, dominanceA, dominanceB).all { it.isFinite() && it in 0.0..1.0 }) }
     fun express() = if (dominanceA + dominanceB == 0.0) (maternal + paternal) / 2 else (maternal * dominanceA + paternal * dominanceB) / (dominanceA + dominanceB)
 }
-@Serializable data class Genome(val curiosity: Locus, val sociability: Locus, val generation: Int = 1)
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable data class Genome(
+    val curiosity: Locus,
+    val sociability: Locus,
+    val generation: Int = 1,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val symbiosis: Locus = Locus(.5, .5, .5, .5)
+)
 @Serializable data class Memory(val tick: Long, val eventId: Long, val action: Activity, val reward: Double, val semantic: Boolean = false)
 @Serializable data class GenealogyRecord(val parentOne: String, val parentTwo: String, val child: String, val tick: Long, val genomeHash: String) {
     fun valid(worldTick: Long, agents: List<Citizen>): Boolean {
