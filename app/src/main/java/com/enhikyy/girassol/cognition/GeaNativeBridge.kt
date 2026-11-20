@@ -10,11 +10,7 @@ object GeaNativeBridge {
     } catch (error: LinkageError) { error }
 
     val available: Boolean get() = failure == null
-
-    fun requireAvailable() {
-        failure?.let { throw it }
-    }
-
+    fun requireAvailable() { failure?.let { throw it } }
     private external fun contractVersion(): Int
     external fun nativeCreateTsetlin(features: Int, clauses: Int, states: Int, specificity: Float, threshold: Int, seed: Long): Long
     external fun nativeDestroyTsetlin(handle: Long)
@@ -22,4 +18,5 @@ object GeaNativeBridge {
     external fun nativeTsetlinPredictVote(handle: Long, features: ByteArray): Int
     external fun nativeTsetlinSerialize(handle: Long): ByteArray?
     external fun nativeTsetlinRestore(blob: ByteArray): Long
+    external fun nativeHardwareProbe(): String
 }

@@ -491,10 +491,29 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 KeyValue("ABIs suportadas", report.supportedAbis.joinToString())
                 KeyValue("GPU / renderer", report.gpuRenderer)
                 KeyValue("RAM física / CPUs visíveis", String.format(Locale.ROOT, "%.1f GB · %d", report.totalRamGb, report.logicalCpuCount))
-                KeyValue("Biblioteca OpenCL", if (report.openClLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrada nos caminhos padrão")
-                KeyValue("Loader Vulkan", if (report.vulkanLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrado nos caminhos padrão")
+                KeyValue("Sonda nativa", if(report.nativeProbeAvailable) "Ativa" else "Indisponível · fallback Kotlin")
+                KeyValue("CPU SIMD", listOfNotNull(
+                    "NEON".takeIf { report.hasNeon },
+                    "DOTPROD".takeIf { report.hasDotProd },
+                    "I8MM".takeIf { report.hasI8mm },
+                    "SVE2".takeIf { report.hasSve2 },
+                    "AVX2".takeIf { report.hasAvx2 }
+                ).ifEmpty { listOf("Sem recursos adicionais confirmados") }.joinToString(" · "))
+                KeyValue("Núcleos Big/Prime", report.bigCoreIds.joinToString().ifBlank { "Não identificados" })
+                KeyValue("Núcleos LITTLE", report.littleCoreIds.joinToString().ifBlank { "Não identificados" })
+                KeyValue("Variantes CPU GGML", report.ggmlVariantOrder)
+                KeyValue("Loader OpenCL", when {
+                    report.nativeProbeAvailable && report.openClLibraryFileFound -> "Loader e símbolo disponíveis"
+                    report.openClLibraryFileFound -> "Arquivo presente; símbolo não verificado"
+                    else -> "Não disponível"
+                })
+                KeyValue("Loader Vulkan", when {
+                    report.nativeProbeAvailable && report.vulkanLibraryFileFound -> "Loader e símbolo disponíveis"
+                    report.vulkanLibraryFileFound -> "Arquivo presente; símbolo não verificado"
+                    else -> "Não disponível"
+                })
                 KeyValue("Backend GGUF neste build", "CPU · llama.cpp")
-                Text("Diagnóstico informativo. Encontrar uma biblioteca não comprova driver funcional; este build ainda não ativa seleção dinâmica OpenCL/Vulkan nem KleidiAI.", color=Muted, fontSize=10.sp)
+                Text("A sonda identifica instruções e símbolos de loaders sem inicializar dispositivos nem executar código do driver. Isso não comprova um ICD funcional nem aceleração ativa. O backend deste build permanece CPU; a seleção GPU exige integração e validação próprias.", color=Muted, fontSize=10.sp)
             }
         }
         item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); KeyValue("WakeLock parcial", if(ui.wakeLockHeld && ui.running) "Ativo" else "Liberado"); Text("O estado do WakeLock é lido de PowerManager. Isso não garante execução ininterrupta: Android e fabricantes continuam controlando processos, bateria e temperatura. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }

@@ -8,6 +8,10 @@ public final class GeaContractIntegration {
         }
         if (expected) {
             GeaNativeBridge.INSTANCE.requireAvailable();
+            String hardware = GeaNativeBridge.INSTANCE.nativeHardwareProbe();
+            if (hardware == null || !hardware.startsWith("abi=") || !hardware.contains("opencl_loader=")) {
+                throw new AssertionError("Native hardware probe report is incomplete");
+            }
         } else {
             try {
                 GeaNativeBridge.INSTANCE.requireAvailable();
