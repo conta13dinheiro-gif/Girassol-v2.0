@@ -117,6 +117,29 @@ class MigrationTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0], 1)
             self.assertEqual(db.execute('SELECT count(*) FROM tsetlin_automata_blobs').fetchone()[0], 0)
 
+    def test_economy_projection_double_entries_and_infrastructure_commit_atomically(self):
+        with baseline() as db:
+            migrate(db)
+            with db:
+                db.execute("INSERT INTO events VALUES(2,2,'economic-event')")
+                insert(db, TABLES[5], (2, 0, 'tools', 'market', 'timber', 1))
+                insert(db, TABLES[5], (2, 1, 'structures', 'market', 'timber', 4))
+                insert(db, TABLES[2], (2, 'annex_research', 'agent', 2402, '{"investedTimber":4}'))
+            deltas = dict(db.execute("""SELECT account, sum(delta) FROM (
+              SELECT debit_account AS account, amount AS delta FROM double_entry_ledger WHERE resource='timber'
+              UNION ALL SELECT credit_account, -amount FROM double_entry_ledger WHERE resource='timber'
+            ) GROUP BY account"""))
+            self.assertEqual(deltas, {'market': -5, 'structures': 4, 'tools': 1})
+            self.assertEqual(sum(deltas.values()), 0)
+            with self.assertRaises(sqlite3.IntegrityError):
+                with db:
+                    db.execute("INSERT INTO events VALUES(3,3,'must-roll-back')")
+                    insert(db, TABLES[5], (3, 0, 'market', 'COMMUNAL_COMMONS', 'coins', 1))
+                    insert(db, TABLES[2], (3, 'invalid-expiry', 'agent', 2, '{}'))
+            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0], 2)
+            self.assertEqual(db.execute('SELECT count(*) FROM double_entry_ledger WHERE event_id=3').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM ecological_niche_structures WHERE event_id=3').fetchone()[0], 0)
+
     def test_corrupt_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory)/'world.db'

@@ -74,6 +74,19 @@ internal object GeaSchema {
     /** Derived records commit with their canonical event, never before it. */
     fun record(db: SQLiteDatabase, transition: Transition, previous: WorldState?) {
         val event = transition.event
+        event.transfers.forEachIndexed { index,entry ->
+            check(entry.valid())
+            db.insertOrThrow("double_entry_ledger",null,ContentValues().apply {
+                put("event_id",event.eventId); put("entry_id",index); put("debit_account",entry.to)
+                put("credit_account",entry.from); put("resource",entry.resource); put("amount",entry.amount)
+            })
+        }
+        event.constructed.forEach { structure ->
+            db.insertOrThrow("ecological_niche_structures",null,ContentValues().apply {
+                put("event_id",event.eventId); put("structure_id",structure.room); put("owner_id",structure.builder)
+                put("expires_tick",structure.expires); put("payload",Json.encodeToString(structure))
+            })
+        }
         event.cognition?.evolution?.let { revision ->
             val payload = Json.encodeToString(revision)
             db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
@@ -110,6 +123,27 @@ internal object GeaSchema {
 
     fun fork(db: SQLiteDatabase, eventId: Long) {
         for (table in tables) db.execSQL("INSERT INTO $table SELECT * FROM origin.$table WHERE event_id<=?", arrayOf(eventId))
+    }
+
+    fun auditEconomyEvent(db: SQLiteDatabase,event: CanonicalEvent) {
+        db.rawQuery("SELECT entry_id,debit_account,credit_account,resource,amount FROM double_entry_ledger WHERE event_id=? ORDER BY entry_id",arrayOf(event.eventId.toString())).use { rows ->
+            var count=0
+            while(rows.moveToNext()) {
+                check(count<event.transfers.size && rows.getInt(0)==count)
+                val expected=event.transfers[count++]
+                check(expected.to==rows.getString(1) && expected.from==rows.getString(2) && expected.resource==rows.getString(3) && expected.amount==rows.getInt(4))
+            }
+            check(count==event.transfers.size) { "Missing double-entry evidence" }
+        }
+        db.rawQuery("SELECT structure_id,owner_id,expires_tick,payload FROM ecological_niche_structures WHERE event_id=? ORDER BY structure_id",arrayOf(event.eventId.toString())).use { rows ->
+            val expected=event.constructed.sortedBy { it.room }; var count=0
+            while(rows.moveToNext()) {
+                check(count<expected.size)
+                val structure=expected[count++]
+                check(structure.room==rows.getString(0) && structure.builder==rows.getString(1) && structure.expires==rows.getLong(2) && structure==Json.decodeFromString<EcologicalNicheStructure>(rows.getString(3)))
+            }
+            check(count==expected.size) { "Missing ecological infrastructure evidence" }
+        }
     }
 
     fun audit(db: SQLiteDatabase) {

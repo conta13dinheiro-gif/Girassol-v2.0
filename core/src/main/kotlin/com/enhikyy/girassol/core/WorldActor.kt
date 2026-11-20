@@ -16,7 +16,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
 
     /** Same admitted intentions used by the native planner and by execution. */
     @Synchronized fun intentions(neural: NeuralProposal? = null,cognition: CognitiveFrame? = null): Map<String,Activity> {
-        val base=state.copy(tick=state.tick+1,agents=state.agents.map { it.copy(needs=it.needs.metabolize()) })
+        val base=state.copy(tick=state.tick+1,agents=state.agents.map { it.copy(needs=metabolize(it)) })
         val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) }
         val input=cognition?.takeIf { rulesVersion>=4 && it.applicable(state) }
         return base.agents.associate { a->a.id to (if(a.id==admitted?.agentId) admitted.activity
@@ -27,7 +27,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val tick = state.tick + 1
         // 1: Runtime input boundary. Thermal policy changes pacing outside this logical core.
         // 2: Environment, spatial trail and metabolism.
-        val base = state.copy(tick = tick, agents = state.agents.map { it.copy(needs = it.needs.metabolize()) }, trail = state.trail.map { it * .97 })
+        val base = state.copy(tick = tick, agents = state.agents.map { it.copy(needs = metabolize(it)) }, trail = state.trail.map { it * .97 })
         // 3-7: Perception, bounded memory, appraisal, utility and intention hysteresis.
         val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
@@ -37,21 +37,36 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 8-9: Bounded typed neural input; arbitration below rechecks physical preconditions.
         val agents = base.agents.map { it.copy(acting = false) }.toMutableList()
         val balances = base.balances.toMutableMap()
+        val stockJournal=ArrayList<StockTransfer>(1024)
+        val economyEnabled=rulesVersion>=8 && cognitiveInput?.economyEnabled==true
+        require(state.economy==null || economyEnabled) { "Active economy requires its canonical input" }
+        fun transfer(stock: MutableMap<String,Int>,from: String,to: String,item: String,amount: Int): Boolean {
+            val accepted=Companion.transfer(stock,from,to,item,amount)
+            if(accepted && economyEnabled) {
+                check(stockJournal.size<1024)
+                stockJournal+=StockTransfer(from,to,item,amount)
+            }
+            return accepted
+        }
+        val economy=if(economyEnabled) DoubleEntryEconomyAndStigmergy(state) { from,to,item,amount -> transfer(balances,from,to,item,amount) } else null
+        val expiredRooms=economy?.expiredRooms().orEmpty()
+
         if (rulesVersion >= 2) {
             // Explicit returns from environmental sinks: no resource or currency is minted.
             if (tick % 2L == 0L) {
-                transfer(balances, "environment", "market", "water", 1)
-                transfer(balances, "environment", "market", "food", 1)
+                transfer(balances, "environment", if(economyEnabled && tick%4L==0L) DoubleEntryEconomyAndStigmergy.COMMONS else "market", "water", 1)
+                transfer(balances, "environment", if(economyEnabled && tick%4L==0L) DoubleEntryEconomyAndStigmergy.COMMONS else "market", "food", 1)
             }
             if (tick % 4L == 0L) transfer(balances, "environment", "market", "coffee", 1)
             if (tick % 6L == 0L) transfer(balances, "archive", "market", "paper", 1)
+            if(economyEnabled && tick%8L==0L) transfer(balances,"environment","market","timber",1)
         }
         val ties = base.ties.toMutableList()
         val words = base.words.toMutableList()
         val dialogues = base.dialogues.toMutableList()
         val artifacts = base.artifacts.toMutableList()
         val genealogy = base.genealogy.toMutableList()
-        val rooms = base.rooms.toMutableList()
+        val rooms = base.rooms.filterNot { it.id in expiredRooms }.toMutableList()
         val counts = base.actionCounts.toMutableMap()
         val trails = base.trail.toMutableList()
         val records = mutableListOf<ActionRecord>()
@@ -61,7 +76,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         for (index in order) {
             var a = agents[index]
             val action = proposals.getValue(a.id)
-            val room = base.rooms.first { it.id == action.room }
+            val room = if(economyEnabled) SmartTerrain.target(state,a,action) else base.rooms.first { it.id == action.room }
+            economy?.prepare(a,action,room)
             val pose=physics?.poses?.get(a.id)
             if(pose!=null) a=a.copy(x=pose.position.x,z=pose.position.z)
             val distance = hypot(room.x - a.x, room.z - a.z)
@@ -70,18 +86,23 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                 a = if(pose==null) a.copy(x = a.x + (room.x - a.x) * factor, z = a.z + (room.z - a.z) * factor, activity = action)
                     else a.copy(activity=action)
                 records += ActionRecord(a.id, action, "MOVE")
-            } else if ((occupied[room.id] ?: 0) < room.capacity) {
+            } else if ((occupied[room.id] ?: 0) < room.capacity && (economy?.reserve(a,room) ?: true)) {
                 // 11: All physical preconditions are checked again at execution time.
                 occupied[room.id] = (occupied[room.id] ?: 0) + 1
                 val before = a.needs
                 var needs = before
                 var success = true
                 when (action) {
-                    Activity.WATER -> { success = transfer(balances, "market", "environment", "water", 1); if (success) needs = needs.copy(hydration = .99) }
+                    Activity.WATER -> { val source=if(economyEnabled && (balances["market/water"] ?: 0)==0) DoubleEntryEconomyAndStigmergy.COMMONS else "market"; success = transfer(balances, source, "environment", "water", 1); if (success) needs = needs.copy(hydration = .99) }
                     Activity.COFFEE -> { success = transfer(balances, "market", "environment", "coffee", 1); if (success) needs = needs.copy(energy = (needs.energy + .12).coerceAtMost(1.0)) }
                     Activity.EAT -> {
-                        success = (balances["${a.id}/coins"] ?: 0) >= 1 && (balances["market/food"] ?: 0) >= 1
-                        if (success) { check(transfer(balances, a.id, "market", "coins", 1)); check(transfer(balances, "market", "environment", "food", 1)); needs = needs.copy(glucose = .99) }
+                        val source=if(economyEnabled && (balances["market/food"] ?: 0)==0) DoubleEntryEconomyAndStigmergy.COMMONS else "market"
+                        val subsidy=economyEnabled && (balances["${a.id}/coins"] ?: 0)==0 && (balances["${DoubleEntryEconomyAndStigmergy.COMMONS}/coins"] ?: 0)>0
+                        success = ((balances["${a.id}/coins"] ?: 0) >= 1 || subsidy) && (balances["$source/food"] ?: 0) >= 1
+                        if (success) {
+                            if(subsidy) check(transfer(balances,DoubleEntryEconomyAndStigmergy.COMMONS,a.id,"coins",1))
+                            check(transfer(balances, a.id, "market", "coins", 1)); check(transfer(balances, source, "environment", "food", 1)); needs = needs.copy(glucose = .99)
+                        }
                     }
                     Activity.SLEEP -> needs = needs.copy(energy = (needs.energy + .1).coerceAtMost(1.0))
                     Activity.TALK -> {
@@ -114,7 +135,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                     }
                     Activity.STUDY -> { needs = needs.copy(curiosity = (needs.curiosity + .15).coerceAtMost(1.0)); a = a.copy(skill = a.skill.practice(tick)) }
                     Activity.WRITE -> {
-                        success = transfer(balances, "market", "archive", "paper", 1)
+                        success = (economy?.ensureTool(a,action,balances) ?: true) && transfer(balances, "market", "archive", "paper", 1)
                         if (success) {
                             needs = needs.copy(curiosity = (needs.curiosity + .25).coerceAtMost(1.0))
                             artifacts += Artifact(tick, a.name, "Caderno de ${a.name} · ${artifacts.size + 1}", "No ciclo $tick observei ${a.memories.takeLast(3).joinToString { it.action.label.lowercase() }.ifBlank { "a vida na colônia" }}. Compartilhar o conhecimento mantém nossa comunidade viva.", eventId + 1)
@@ -122,9 +143,13 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                         }
                     }
                     Activity.BUILD -> {
-                        success = (rulesVersion >= 6 || rooms.size < 10) && transfer(balances, "market", "structures", "timber", 4)
+                        success = (rulesVersion >= 6 || rooms.size < 10) && (!economyEnabled || rooms.size<134) && (economy?.ensureTool(a,action,balances) ?: true) && transfer(balances, "market", "structures", "timber", 4)
                         if (success) {
-                            if (rulesVersion >= 6) rooms += ProceduralDistricts.nextAnnex(rooms,state.seed)
+                            if (rulesVersion >= 6) {
+                                val planned=ProceduralDistricts.nextAnnex(rooms,state.seed)
+                                val annex=if(economyEnabled) planned.copy(id=planned.id.substringBeforeLast('_')+"_"+Canonical.hash("${state.seed}:$tick:${a.id}").take(12)+"_"+planned.id.substringAfterLast('_')) else planned
+                                rooms+=annex; economy?.constructed(annex,a.id)
+                            }
                             else {
                                 val n = rooms.size - 6
                                 rooms += Room("annex_$n", "Anexo ${n + 1}", 2.0 + n * 2.0, 9.0, 1.7, 1.5, 2)
@@ -137,12 +162,14 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                     // Wages are paid out of market coins after validated productive work.
                     if (rulesVersion >= 2 && action in setOf(Activity.WRITE, Activity.BUILD)) {
                         transfer(balances, "market", a.id, "coins", 1)
+                        if(economyEnabled && (balances["${a.id}/coins"] ?: 0)>4) transfer(balances,a.id,DoubleEntryEconomyAndStigmergy.COMMONS,"coins",1)
                     }
                     val reward = (needs.energy - before.energy) + (needs.hydration - before.hydration) + (needs.glucose - before.glucose) + (needs.social - before.social) + (needs.curiosity - before.curiosity)
                     val memory = Memory(tick, eventId + 1, action, reward, action == Activity.SLEEP)
                     a = a.copy(needs = needs, memories = (a.memories + memory).takeLast(32), acting = true)
                     counts[action.name] = (counts[action.name] ?: 0) + 1
                 }
+                economy?.finish(a,action,success)
                 records += ActionRecord(a.id, action, if (success) "OK" else "PRECONDITION_FAILED")
                 a = a.copy(activity = action)
             } else records += ActionRecord(a.id, action, "RESERVED")
@@ -200,9 +227,14 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             }
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val next = base.copy(socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        val next = base.copy(economy=economy?.snapshot() ?: base.economy,socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
-        val raw = CanonicalEvent(version = if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        if(economyEnabled) {
+            val projected=state.balances.toMutableMap()
+            stockJournal.forEach { check(Companion.transfer(projected,it.from,it.to,it.resource,it.amount)) }
+            check((projected.keys+next.balances.keys).all { (projected[it] ?: 0)==(next.balances[it] ?: 0) }) { "Unjournaled stock mutation" }
+        }
+        val raw = CanonicalEvent(constructed=next.economy?.niches.orEmpty().filter { n -> state.economy?.niches.orEmpty().none { it.room==n.room } },transfers=stockJournal.toList(),version = if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -305,6 +337,14 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         genealogy += GenealogyRecord(current.id, partner.id, childId, tick, Canonical.genomeHash(genome))
     }
 
+    private fun metabolize(citizen: Citizen): Needs {
+        val needs=citizen.needs.metabolize()
+        val bonus=state.economy?.niches.orEmpty().count { structure ->
+            structure.expires>state.tick+1 && state.rooms.any { it.id==structure.room && hypot(citizen.x-it.x,citizen.z-it.z)<=4.0 }
+        }.times(.08).coerceAtMost(.75)
+        return if(bonus==0.0) needs else needs.copy(energy=(needs.energy+.002*bonus).coerceAtMost(1.0))
+    }
+
     private fun choose(a: Citizen, tick: Long, world: WorldState): Activity {
         val fallback = chooseLegacy(a, tick, world)
         return if (rulesVersion >= 6) UtilityGoapPlanner.choose(world, a, fallback) else fallback
@@ -315,7 +355,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         if (n.hydration < .42) return Activity.WATER
         if (n.glucose < .4) {
             // A citizen without coins can earn a wage by writing before visiting the market.
-            if (rulesVersion >= 2 && (world.balances["${a.id}/coins"] ?: 0) == 0 &&
+            if (rulesVersion >= 2 && (world.economy==null || (world.balances["${DoubleEntryEconomyAndStigmergy.COMMONS}/coins"] ?: 0)==0) && (world.balances["${a.id}/coins"] ?: 0) == 0 &&
                 (world.balances["market/coins"] ?: 0) > 0 &&
                 ((world.balances["market/paper"] ?: 0) + (world.balances["archive/paper"] ?: 0)) > 0) return Activity.WRITE
             return Activity.EAT
@@ -368,6 +408,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
+            if(s.economy?.valid(s)==false) add("Economia inválida")
             if(!s.socialSynchrony.isFinite() || s.socialSynchrony !in 0.0..1.0) add("Sincronização social inválida")
             if(s.spatial.keys.any { id->s.agents.none { it.id==id } } || s.spatial.values.any { !it.valid() }) add("Estado espacial inválido")
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")

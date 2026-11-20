@@ -21,7 +21,7 @@ import kotlin.math.hypot
         if(sourceTick!=world.tick || sourceHash!=Canonical.hash(Canonical.state(world)) || seed!=world.seed ||
             fixedDeltaTime!=1.0/60.0 || substeps!=30 || intentions!=proposals || poses.keys!=proposals.keys) return false
         return world.agents.all { a->
-            val p=poses.getValue(a.id);val room=world.rooms.first { it.id==proposals.getValue(a.id).room }
+            val p=poses.getValue(a.id);val room=SmartTerrain.target(world,a,proposals.getValue(a.id))
             p.valid() && p.distance<=.4501 && (p.corrected || hypot(p.route.first().x-a.x,p.route.first().z-a.z)<1e-5) &&
                 (!p.reached || (abs(p.position.x-room.x)<=room.width/2 && abs(p.position.z-room.z)<=room.depth/2))
         }

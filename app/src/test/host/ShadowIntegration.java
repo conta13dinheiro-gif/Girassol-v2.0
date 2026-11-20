@@ -16,6 +16,8 @@ public class ShadowIntegration {
       var spatial=com.enhikyy.girassol.physics.NativeSpatial.INSTANCE.advance(live.getState(),live.intentions(null,input));
       var transition=live.step(null,input,spatial);
       if(transition.getEvent().getVersion()!=WorldActor.CURRENT_RULES_VERSION) throw new AssertionError("wrong envelope version");
+      if(transition.getState().getEconomy()==null || !transition.getState().getEconomy().valid(transition.getState())) throw new AssertionError("missing physical economy");
+      for(var entry:transition.getEvent().getTransfers()) if(!entry.valid()) throw new AssertionError("invalid ledger");
       actions=transition.getEvent().getActions();
     }
     if(!one.getCheckpoint().equals(live.checkpoint())) throw new AssertionError("shadow differs from live rules");

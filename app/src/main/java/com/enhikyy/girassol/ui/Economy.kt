@@ -38,7 +38,16 @@ import kotlin.math.*
                 }
             }
         }
-        Text("Verde: mercado · azul: cidadãos · âmbar: ambiente, arquivo e estruturas",color=Solar.Muted,fontSize=11.sp)
+        Text("Verde: mercado · azul: cidadãos · âmbar: ambiente, bens comuns, arquivo, ferramentas e estruturas",color=Solar.Muted,fontSize=11.sp)
+        world.economy?.let { economy ->
+            Text("Bens comuns",style=MaterialTheme.typography.titleLarge)
+            val account=com.enhikyy.girassol.core.DoubleEntryEconomyAndStigmergy.COMMONS
+            Text("Água: ${world.balances["$account/water"] ?: 0} · Alimento: ${world.balances["$account/food"] ?: 0} · Moedas: ${world.balances["$account/coins"] ?: 0}")
+            Text("${economy.tools.size} ferramentas · ${economy.niches.size} anexos ativos · ${economy.leases.size} reservas",color=Solar.Muted)
+            val completed=economy.jobs.count { it.phase=="DONE" }
+            val travelling=economy.jobs.count { it.phase=="MOVE_TO" }
+            Text("Trabalho no ciclo: $completed concluídos · $travelling em deslocamento",color=Solar.Muted)
+        }
         Spacer(Modifier.height(8.dp)); Text("Práticas da comunidade",style=MaterialTheme.typography.titleLarge)
         val total=world.actionCounts.values.sum().coerceAtLeast(1)
         val colors=listOf(Solar.Cognitive,Solar.Amber,Solar.Biosphere,Color(0xffa78bfa),Color(0xfff472b6),Color(0xfffb923c),Color(0xff2dd4bf),Color(0xff818cf8))

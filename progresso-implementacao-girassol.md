@@ -120,6 +120,10 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - Comando completo testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon passou em 6m17s (121 tarefas). Os oito APKs passaram em apksigner verify; as 18 exportações foram conferidas nas três ABIs do universal Release. Release segue usando chave debug. CI deste novo commit será disparado pelo push; sucesso remoto não é presumido.
 - Limites ainda sem medição: latência, RAM total e carga 24/7 no Moto G62; testes instrumentados Android não executados por ausência de dispositivo.
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e0a1af0de856bd0de106f695e3a7e5d131ed0279b7ab0d0c837c3d386fde32cf -->
+
 ## Entrega atual — Frente 1 / RSI (2026-11-20)
 
 **Cobertura funcional local: 27,3% (3/11 frentes: 3, 5 e 1).** São frentes implementadas e integradas com os testes locais descritos; não é percentual de esforço, de cobertura de linhas ou de aceite no aparelho. As oito frentes das Fases 3 e 4 continuam pendentes. A próxima é a Frente 8.
@@ -134,6 +138,26 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - JNI final passou: 500 transições, equivalência live/shadow com genoma alterado, repetição determinística, vinte propostas com vinte resultados terminais, cancelamento preservando proposta e recusa de avaliação após falha do gravador. Todos os candidatos dessa busca foram recusados em treino; não houve promoção nem execução da janela de validação de um vencedor nessa rodada. Testes de unidade cobrem aceitação/recusa das duas janelas; não foi fabricado um vencedor.
 - Build com core/host/instrumentation compile/testDebugUnitTest/lintDebug/assembleDebug/assembleRelease passou em 7 minutos, 137 tarefas. Os oito APKs passaram em apksigner verify; 18 símbolos JNI foram conferidos em todas as três ABIs do universal Release. Release continua com chave debug. O push dispara nova Action; sucesso remoto deste commit ainda não é presumido.
 - Testes instrumentados de migração 1–5→6 e recuperação real do WorldStore compilaram, mas não executaram: adb não encontrou dispositivo, a lista de AVDs está vazia e /dev/kvm não existe. A verificação em software não foi iniciada sem emulador/imagem instalados. RAM total/latência/24 horas no Moto G62 continuam sem medição. Os limites novos de genoma, gramática, candidatos e payload não substituem essa medição nem fecham os limites dos motores das próximas frentes.
+
+## Entrega atual — Frente 8 / Economia e mundo (2026-11-20)
+
+**Cobertura funcional local: 36,4% (4/11 frentes: 3, 5, 1 e 8).** A métrica conta frentes implementadas, integradas e verificadas localmente com o mesmo peso; não representa esforço, cobertura de linhas ou aceite no Moto G62. Permanecem sete frentes: 2, 6, 4, 7, 9, 10 e 11.
+
+- Base desta entrega: `0b4523bc6210b4040178850acd62b26b16631dfb`. A Action desse commit, execução `44651559465`, terminou com sucesso e publicou Girassol-debug, Girassol-release e Girassol-checksums. O workflow existente dispara em push, PR e manualmente; orienta escolher app-arm64-v8a-debug.apk no Moto G62. Sucesso remoto da Frente 8 depende da execução iniciada pelo próximo push.
+- WorldActor registra toda transferência aceita como débito/crédito conservativo e confere a reconstrução dos saldos antes de publicar. Bens comuns recebem contribuições e recursos reciclados, financiam alimentação de habitantes sem moedas e fornecem água/alimento disponíveis; não há emissão de recursos/moedas. GOAP e execução consultam os fundos comuns e os custos das ferramentas. O teste de insolvência encontrou e corrigiu uma escolha indevida de WRITE antes do auxílio disponível.
+- Ferramentas de escrita/construção imobilizam madeira real, duram 32 usos e devolvem material ao ambiente quando quebram. Construção consome quatro unidades adicionais e produz anexo utilizável. Smart Terrain anuncia as atividades dos anexos reais e direciona o solver JNI ao cômodo escolhido. Jobs registram reserva, deslocamento, execução, recibo e interrupção, com referência à experiência anterior quando existente. Reservas têm TTL de 30 ticks e capacidade do cômodo; falhas/interrupções liberam a reserva.
+- Infraestruturas ficam no checkpoint, reduzem o custo metabólico nas proximidades e expiram em 2.400 ticks, removendo o anexo físico e devolvendo a madeira ao ambiente. Estoque estrutural anterior é preservado em legacyTimber sem inventar autoria ou expiração retroativa. IDs novos de anexos incluem hash para evitar colisão após expirações.
+- Estigmergia usa oito canais de 12×12 células, difusão de cinco pontos, bordas refletivas e evaporação de 3% por tick. Células de quatro metros cobrem 48×48 metros e os 128 terrenos procedurais testados. Foi corrigida a projeção inicial que concentrava anexos na borda. Os sinais influenciam a pontuação cognitiva. Limites adicionais: 150 jobs/reservas, 300 ferramentas, 128 infraestruturas e 1.024 transferências por tick. Esses limites não comprovam RAM total em 4 GB.
+- As tabelas double_entry_ledger e ecological_niche_structures recebem os registros na mesma transação do evento/checkpoint. A auditoria confere conteúdo, ordem e quantidade contra o evento canônico, detectando registros alterados ou ausentes. Não houve migração adicional: são produtores das tabelas do Schema 5. Produtores completos de crenças, instituições e biblioteca Voyager continuam associados às próximas frentes.
+- Novos campos de estado/evento e a ativação econômica têm defaults omitidos; eventos históricos sem ativação mantêm o caminho anterior. Permanecem CURRENT_RULES_VERSION=8, teto de admissão de 150 habitantes, alelos, IDs de descendentes por hash e idade Double. Testes históricos e de reprodução continuam passando.
+- Verificação final local: **105 testes core, 13 do app, 12 testes SQLite reais**, host-validation e lintDebug aprovados. SQLite inclui migração, corrupção, disco cheio, constraints, rollback e atomicidade de ledger/infraestrutura. As dez suítes nativas e injeção HNSW passaram com ASan/UBSan. As 18 declarações JNI correspondem ao C++ e às exportações nas três ABIs.
+- scripts/test-mind-jni.sh final passou: contrato ausente/presente, 500 transições reais com replay exato, construção/ferramenta/ledger/anexo no solver C++, equivalência live/shadow com economia ativa, 21 avaliações RSI, isolamento, cancelamento, recusa de escrita e idade/entradas inválidas. Nenhum dos vinte genomas passou por todos os gates de treino; não houve promoção fabricada. A primeira versão do teste de construção pressupunha trabalho no primeiro tick; o teste foi corrigido para exigir chegada física efetiva e continuou passando pelo fluxo real.
+- Comando final `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon` passou em **5m35s**, 137 tarefas. Os **oito APKs** corrigidos passaram em apksigner verify. Release ainda usa chave debug; identidade persistente para distribuição atualizável continua pendente.
+- Testes instrumentados de WorldStore, reabertura e remoção indevida de lançamento compilaram, mas não executaram: continuam ausentes dispositivo/AVD/KVM. Não foram medidos RAM total, latência ou operação 24 horas no alvo. A Frente 2 é a próxima implementação.
+
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 

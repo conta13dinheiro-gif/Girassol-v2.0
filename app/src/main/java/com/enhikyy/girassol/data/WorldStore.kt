@@ -173,7 +173,11 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             val checkpoint=load()
             val audit=JournalAudit()
             db.rawQuery("SELECT id,tick,payload FROM events ORDER BY id",null).use { rows ->
-                while (rows.moveToNext()) audit.accept(rows.getLong(0),rows.getLong(1),Canonical.event(rows.getString(2)))
+                while (rows.moveToNext()) {
+                    val event=Canonical.event(rows.getString(2))
+                    audit.accept(rows.getLong(0),rows.getLong(1),event)
+                    GeaSchema.auditEconomyEvent(db,event)
+                }
             }
             val count=audit.finish(checkpoint)
             ResearchTables(db).audit()

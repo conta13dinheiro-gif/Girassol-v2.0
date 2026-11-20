@@ -60,6 +60,34 @@ class WorldStoreTest {
         context.deleteDatabase("girassol.db")
     }
 
+    @Test fun realEconomyProjectionsSurviveReopenAndMissingLedgerRowFailsAudit() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="girassol-branch-00000000-0000-0000-0000-000000000008.db"
+        context.deleteDatabase(name)
+        try {
+            val actor=WorldActor(rulesVersion=WorldActor.CURRENT_RULES_VERSION)
+            var actions=emptyList<ActionRecord>()
+            WorldStore(context,name).use { store ->
+                repeat(24) {
+                    val frame=com.enhikyy.girassol.cognition.NativeMind.evaluate(actor.state,actions,List(8) { 0.0 },ThermalTier.NONE_OR_LIGHT)
+                    val physics=com.enhikyy.girassol.physics.NativeSpatial.advance(actor.state,actor.intentions(cognition=frame))
+                    val transition=actor.step(cognition=frame,spatial=physics)
+                    store.commit(transition); actions=transition.event.actions
+                }
+                assertEquals(24L,store.audit())
+                store.readableDatabase.rawQuery("SELECT count(*) FROM double_entry_ledger",null).use { rows ->
+                    assertTrue(rows.moveToFirst());assertTrue(rows.getInt(0)>0)
+                }
+            }
+            WorldStore(context,name).use { store ->
+                assertEquals(actor.checkpoint(),store.load());assertEquals(24L,store.audit())
+                store.writableDatabase.execSQL("DELETE FROM double_entry_ledger WHERE rowid=(SELECT rowid FROM double_entry_ledger LIMIT 1)")
+                try { store.audit();fail("Missing projection must be detected") } catch (_: IllegalStateException) { }
+                assertEquals(actor.checkpoint(),store.load())
+            }
+        } finally { context.deleteDatabase(name) }
+    }
+
     @Test fun oldCheckpointLoadsAndNewEventContinuesItsChain() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = InstrumentationRegistry.getInstrumentation().context.assets

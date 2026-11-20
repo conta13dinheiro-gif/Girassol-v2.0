@@ -114,12 +114,14 @@ internal object NativeMind {
                     }
                 } },
                 { Activity.entries.map { activity ->
-                    val room=world.rooms.first { it.id==activity.room }
+                    val room=SmartTerrain.target(world,citizen,activity)
                     var value=policy[activity.ordinal]*policyScale-hypot(room.x-citizen.x,room.z-citizen.z)*.025
                     if(activity==Activity.SLEEP && n.energy>.8) value-=1
-                    if(activity==Activity.BUILD && (world.balances["market/timber"] ?: 0)<4) value-=3
-                    if(activity==Activity.WRITE && (world.balances["market/paper"] ?: 0)==0) value-=3
-                    if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0) value-=3
+                    val hasTool=world.economy?.tools?.any { it.agent==citizen.id && it.action==activity } ?: false
+                    if(activity==Activity.BUILD && ((world.balances["market/timber"] ?: 0)<(if(hasTool) 4 else 5) || world.rooms.size>=134)) value-=3
+                    if(activity==Activity.WRITE && ((world.balances["market/paper"] ?: 0)==0 || (!hasTool && (world.balances["market/timber"] ?: 0)==0))) value-=3
+                    if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0 && (world.economy==null || (world.balances["${DoubleEntryEconomyAndStigmergy.COMMONS}/coins"] ?: 0)==0)) value-=3
+                    value+=(world.economy?.pheromones?.get(activity.ordinal*144+DoubleEntryEconomyAndStigmergy.cell(citizen.x,citizen.z)) ?: 0.0)*.01
                     value+GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,activity),true).coerceIn(-4,4)*.05
                 } },
                 { List(8) { i -> nativeScores[i]+noise[i]+.4/sqrt(exposure[i]+1.0) } }
@@ -145,7 +147,7 @@ internal object NativeMind {
         }
         return CognitiveFrame(
             world.tick,Canonical.hash(Canonical.state(world)),minds,decisions,
-            socialSynchrony=autonomy.orderParameter
+            socialSynchrony=autonomy.orderParameter,economyEnabled=true
         )
     }
 }

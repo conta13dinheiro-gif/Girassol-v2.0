@@ -24,7 +24,7 @@ internal object NativeSpatial {
         people.forEach { a->
             val prior=world.spatial[a.id]
             b.input.putDouble(a.x).putDouble(prior?.position?.y ?: 0.0).putDouble(a.z)
-                .putDouble(prior?.verticalVelocity ?: 0.0).putDouble(world.rooms.indexOfFirst { it.id==intentions.getValue(a.id).room }.toDouble())
+                .putDouble(prior?.verticalVelocity ?: 0.0).putDouble(world.rooms.indexOfFirst { it.id==SmartTerrain.target(world,a,intentions.getValue(a.id)).id }.toDouble())
         }
         check(nativeStep(NativeCityMesh.roomBuffer(world.rooms),world.rooms.size,b.input,people.size,world.seed,world.tick+1,b.output)) { "Falha no solver espacial" }
         val poses=people.mapIndexed { i,a->

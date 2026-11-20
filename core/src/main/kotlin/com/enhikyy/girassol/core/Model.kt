@@ -90,15 +90,18 @@ class DeterministicRng(private var state: Long) {
     @EncodeDefault(EncodeDefault.Mode.NEVER) val knowledge: List<KnowledgeLesson> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: Map<String,SpatialPose> = emptyMap(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val genealogy: List<GenealogyRecord> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0)
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val economy: EconomyState? = null)
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CanonicalEvent(val version: Int = 1, val eventId: Long, val tick: Long,
     val actions: List<ActionRecord>, val stateHash: String, val previousHash: String, val hash: String = "",
     @EncodeDefault(EncodeDefault.Mode.NEVER) val neural: NeuralProposal? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val cognition: CognitiveFrame? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: SpatialFrame? = null) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: SpatialFrame? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val transfers: List<StockTransfer> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val constructed: List<EcologicalNicheStructure> = emptyList()) {
     fun computedHash(): String = Canonical.hash(Canonical.event(copy(hash = "")))
-    fun valid() = version in 1..8 && (when(version) { 1,2 -> neural==null && cognition==null && spatial==null; 3 -> neural!=null && cognition==null && spatial==null; 4 -> cognition!=null && spatial==null; 7 -> cognition!=null && spatial!=null; else -> spatial!=null }) && hash == computedHash()
+    fun valid() = constructed.size<=128 && constructed.map { it.room }.distinct().size==constructed.size && constructed.all { it.room.isNotBlank() && it.room.length<=128 && it.builder.isNotBlank() && it.builder.length<=128 && it.expires>tick && it.investedTimber==4 } && (constructed.isEmpty() || cognition?.economyEnabled==true) && transfers.size<=1024 && transfers.all { it.valid() } && (transfers.isEmpty() || cognition?.economyEnabled==true) && version in 1..8 && (when(version) { 1,2 -> neural==null && cognition==null && spatial==null; 3 -> neural!=null && cognition==null && spatial==null; 4 -> cognition!=null && spatial==null; 7 -> cognition!=null && spatial!=null; else -> spatial!=null }) && hash == computedHash()
 }
 data class Transition(val state: WorldState, val event: CanonicalEvent)
 data class Checkpoint(val state: WorldState, val eventId: Long, val eventHash: String)
