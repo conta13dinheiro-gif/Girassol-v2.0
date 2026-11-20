@@ -6,7 +6,7 @@
 #include <vector>
 
 int main() {
-    using namespace girassol::cognition::extended;
+    using namespace extended;
     TsetlinMachine tm;
     assert(tm.add({1,20,0x3u,true}));
     assert(tm.add({2,22,0x1u,false}));
