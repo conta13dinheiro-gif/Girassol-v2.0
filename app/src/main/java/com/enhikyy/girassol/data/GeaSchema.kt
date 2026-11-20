@@ -102,11 +102,17 @@ internal object GeaSchema {
             "SELECT 1 FROM subjective_beliefs b LEFT JOIN staging_knowledge s ON s.id=b.claim_id AND s.acquisition_hash=b.source_id WHERE s.id IS NULL LIMIT 1",
             null
         ).use { rows -> check(!rows.moveToFirst()) { "Subjective belief has no staged evidence provenance" } }
-        db.rawQuery("SELECT automata,digest FROM tsetlin_automata_blobs", null).use { rows ->
+        db.rawQuery("SELECT format_version,automata,digest FROM tsetlin_automata_blobs", null).use { rows ->
             while (rows.moveToNext()) {
-                val digest = java.security.MessageDigest.getInstance("SHA-256").digest(rows.getBlob(0))
+                val blob = rows.getBlob(1)
+                val digest = java.security.MessageDigest.getInstance("SHA-256").digest(blob)
                     .joinToString("") { "%02x".format(it) }
-                check(digest == rows.getString(1)) { "Tsetlin blob digest mismatch" }
+                check(digest == rows.getString(2)) { "Tsetlin blob digest mismatch" }
+                check(rows.getInt(0) == 1 && blob.size >= 32 &&
+                    blob[0] == 'G'.code.toByte() && blob[1] == 'R'.code.toByte() &&
+                    blob[2] == 'S'.code.toByte() && blob[3] == 'T'.code.toByte()) {
+                    "Tsetlin blob format mismatch"
+                }
             }
         }
         db.rawQuery("PRAGMA quick_check", null).use {
