@@ -13,7 +13,7 @@ import android.os.SystemClock
  */
 internal class PersistenceAndPriorityGuardian(context: Context) : AutoCloseable {
     private val appContext = context.applicationContext
-    private val power = appContext.getSystemService(PowerManager::class.java)
+    private val power = requireNotNull(appContext.getSystemService(PowerManager::class.java))
     private val battery = appContext.getSystemService(BatteryManager::class.java)
     private val wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Girassol:Biosphere")
     private var hintSession: PerformanceHintManager.Session? = null
@@ -43,7 +43,7 @@ internal class PersistenceAndPriorityGuardian(context: Context) : AutoCloseable 
     fun finishCycle(startedAtNanos: Long, thermalStatus: Int, memoryLow: Boolean, speed: Int): Long {
         val elapsed = (SystemClock.elapsedRealtimeNanos() - startedAtNanos).coerceAtLeast(1L)
         val batteryPercent = runCatching {
-            battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            battery?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
         }.getOrDefault(-1)
         val batteryConstrained = power.isPowerSaveMode || batteryPercent in 0..15
         val thermallyConstrained = thermalStatus > PowerManager.THERMAL_STATUS_LIGHT
