@@ -74,7 +74,7 @@ jobs:
       - name: Run unit tests and lint
         run: ./gradlew test testDebugUnitTest lintDebug --no-daemon
 
-      - name: Prepare Release signing key
+      - name: Prepare persistent Release signing key when configured
         shell: bash
         env:
           GIRASSOL_KEYSTORE_BASE64: ${{ secrets.GIRASSOL_KEYSTORE_BASE64 }}
@@ -83,33 +83,26 @@ jobs:
           GIRASSOL_KEY_PASSWORD: ${{ secrets.GIRASSOL_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          STORE_PATH="$RUNNER_TEMP/girassol-ci.jks"
           if [[ -n "${GIRASSOL_KEYSTORE_BASE64:-}" ]]; then
+            STORE_PATH="$RUNNER_TEMP/girassol-release.jks"
             printf '%s' "$GIRASSOL_KEYSTORE_BASE64" | base64 --decode > "$STORE_PATH"
             : "${GIRASSOL_KEYSTORE_PASSWORD:?GIRASSOL_KEYSTORE_PASSWORD is required with GIRASSOL_KEYSTORE_BASE64}"
             : "${GIRASSOL_KEY_ALIAS:?GIRASSOL_KEY_ALIAS is required with GIRASSOL_KEYSTORE_BASE64}"
             : "${GIRASSOL_KEY_PASSWORD:?GIRASSOL_KEY_PASSWORD is required with GIRASSOL_KEYSTORE_BASE64}"
+            keytool -list -keystore "$STORE_PATH" -storepass "$GIRASSOL_KEYSTORE_PASSWORD" -alias "$GIRASSOL_KEY_ALIAS" >/dev/null
+            {
+              echo "GIRASSOL_KEYSTORE_PATH=$STORE_PATH"
+              echo "GIRASSOL_KEYSTORE_PASSWORD=$GIRASSOL_KEYSTORE_PASSWORD"
+              echo "GIRASSOL_KEY_ALIAS=$GIRASSOL_KEY_ALIAS"
+              echo "GIRASSOL_KEY_PASSWORD=$GIRASSOL_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            chmod 600 "$STORE_PATH"
           else
-            STORE_PASSWORD="$(openssl rand -hex 16)"
-            KEY_PASSWORD="$(openssl rand -hex 16)"
-            KEY_ALIAS="girassol-ci"
-            keytool -genkeypair -noprompt -keystore "$STORE_PATH" -storetype JKS \
-              -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
-              -alias "$KEY_ALIAS" -dname "CN=Girassol CI, OU=Build, O=Girassol, L=NA, ST=NA, C=BR" \
-              -keyalg RSA -keysize 3072 -validity 30
-            GIRASSOL_KEYSTORE_PASSWORD="$STORE_PASSWORD"
-            GIRASSOL_KEY_ALIAS="$KEY_ALIAS"
-            GIRASSOL_KEY_PASSWORD="$KEY_PASSWORD"
+            echo "GIRASSOL_KEYSTORE_BASE64 absent: Gradle uses its local Debug keystore as a development-only Release fallback."
+            echo "This runner key is ephemeral; do not use this APK for updates over an existing installation or production distribution."
           fi
-          {
-            echo "GIRASSOL_KEYSTORE_PATH=$STORE_PATH"
-            echo "GIRASSOL_KEYSTORE_PASSWORD=$GIRASSOL_KEYSTORE_PASSWORD"
-            echo "GIRASSOL_KEY_ALIAS=$GIRASSOL_KEY_ALIAS"
-            echo "GIRASSOL_KEY_PASSWORD=$GIRASSOL_KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
-          chmod 600 "$STORE_PATH"
 
-      - name: Build multi-ABI Debug and Release APKs
+      - name: Build ARM64 Debug and Release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
 
       - name: Stage named APK artifacts
@@ -117,10 +110,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*universal*.apk' -print -quit)"
-          RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*universal*.apk' -print -quit)"
-          [[ -n "$DEBUG_APK" ]] || DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
-          [[ -n "$RELEASE_APK" ]] || RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*arm64-v8a*.apk' -print -quit)"
+          RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*arm64-v8a*.apk' -print -quit)"
+          [[ -n "$DEBUG_APK" && -n "$RELEASE_APK" ]] || { echo "Expected ARM64 split APKs were not produced"; exit 1; }
           [[ -n "$DEBUG_APK" && -n "$RELEASE_APK" ]]
           cp "$DEBUG_APK" dist/Girassol-debug.apk
           cp "$RELEASE_APK" dist/Girassol-release.apk
@@ -195,6 +187,8 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run Android instrumentation tests on a 4 GiB emulator
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -204,9 +198,9 @@ jobs:
           ram-size: 4096M
           heap-size: 512M
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          emulator-options: -no-window -no-audio -no-boot-anim -no-metrics -gpu swiftshader_indirect
           script: |
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon
+            ./gradlew :app:connectedDebugAndroidTest -Pgirassol.testX86=true --no-daemon
