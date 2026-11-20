@@ -1,4 +1,4 @@
-#include "hardware/soc_hardware_probe.hpp"
+#include "soc_hardware_probe.hpp"
 #include <jni.h>
 #include <string>
 extern "C" JNIEXPORT jstring JNICALL
