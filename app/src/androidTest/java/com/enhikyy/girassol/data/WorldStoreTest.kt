@@ -10,6 +10,23 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class WorldStoreTest {
+    @Test fun sqliteCacheAndWalHaveExplicitMemoryBounds() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.deleteDatabase("girassol.db")
+        try {
+            WorldStore(context).use { store ->
+                val db = store.writableDatabase
+                fun pragma(name: String): Long = db.rawQuery("PRAGMA $name", null).use {
+                    assertTrue("PRAGMA $name returned no value", it.moveToFirst())
+                    it.getLong(0)
+                }
+                assertEquals(-2048L, pragma("cache_size"))
+                assertEquals(256L, pragma("wal_autocheckpoint"))
+                assertEquals(4L * 1024 * 1024, pragma("journal_size_limit"))
+            }
+        } finally { context.deleteDatabase("girassol.db") }
+    }
+
     @Test fun neuralEnvelopePersistsAndReopensWithoutModel() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         context.deleteDatabase("girassol.db")
