@@ -268,7 +268,7 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
             replay.update(j,priority);
         }
         const auto randomBits=mix64(static_cast<std::uint64_t>(ids[static_cast<std::size_t>(i)]) ^
-            (static_cast<std::uint64_t>(values[kPhase]*100000.0f)));
+            static_cast<std::uint64_t>(std::llround(values[kPhase]*100000.0f)));
         const float replayMass=replay.total()*static_cast<float>(
             static_cast<double>(randomBits>>11)*(1.0/9007199254740992.0));
         const std::size_t replayIndex=replay.sample(replayMass);

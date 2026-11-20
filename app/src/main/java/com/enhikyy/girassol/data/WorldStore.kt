@@ -32,7 +32,11 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         check(oldVersion in 1..5 && newVersion==6)
         if(oldVersion<2) createHistory(db)
-        if(oldVersion<3) ResearchTables.create(db) else ResearchTables.createVectors(db)
+        if(oldVersion<3) ResearchTables.create(db)
+        else {
+            val hasVectors = db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='knowledge_vectors'", null).use { it.moveToFirst() }
+            if(!hasVectors) ResearchTables.createVectors(db)
+        }
         if(oldVersion<5) createCognitiveGrs(db)
         if(oldVersion<6) createRsiPromotionLedger(db)
     }
