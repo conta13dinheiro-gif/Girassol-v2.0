@@ -133,8 +133,14 @@ internal object SpeechNativeRuntime {
             }
             check(found == requiredLibraries.toSet()) { "O pacote Sherpa não contém todas as bibliotecas ARM64 esperadas" }
             File(staging, "archive.sha256").writeText("$ARCHIVE_SHA256\n")
-            root.deleteRecursively()
-            check(staging.renameTo(root)) { "Não foi possível ativar o runtime neural instalado" }
+            val backup = File(parent, "arm64-v8a.previous")
+            backup.deleteRecursively()
+            if (root.exists()) check(root.renameTo(backup)) { "Não foi possível preservar o runtime anterior" }
+            if (!staging.renameTo(root)) {
+                if (backup.exists()) backup.renameTo(root)
+                throw IllegalStateException("Não foi possível ativar o runtime neural instalado")
+            }
+            backup.deleteRecursively()
         } finally {
             archive.delete()
             staging.deleteRecursively()
