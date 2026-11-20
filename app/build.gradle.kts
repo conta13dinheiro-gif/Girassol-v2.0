@@ -1,13 +1,16 @@
 import java.security.MessageDigest
 
 plugins { id("com.android.application"); kotlin("android"); kotlin("plugin.compose") }
+
+val girassolTestX86 = providers.gradleProperty("girassol.testX86").orNull == "true"
+val girassolTargetAbis = if (girassolTestX86) listOf("x86_64") else listOf("arm64-v8a")
 android {
     namespace = "com.enhikyy.girassol"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     defaultConfig {
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        ndk { abiFilters += girassolTargetAbis }
         applicationId = "com.enhikyy.girassol"
         minSdk = 33
         targetSdk = 35
@@ -19,10 +22,11 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
+            include(*girassolTargetAbis.toTypedArray())
+            isUniversalApk = false
         }
     }
+    packaging { jniLibs { useLegacyPackaging = false } }
     buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
