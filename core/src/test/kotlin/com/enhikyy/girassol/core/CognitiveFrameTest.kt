@@ -77,6 +77,22 @@ class CognitiveFrameTest {
         assertEquals(inherited,MindState.inherit(world,child,one.id,two.id,first,second))
     }
 
+    @Test fun nativeEngineTraceIsPersistedAndReplayedInCanonicalEvents() {
+        val writer=WorldActor(rulesVersion=4)
+        val reader=WorldActor()
+        val base=frame(writer.state)
+        val enriched=base.copy(minds=base.minds.mapValues { (_,mind) ->
+            mind.copy(nativeEngineTrace=List(8) { index -> (index+1)/10.0 })
+        })
+        assertTrue(enriched.applicable(writer.state))
+        val transition=writer.step(cognition=enriched)
+        val payload=Canonical.event(transition.event)
+        assertTrue(payload.contains("nativeEngineTrace"))
+        reader.replay(Canonical.event(payload))
+        assertEquals(writer.checkpoint(),reader.checkpoint())
+        assertFalse(enriched.minds.values.first().copy(nativeEngineTrace=List(8) { 1.5 }).valid(writer.state.tick))
+    }
+
     @Test fun somaticPsycheIsBoundedInheritedAndDeterministic() {
         val world=WorldActor.genesis()
         val parentOne=world.agents[0]
