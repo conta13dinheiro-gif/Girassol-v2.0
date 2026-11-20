@@ -141,6 +141,7 @@ internal object GeaSchema {
 
         val semanticEntropy = SemanticCollapseGuard.normalizedPopulationEntropy(world.actionCounts)
         val changedCells = linkedMapOf<String, Pair<AuroraCandidate, String>>()
+        val projectionObservations = mutableListOf<List<Double>>()
         for (citizen in world.agents.sortedBy { it.id }) {
             val mind = world.minds[citizen.id] ?: continue
             val features = listOf(
@@ -206,8 +207,11 @@ internal object GeaSchema {
                 val structureId = "aurora-cell-${cell.first}-${cell.second}-${cell.third}"
                 changedCells[structureId] = candidate to citizen.id
             }
-            if (tick % 30L == 0L) projector = projector.observe(features)
+            if (tick % 30L == 0L) projectionObservations += features
         }
+
+        // Every agent in a tick is projected by the same frozen basis; update only afterwards.
+        projectionObservations.forEach { features -> projector = projector.observe(features) }
 
         for ((structureId, stored) in changedCells.toSortedMap()) {
             val (candidate, owner) = stored
