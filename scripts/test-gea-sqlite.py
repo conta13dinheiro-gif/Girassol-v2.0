@@ -339,5 +339,66 @@ class RsiMigrationTest(unittest.TestCase):
                 db.close()
 
 
+def migrate7(db):
+    db.execute('BEGIN')
+    with db:
+        for statement in (ROOT/'app/src/main/assets/database/gea-v7.sql').read_text().split(';'):
+            if statement.strip():
+                db.execute(statement)
+        db.execute('PRAGMA user_version=7')
+
+
+class LoraMigrationTest(unittest.TestCase):
+    def ready(self, path=':memory:'):
+        db=baseline(path);migrate(db);migrate6(db)
+        return db
+
+    def test_migration7_preserves_history_and_rolls_back_failed_index(self):
+        with self.ready() as db:
+            before=db.execute('SELECT * FROM events').fetchall()
+            db.set_authorizer(lambda action,name,*_: sqlite3.SQLITE_DENY if action==sqlite3.SQLITE_CREATE_INDEX and name=='lora_agent_history' else sqlite3.SQLITE_OK)
+            with self.assertRaises(sqlite3.DatabaseError): migrate7(db)
+            db.set_authorizer(None)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],6)
+            self.assertEqual(db.execute("SELECT count(*) FROM sqlite_master WHERE name='lora_adapter_checkpoints'").fetchone()[0],0)
+            migrate7(db)
+            self.assertEqual(db.execute('SELECT * FROM events').fetchall(),before)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],7)
+
+    def test_lora_domains_sources_and_failed_event_transaction(self):
+        with self.ready() as db:
+            migrate7(db)
+            initial=(1,'agent',1,0,None,'','',bytes(2592),'a'*64)
+            with db: insert(db,'lora_adapter_checkpoints',initial)
+            invalid=[(99,*initial[1:]),(1,'other',1,1,None,'','',bytes(2592),'a'*64),
+                     (1,'other',1,0,None,'','',bytes(2591),'a'*64),(1,'other',1,0,None,'','',bytes(2593),'a'*64),
+                     (1,'other',1,0,None,'','',bytes(2592),'z'*64),
+                     (1,'other',1,1,1,'a'*64,'a'*64,bytes(2592),'a'*64)]
+            for row in invalid:
+                with self.subTest(row=row[:5]), self.assertRaises(sqlite3.IntegrityError), db:
+                    insert(db,'lora_adapter_checkpoints',row)
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                db.execute("INSERT INTO events VALUES(2,2,'next')")
+                insert(db,'lora_adapter_checkpoints',(2,'agent',1,1,1,'b'*64,'c'*64,bytes(2592),'d'*64))
+                insert(db,'lora_adapter_checkpoints',(2,'agent',1,1,1,'b'*64,'c'*64,bytes(2592),'d'*64))
+            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],1)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+
+    def test_lora_full_disk_preserves_previous_optimizer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db=self.ready(str(pathlib.Path(directory)/'lora.db'))
+            try:
+                migrate7(db)
+                with db: insert(db,'lora_adapter_checkpoints',(1,'agent',1,0,None,'','',bytes(2592),'a'*64))
+                pages=db.execute('PRAGMA page_count').fetchone()[0];db.execute(f'PRAGMA max_page_count={pages}')
+                with self.assertRaises(sqlite3.OperationalError) as failure, db:
+                    db.execute("INSERT INTO events VALUES(2,2,'next')")
+                    for i in range(150): insert(db,'lora_adapter_checkpoints',(2,f'agent{i}',1,1,1,'b'*64,'c'*64,bytes(2592),'d'*64))
+                self.assertEqual(failure.exception.sqlite_errorcode,sqlite3.SQLITE_FULL)
+                self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0],1)
+                self.assertEqual(db.execute('SELECT steps,length(adapter) FROM lora_adapter_checkpoints').fetchall(),[(0,2592)])
+            finally: db.close()
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

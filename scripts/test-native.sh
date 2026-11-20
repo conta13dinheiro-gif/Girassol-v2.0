@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_root="$(mktemp -d)"
 trap 'rm -rf "$build_root"' EXIT
 cd "$repo_root"
-for suite in projection city_mesh synth plasticity vector_memory semantic_index cma_es dataset_decoder anokhin_gnw_core tsetlin qd navigation hrtf; do
+for suite in projection city_mesh synth plasticity vector_memory semantic_index cma_es dataset_decoder anokhin_gnw_core tsetlin qd navigation hrtf lora; do
   case "$suite" in
     synth|hrtf) source=audio/synth ;;
     plasticity) source=mind/plasticity ;;
@@ -12,7 +12,7 @@ for suite in projection city_mesh synth plasticity vector_memory semantic_index 
     semantic_index) source=mind/semantic_index ;;
     cma_es) source=evolution/cma_es ;;
     dataset_decoder) source=research/dataset_decoder ;;
-    anokhin_gnw_core|tsetlin|qd|navigation) source= ;;
+    anokhin_gnw_core|tsetlin|qd|navigation|lora) source= ;;
     *) source="$suite" ;;
   esac
   sources=()
@@ -20,6 +20,7 @@ for suite in projection city_mesh synth plasticity vector_memory semantic_index 
   extra=()
   if [[ "$suite" == vector_memory || "$suite" == semantic_index ]]; then extra=(-DHNSWLIB_ENABLE_EXCEPTIONS=ON -DHNSWLIB_USE_PREFETCH=0); fi
   if [[ "$suite" == dataset_decoder ]]; then extra+=(app/src/main/cpp/research/swap_arena.cpp); fi
+  if [[ "$suite" == lora ]]; then extra+=(-DGIRASSOL_LORA_ALLOC_CHECK -Wl,--wrap=malloc -Wl,--wrap=calloc); fi
   if [[ "$suite" == navigation ]]; then
     source scripts/native-navigation.sh
     compile_navigation -fno-omit-frame-pointer -fsanitize=address,undefined
@@ -30,6 +31,7 @@ for suite in projection city_mesh synth plasticity vector_memory semantic_index 
     -Iapp/src/main/cpp -isystem app/src/main/cpp/third_party/hnswlib -isystem app/src/main/cpp/third_party/rapidjson/include \
     "${sources[@]}" "app/src/test/cpp/${suite}_test.cpp" -o "$build_root/$suite"
   "$build_root/$suite"
+  if [[ "$suite" == lora ]]; then python3 scripts/test-lora-sqlite.py "$build_root/lora"; fi
   printf '%s passed (ASan/UBSan)\n' "$suite"
 done
 c++ -std=c++20 -Wall -Wextra -Werror -fno-omit-frame-pointer -fsanitize=address,undefined \

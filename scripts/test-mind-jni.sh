@@ -22,6 +22,7 @@ java -Djava.library.path="$build_root/absent" -cp "$host_cp" GeaContractIntegrat
 java -Djava.library.path="$build_root" -cp "$host_cp" GeaContractIntegration present
 GIRASSOL_TEST_NAV_OOM=1 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" SpaceAllocationIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" SpaceAudioIntegration
+java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" LoraIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" MindIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" BiologyIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" QualityDiversityIntegration

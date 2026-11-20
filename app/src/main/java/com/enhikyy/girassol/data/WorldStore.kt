@@ -9,7 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
-class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 6, DatabaseErrorHandler {
+class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 7, DatabaseErrorHandler {
     throw SQLiteDatabaseCorruptException("Banco corrompido; arquivo preservado para recuperação")
 }) {
     private val app=context.applicationContext
@@ -22,13 +22,15 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         ResearchTables.create(db)
         GeaSchema.create(app, db)
         GeaSchema.createV6(app, db)
+        GeaSchema.createV7(app, db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..5 && newVersion==6)
+        check(oldVersion in 1..6 && newVersion==7)
         if(oldVersion<2) createHistory(db)
         if(oldVersion<3) ResearchTables.create(db) else if(oldVersion<4) ResearchTables.createVectors(db)
         if(oldVersion<5) GeaSchema.create(app, db)
-        GeaSchema.createV6(app, db)
+        if(oldVersion<6) GeaSchema.createV6(app, db)
+        GeaSchema.createV7(app, db)
     }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, tick INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, cause TEXT NOT NULL, agents TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, event_hash TEXT NOT NULL)")
@@ -95,7 +97,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 }
             }
             val cognition=event.cognition
-            if(cognition?.biologyEnabled==true) {
+            if(cognition?.biologyEnabled==true || cognition?.minds?.values?.any { it.lora!=null }==true) {
                 val source=previous ?: load()?.state
                 if(source!=null) check(cognition.applicable(source)) { "Biology acquisition lacks canonical source evidence" }
                 else check(event.tick==1L && cognition.minds.values.all { it.symbioticModules.isEmpty() })
@@ -183,6 +185,8 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             val checkpoint=load()
             val audit=JournalAudit()
             val symbiosis=SymbioticLedgerAudit()
+            val lora=LoraLedgerAudit()
+            var adapters=emptyMap<String,LoraAdapterState>()
             var opinions=emptyMap<String,List<ProvenancedOpinion>>()
             var learning=emptyMap<String,List<SkillLearningTrace>>()
             var skills=emptyMap<String,List<VoyagerSkill>>()
@@ -191,11 +195,14 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     val event=Canonical.event(rows.getString(2))
                     audit.accept(rows.getLong(0),rows.getLong(1),event)
                     symbiosis.accept(event)
+                    lora.accept(event)
+                    GeaSchema.auditLoraEvent(db,event,adapters)
                     GeaSchema.auditEconomyEvent(db,event)
                     GeaSchema.auditInstitutionsEvent(db,event)
                     GeaSchema.auditBeliefsEvent(db,event,opinions)
                     GeaSchema.auditPedagogyEvent(db,event,learning,skills)
                     event.cognition?.let {
+                        adapters=it.minds.mapNotNull { (id,mind) -> mind.lora?.let { adapter -> id to adapter } }.toMap()
                         opinions=it.minds.mapValues { entry -> entry.value.memory.opinions }
                         learning=it.minds.mapValues { entry -> entry.value.memory.learning }
                         skills=it.minds.mapValues { entry -> entry.value.memory.skills }

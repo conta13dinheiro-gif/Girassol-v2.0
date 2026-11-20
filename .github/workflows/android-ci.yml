@@ -83,7 +83,7 @@ jobs:
       - name: Run unit tests and lint
         id: validation
         continue-on-error: true
-        run: ./gradlew test :host-validation:check testDebugUnitTest lintDebug --no-daemon
+        run: ./gradlew test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug --no-daemon
 
       - name: Build debug and release APKs for three ABIs and universal
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
@@ -108,6 +108,7 @@ jobs:
           for apk in dist/debug/*.apk dist/release/*.apk; do
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk"
           done
+          python3 scripts/test-jni-contract.py dist/release/app-universal-release.apk "$ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
 
       - name: Publish APK checksums
         if: always()

@@ -41,6 +41,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
         require(state.qualityDiversity==null || cognitiveInput?.qualityDiversity!=null) { "Active QD archive requires canonical cognitive input" }
+        require(state.minds.values.none { it.lora!=null } || cognitiveInput!=null) { "Active LoRA requires canonical cognitive input" }
         val planned=plans(neural,cognitiveInput)
         val proposals=planned.mapValues { it.value.second.action }
         val physics=spatial?.snapshot()?.takeIf { rulesVersion>=5 && it.applicable(state,proposals) }

@@ -22,7 +22,13 @@ Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretri
 
 <!-- coderabbit-ai-generated-section:v1:59bc26c3debdc9a311c1a8d7ee3d92d3296c6467d908006fc234d1ae0a06c08a -->
 
-**Estado mais recente: 90,9% de cobertura funcional local (10/11 frentes: 3, 5, 1, 8, 2, 6, 4, 7, 9 e 10).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 10”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:19bfb1dcb8b9df895d5e098bcd29e12dfb79a1eb5c70207a7da575b2859c6621 -->
+
+**Estado mais recente: 100% de cobertura funcional local das frentes (11/11).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual, no escopo descrito em cada entrega; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 11”, ao final. O aceite global continua aberto para hardware/24h, assinatura de distribuição e demais limitações explicitadas. As porcentagens nos históricos pertencem às respectivas etapas.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -356,7 +362,11 @@ Frentes 9/10/11, execução dos testes instrumentados, RAM/latência e carga 24/
 
 Frentes 10/11, execução instrumentada, RAM/latência e carga 24/7 no Moto G62. Release usa chave debug; identidade persistente de distribuição segue pendente. Não se atribui medição de 4 GB a limites estáticos ou testes host. Fórmulas, diferença do protótipo e limites estão em `docs/biologia-baldwin-simbiogenese.md`.
 
-## Entrega atual — Frente 10 / Recast, ORCA, HRTF e Vulkan/ES (2026-11-20)
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:725cf7752070899ce5452debfb5e918d8d2f10982199a3c31c6bb9d3afa182a5 -->
+
+## Histórico — Frente 10 / Recast, ORCA, HRTF e Vulkan/ES (2026-11-20)
 
 **Cobertura funcional local: 90,9% (10/11 frentes).** Critério mantido: peso igual por frente integrada e verificada localmente. A Frente 11 permanece pendente. Esta métrica não comprova execução no Moto G62, RAM total de 4 GB, carga 24/7 ou completude dos anexos v2.1.
 
@@ -380,6 +390,68 @@ Frentes 10/11, execução instrumentada, RAM/latência e carga 24/7 no Moto G62.
 ### Pendências
 
 Frente 11 (treino LoRA+), execução instrumentada/driver Vulkan→ES e audição Sherpa/AAudio, RAM/latência e carga 24/7 no alvo. ADB não tem dispositivo conectado e o sandbox não oferece KVM. Release continua com chave debug; distribuição atualizável exige identidade persistente. As arenas e os testes host não comprovam o pico total de RAM de ONNX/Filament/driver em 4 GB. Detalhes: `docs/espaco-audio-renderizacao.md` e `third_party/NAVIGATION-SOURCES.md` no diretório C++.
+
+## Entrega atual — Frente 11 / LoRA+ no readout LTC e Schema 7 (2026-11-20)
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:c70af3a16c62fd34080fe78baaeef87e24d455075ae6579ad1a79b60699d074d -->
+
+**Cobertura funcional local: 100% (11/11 frentes com implementação integrada e verificações locais).** Este indicador usa pesos iguais e o escopo documentado de cada frente; o aceite global em aparelho permanece aberto.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+### Fluxo integrado e orçamento delimitado
+
+- `forge/lora_trainer_realtime.hpp` executa y=W0*x+4*B(Ax), backward MSE, LoRA+ eta_B=4*eta_A, AdamW com correção de viés e Fisher diagonal online/EWC. B começa em zero; âncora é consolidada a cada 32 atualizações reais. A inicialização uniforme de variância 1/8 é especificada via SplitMix64 para determinismo entre bibliotecas padrão.
+- `NativeMind` treina com a recompensa de um recibo de execução do estado canônico anterior, no máximo uma vez por tick/agente, usando seu readout e ativação anteriores. Usa a projeção adaptada no quinto módulo PIANO e no DecisionTrace; o bloqueio térmico interrompe o treino. Hebb, SWR, FSRS/Voyager e simbiogênese preservam a propriedade de seus parâmetros/recibos.
+- Escopo concreto: readout LTC 8×8, posto 4, 64 parâmetros. Matrizes internas GGUF/llama.cpp seguem fora deste otimizador. Este recurso não comprova treino de um transformador.
+- Estado C++ fixo de 2.576 bytes, wire little-endian LRA1 de 2.592 bytes com pesos, m/v, Fisher, âncora e contadores. Workspace direto reutilizado de 3.232 bytes por thread; nenhum heap C++ durante inicialização/forward/backward/load/save. 150 estados binários somam 388.800 bytes, excluindo representação Kotlin e eventos. Pesos, momentos, Fisher, entradas e passos têm limites rígidos; falhas de validação não publicam mudanças parciais.
+- Contrato JNI versão 5: nova `loraStep`, 23 chamadas totais. Rejeita buffers de heap, dimensões incorretas, aliases, saídas somente leitura, números não finitos e estados inválidos; não usa handles nativos.
+- Schema 7 acrescenta `lora_adapter_checkpoints` às oito tabelas do Schema 5 e ao ledger RSI do Schema 6. Grava somente adaptadores alterados na mesma transação do evento/checkpoint; FK, índices, orçamento BLOB, digest e origem são conferidos. Auditoria verifica recibos, contadores, hashes e igualdade BLOB/evento, incluindo linhas ausentes. A leitura do evento de origem é compartilhada por gravação/auditoria, evitando decodificá-lo até 150 vezes. Fork copia somente o prefixo escolhido; os defaults omitidos preservam eventos históricos.
+
+### Evidência executada
+
+| Verificação | Resultado observado |
+|---|---|
+| `scripts/test-native.sh` | 14 suítes com ASan/UBSan; recuperação de 74 falhas de construção Recast, 15 de consulta e 36+34 no HNSW. LoRA: 64 diferenças finitas, AdamW independente, Fisher/EWC, convergência, corrupção/atomicidade e 128 operações completas com malloc/calloc negados sem tentativa de alocação. |
+| `scripts/test-lora-sqlite.py` | Otimizador C++ realmente treinado por 296 passos passa por BLOB SQLite7, reabertura e processo nativo novo; mais 40 passos são idênticos à execução contínua. Prefixo de fork e rejeição de corrupção sem sinal fatal passaram. |
+| `scripts/test-gea-sqlite.py` | 18 testes aprovados, incluindo migração 6→7 interrompida, preservação do histórico, FK, limites, disco cheio e rollback conjunto de evento/adaptador. |
+| LoRA JNI e consumidor | 52 atualizações por recibos reais em v8 com física/economia/Voyager ativos, 250 readouts conferidos no PIANO, uma âncora EWC e 41 adulterações de proveniência com hash recalculado rejeitadas. Bloqueio térmico e retomada do próximo passo após serialização passaram. |
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:0fb5dbabb058c75e7e978b23c8a4421f2bfc9488b59152ed5a4b694613059b54 -->
+
+| `scripts/test-mind-jni.sh` completo | Aprovado: 500 transições com replay exato; biologia com uma simbiogênese, cinco avaliações de seleção e um nascimento; QD com 18 amostras; cinco programas Voyager; sociedade; SWR/imunidade; construção/anexos. Três execuções de 256 ticks live/shadow equivalentes, busca RSI com 21 avaliações e 20 propostas/rejeições, isolamento, cancelamento, falha de gravação, idade Double e entradas inválidas aprovados. |
+
+<!-- /coderabbit-ai-generated:v1 -->
+| JVM e build Android | 146 testes core aprovados e reutilizados com entradas equivalentes; 13 JVM do app aprovados no build final. `:host-validation:check`, `testDebugUnitTest`, `lintDebug`, `:app:compileDebugAndroidTestKotlin`, `:app:assembleDebug` e `:app:assembleRelease` passaram. Build final: 3m22s, 137 tarefas (41 executadas/96 atualizadas), lint sem erros e 28 avisos. |
+| APKs/JNI | Oito APKs debug/release aprovados individualmente em `apksigner verify`; 23 assinaturas JNI correspondem ao C++ e todas as exportações existem nas três ABIs do APK universal release. |
+
+Dois primeiros cenários LoRA produziram somente 16 atualizações e falharam corretamente no requisito de observar uma âncora. O cenário final controla capacidade/reservas da biblioteca e posição dos demais agentes, mantendo o gate de 32 passos e a execução real. O primeiro teste C++ também exigiu correção de indentação para manter `-Werror`; a primeira compilação de desenvolvimento pegou assinaturas Kotlin em revisões diferentes. As execuções finais citadas usam entradas estáveis.
+
+Base publicada: `00ca5b62b15c73e940bdd826b7b937c47b49d100`. Identidade reproduzível das entradas de código/dependências/configuração desta entrega: SHA-256 `7e799d02bf5b9082d73d330e5976ced487e35e4a17c2302ae627cf2353f81b7e` do manifesto local. As mudanças posteriores ao build final foram somente no cenário host, sem alterar os APKs.
+
+SHA-256 dos APKs locais verificados:
+
+- ARM64 debug: `1c5921f1808d2dc9f9f2abaa7356b5cdbbe2b82905129293cb636e14f435d678`.
+- Universal debug: `f7c8d8bd17841ab9440c56c321fda7e52fb98ac6c10e18fdf4a4b4b7603c7399`.
+- Universal release: `9b4403bbb1552224b291dc390d6defa6342b5304815ec99ba367e44070887e0b`.
+
+### GitHub e aceite ainda aberto
+
+O workflow `android-ci.yml` executa em push e manualmente; gera quatro APKs debug e quatro release, verifica assinaturas/exportações JNI e publica `Girassol-debug`, `Girassol-release` e `Girassol-checksums` por 30 dias. Esta entrega acrescenta compilação dos testes instrumentados e verificação das exportações nas três ABIs. O YAML e os comandos obrigatórios passaram na validação local. [CI da Frente 10 concluído com sucesso](https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44674854369); a aprovação remota da Frente 11 depende de seu próximo push.
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:eda9f6d3ec6d3a893a7372be704c081d9288e9d2dfa36cb6d8c030ea13d49d16 -->
+
+Os testes Android de migração 1..6→7, reabertura do DAO/retomada LoRA e adulteração/remoção de checkpoints foram compilados, sem execução em aparelho. As 20 propostas RSI foram rejeitadas no treino; a promoção de um vencedor e sua janela independente continuam sem exercício nesta execução.
+
+<!-- /coderabbit-ai-generated:v1 --> Permanecem sem evidência: pico total de RAM em 4 GB, carga 24/7 no Moto G62, Vulkan/fallback e áudio no hardware. Release usa chave debug; identidade persistente de distribuição continua pendente. O indicador por frentes não mede esses critérios de aceite. Detalhes técnicos: `docs/treino-lora-readout.md`.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 <!-- /coderabbit-ai-generated:v1 -->

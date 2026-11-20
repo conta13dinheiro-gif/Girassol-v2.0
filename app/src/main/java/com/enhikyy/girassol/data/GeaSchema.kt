@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
 internal object GeaSchema {
     val tables = listOf("rsi_promotion_ledger", "subjective_beliefs", "ecological_niche_structures",
         "tsetlin_automata_blobs", "adico_institutions", "double_entry_ledger",
-        "bkt_fsrs_mastery", "voyager_skill_library", "rsi_policy_trials")
+        "bkt_fsrs_mastery", "voyager_skill_library", "rsi_policy_trials", "lora_adapter_checkpoints")
 
     fun create(context: Context, db: SQLiteDatabase) {
         context.assets.open("database/gea-v5.sql").bufferedReader().use { reader ->
@@ -22,6 +22,39 @@ internal object GeaSchema {
     fun createV6(context: Context,db: SQLiteDatabase) {
         context.assets.open("database/gea-v6.sql").bufferedReader().use { reader ->
             reader.readText().split("-- @statement").map(String::trim).filter(String::isNotEmpty).forEach { db.execSQL(it) }
+        }
+    }
+
+    fun createV7(context: Context,db: SQLiteDatabase) {
+        context.assets.open("database/gea-v7.sql").bufferedReader().use { reader ->
+            reader.readText().split(';').map(String::trim).filter(String::isNotEmpty).forEach { db.execSQL(it) }
+        }
+    }
+
+    private fun blobDigest(bytes: ByteArray)=java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private fun verifyLoraSource(db: SQLiteDatabase,state: LoraAdapterState,sources: MutableMap<Long,String>) {
+        if(state.steps()==0L) return
+        val hash=sources.getOrPut(state.trainedTick) {
+            db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(state.trainedTick.toString())).use { source ->
+                check(source.moveToFirst()) { "LoRA source event missing" }
+                val event=Canonical.event(source.getString(0));check(event.valid());event.stateHash
+            }
+        }
+        check(hash==state.sourceHash) { "LoRA source digest mismatch" }
+    }
+    fun auditLoraEvent(db: SQLiteDatabase,event: CanonicalEvent,prior: Map<String,LoraAdapterState>) {
+        val sources=mutableMapOf<Long,String>()
+        val expected=event.cognition?.minds.orEmpty().mapNotNull { (id,mind) -> mind.lora?.takeIf { it!=prior[id] }?.let { id to it } }.sortedBy { it.first }
+        db.rawQuery("SELECT agent_id,format_version,steps,source_event_id,source_hash,base_hash,adapter,digest FROM lora_adapter_checkpoints WHERE event_id=? ORDER BY agent_id",arrayOf(event.eventId.toString())).use { rows ->
+            var count=0
+            while(rows.moveToNext()) {
+                check(count<expected.size);val (id,state)=expected[count++];val bytes=rows.getBlob(6)
+                check(state.valid(event.tick-1) && rows.getString(0)==id && rows.getInt(1)==1 && rows.getLong(2)==state.steps() &&
+                    (if(state.steps()==0L) rows.isNull(3) else !rows.isNull(3) && rows.getLong(3)==state.trainedTick) &&
+                    rows.getString(4)==state.sourceHash && rows.getString(5)==state.baseHash && bytes.contentEquals(state.bytes()) && rows.getString(7)==blobDigest(bytes)) { "LoRA checkpoint differs from canonical optimizer" }
+                verifyLoraSource(db,state,sources)
+            }
+            check(count==expected.size) { "Missing incremental LoRA checkpoint" }
         }
     }
 
@@ -106,13 +139,14 @@ internal object GeaSchema {
                 put("payload", payload); put("digest", Canonical.hash(payload))
             })
         }
-        val before=previous ?: if(transition.state.minds.values.any { it.memory.opinions.isNotEmpty() }) {
+        val before=previous ?: run {
             db.rawQuery("SELECT payload,digest FROM checkpoint WHERE id=1",null).use { rows ->
                 if(rows.moveToFirst()) {
                     val text=rows.getString(0);check(Canonical.hash(text)==rows.getString(1));Canonical.state(text)
                 } else null
             }
-        } else null
+        }
+        val loraSources=mutableMapOf<Long,String>()
         for ((agent, mind) in transition.state.minds) {
             for(opinion in mind.memory.opinions.filter { it !in before?.minds?.get(agent)?.memory?.opinions.orEmpty() }) {
                 verifyOpinion(db,event,agent,opinion)
@@ -122,14 +156,23 @@ internal object GeaSchema {
                     put("belief",discounted.belief);put("disbelief",discounted.disbelief);put("uncertainty",discounted.uncertainty);put("base_rate",discounted.baseRate)
                 })
             }
-            if(mind.tsetlin.hex.isNotEmpty() && mind.tsetlin.hex != previous?.minds?.get(agent)?.tsetlin?.hex) {
+            if(mind.tsetlin.hex.isNotEmpty() && mind.tsetlin.hex != before?.minds?.get(agent)?.tsetlin?.hex) {
                 val bytes=mind.tsetlin.bytes()
                 db.insertOrThrow("tsetlin_automata_blobs",null,ContentValues().apply {
                     put("event_id",event.eventId);put("agent_id",agent);put("format_version",1);put("automata",bytes)
                     put("digest",java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) })
                 })
             }
-            val oldSkills=previous?.minds?.get(agent)?.memory?.skills.orEmpty().associateBy { it.action }
+            mind.lora?.takeIf { it!=before?.minds?.get(agent)?.lora }?.let { adapter ->
+                check(adapter.valid(event.tick-1));verifyLoraSource(db,adapter,loraSources)
+                val bytes=adapter.bytes()
+                db.insertOrThrow("lora_adapter_checkpoints",null,ContentValues().apply {
+                    put("event_id",event.eventId);put("agent_id",agent);put("format_version",1);put("steps",adapter.steps())
+                    if(adapter.steps()==0L) putNull("source_event_id") else put("source_event_id",adapter.trainedTick)
+                    put("source_hash",adapter.sourceHash);put("base_hash",adapter.baseHash);put("adapter",bytes);put("digest",blobDigest(bytes))
+                })
+            }
+            val oldSkills=before?.minds?.get(agent)?.memory?.skills.orEmpty().associateBy { it.action }
             for(skill in mind.memory.skills) {
                 if(oldSkills[skill.action]==skill) continue
                 verifySkill(db,skill,event.tick-1)
@@ -139,7 +182,7 @@ internal object GeaSchema {
                     put("preconditions",Json.encodeToString(skill.preconditions));put("program",Json.encodeToString(skill))
                 })
             }
-            val old = previous?.minds?.get(agent)?.memory?.learning.orEmpty().associateBy { it.action }
+            val old = before?.minds?.get(agent)?.memory?.learning.orEmpty().associateBy { it.action }
             for (trace in mind.memory.learning) {
                 if (old[trace.action] == trace) continue
                 check(trace.valid(event.tick))

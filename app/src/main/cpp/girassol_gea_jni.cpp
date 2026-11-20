@@ -3,7 +3,7 @@
 // This call cannot allocate or throw across the JNI boundary.
 extern "C" JNIEXPORT jint JNICALL
 Java_com_enhikyy_girassol_cognition_GeaNativeBridge_contractVersion(JNIEnv*, jobject) {
-    return 4;
+    return 5;
 }
 
 #include "cognitive/tsetlin_machine.hpp"
@@ -125,4 +125,26 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_acousticTrace(JNIEnv* env,jo
         if(auto type=env->FindClass("java/lang/IllegalStateException")) env->ThrowNew(type,error.what());
         return JNI_FALSE;
     }
+}
+
+#include "forge/lora_trainer_realtime.hpp"
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_enhikyy_girassol_cognition_GeaNativeBridge_loraStep(JNIEnv* env,jobject,jobject state,jobject input,jobject output,jboolean reset,jlong seed,jint action,jdouble reward) {
+    using Model=girassol::forge::RealTimeLoraAdapter;
+    // input: W0[64], x[8]. output: y[8]. action=-1 is inference only.
+    auto reject=[&]() { if(!env->ExceptionCheck()) if(auto type=env->FindClass("java/lang/IllegalArgumentException")) env->ThrowNew(type,"Invalid bounded LoRA state or sample");return JNI_FALSE; };
+    if(!state || !input || !output || env->GetDirectBufferCapacity(state)!=2592 || env->GetDirectBufferCapacity(input)!=576 || env->GetDirectBufferCapacity(output)!=64 || !writable(env,state) || !writable(env,output) || action< -1 || action>7 || !std::isfinite(reward) || std::abs(reward)>1) return reject();
+    auto* bytes=static_cast<std::uint8_t*>(env->GetDirectBufferAddress(state));auto* data=env->GetDirectBufferAddress(input);auto* out=env->GetDirectBufferAddress(output);
+    auto overlap=[](void* a,std::size_t n,void* b,std::size_t m) { auto x=reinterpret_cast<std::uintptr_t>(a),y=reinterpret_cast<std::uintptr_t>(b);return x<y+m && y<x+n; };
+    if(!bytes || !data || !out || overlap(bytes,2592,data,576) || overlap(bytes,2592,out,64) || overlap(data,576,out,64)) return reject();
+    Model model{};Model::Base base{};Model::Input x{};
+    if(reset==JNI_TRUE) { if(action!=-1) return reject();model.initialize(static_cast<std::uint64_t>(seed)); }
+    else if(!model.load({bytes,2592})) return reject();
+    std::memcpy(base.data(),data,512);std::memcpy(x.data(),static_cast<std::uint8_t*>(data)+512,64);
+    if(!Model::inputs(base,x)) return reject();
+    if(action>=0) {
+        auto target=model.forward(base,x);target[action]=reward;double loss=0;
+        if(!model.train(base,x,target,loss)) return reject();
+    }
+    const auto result=model.forward(base,x);model.save({bytes,2592});std::memcpy(out,result.data(),64);return JNI_TRUE;
 }

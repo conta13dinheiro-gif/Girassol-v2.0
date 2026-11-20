@@ -106,7 +106,7 @@ internal object NativeMind {
             repeat(8) { data.putDouble(0.0) }
             check(advance(data)) { "Falha na atualização LTC" }
             fun values(start: Int,count: Int)=List(count) { data.getDouble((start+it)*8) }
-            val nativeScores=values(272,8)
+            var nativeScores=values(272,8)
             val exposure=old.exposure.toMutableList()
             if(learn && exposure[citizen.activity.ordinal]<Int.MAX_VALUE) exposure[citizen.activity.ordinal]++
             val discovered=learn && (distances.firstOrNull() ?: 1.0)>.06
@@ -126,6 +126,8 @@ internal object NativeMind {
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
             bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
             var next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive,noveltyAdmissions=admissions)
+            val adapted=NativeLora.evaluate(world,citizen,prior,next,thermalTier,sourceHash)
+            next=next.copy(lora=adapted.state);nativeScores=adapted.scores
             if(citizen.id in replayAgents) next=ripple(next,world,citizen,thermalTier)
             bank=next.memory
             check(next.valid(world.tick))

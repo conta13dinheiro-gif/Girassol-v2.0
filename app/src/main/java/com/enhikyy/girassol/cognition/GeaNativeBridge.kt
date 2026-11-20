@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 
 /** Single version-checked loader for the simulation JNI library. JVM callers can inspect availability. */
 object GeaNativeBridge {
-    const val CONTRACT_VERSION = 4
+    const val CONTRACT_VERSION = 5
     private val failure: LinkageError? = try {
         System.loadLibrary("girassol_core")
         val actual = contractVersion()
@@ -24,6 +24,8 @@ object GeaNativeBridge {
 
     external fun hrtfProcess(state: ByteBuffer,mono: ByteBuffer,stereo: ByteBuffer,frames: Int,sampleRate: Int,azimuth: Double,distance: Double,occlusion: Double,reset: Boolean): Boolean
     external fun acousticTrace(rooms: ByteBuffer,count: Int,seed: Long,endpoints: ByteBuffer,result: ByteBuffer): Boolean
+
+    external fun loraStep(state: ByteBuffer,input: ByteBuffer,output: ByteBuffer,reset: Boolean,seed: Long,action: Int,reward: Double): Boolean
 
     private external fun contractVersion(): Int
 }

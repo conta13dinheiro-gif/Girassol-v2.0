@@ -30,7 +30,7 @@ class GeaMigrationTest {
 
     @Test fun upgradesEveryHistoricalSchemaWithoutChangingEvents() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        for (version in 1..5) {
+        for (version in 1..6) {
             val name = "girassol-branch-00000000-0000-0000-0000-00000000000$version.db"
             context.deleteDatabase(name)
             try {
@@ -38,7 +38,7 @@ class GeaMigrationTest {
                 WorldStore(context, name).use { store -> store.commit(actor.step()) }
                 // Reconstruct each historical schema, retaining a real checkpoint and journal.
                 SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-                    GeaSchema.tables.filter { version<5 || it=="rsi_policy_trials" }.forEach { db.execSQL("DROP TABLE $it") }
+                    GeaSchema.tables.filter { version<5 || version<6 && it=="rsi_policy_trials" || it=="lora_adapter_checkpoints" }.forEach { db.execSQL("DROP TABLE $it") }
                     if (version < 4) db.execSQL("DROP TABLE knowledge_vectors")
                     if (version < 3) listOf("epistemic_nodes", "research_intents", "external_knowledge_journal", "staging_knowledge", "installed_datasets").forEach { db.execSQL("DROP TABLE $it") }
                     if (version < 2) db.execSQL("DROP TABLE milestones")
@@ -47,7 +47,7 @@ class GeaMigrationTest {
                 WorldStore(context, name).use { store ->
                     assertEquals(actor.checkpoint(), store.load())
                     assertEquals(1L, store.audit())
-                    assertEquals(6, store.readableDatabase.version)
+                    assertEquals(7, store.readableDatabase.version)
                     GeaSchema.tables.forEach { table ->
                         store.readableDatabase.rawQuery("SELECT count(*) FROM $table", null).use { assertTrue(it.moveToFirst()) }
                     }
