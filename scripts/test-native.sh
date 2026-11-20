@@ -12,7 +12,7 @@ for suite in projection city_mesh synth plasticity vector_memory semantic_index 
     semantic_index) source=mind/semantic_index ;;
     cma_es) source=evolution/cma_es ;;
     dataset_decoder) source=research/dataset_decoder ;;
-    anokhin_gnw_core|deterministic_engines|soc_hardware_probe) source= ;;
+    anokhin_gnw_core|deterministic_engines|extended_deterministic_engines|soc_hardware_probe) source= ;;
     *) source="$suite" ;;
   esac
   sources=()
