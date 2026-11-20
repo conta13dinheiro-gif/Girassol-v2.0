@@ -115,21 +115,6 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinPredictVote(
     return it->second->predictVoteEarlyExit(features);
 }
 
-extern "C" JNIEXPORT jfloat JNICALL
-Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinConfidence(
-    JNIEnv* env, jobject, jlong handle, jbyteArray featuresArray
-) {
-    std::vector<std::uint8_t> features;
-    if (!readFeatures(env, featuresArray, features)) {
-        throwJava(env, "java/lang/IllegalArgumentException", "Invalid Tsetlin feature vector");
-        return 0.0f;
-    }
-    std::lock_guard<std::mutex> lock(gTsetlinMutex);
-    const auto it = gTsetlinModels.find(handle);
-    if (it == gTsetlinModels.end() || features.size() != it->second->numFeatures()) return 0.0f;
-    return it->second->confidence(features);
-}
-
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinSerialize(
     JNIEnv* env, jobject, jlong handle
