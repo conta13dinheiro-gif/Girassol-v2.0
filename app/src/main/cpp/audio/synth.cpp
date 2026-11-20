@@ -55,7 +55,7 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
             sr
         );
         // Movement is the side-chain: fast attack protects transients, slow release preserves music.
-        const float duckTarget=1.0f-std::min(.45f,std::abs(steps)*2.5f*stepWeight);
+        const float duckTarget=1.0f-.45f*step_env*stepWeight;
         const double duckTime=duckTarget<musicDuck_?.018:.24;
         const float duckSmooth=static_cast<float>(1.0-std::exp(-dt/duckTime));
         musicDuck_+=(duckTarget-musicDuck_)*duckSmooth;
