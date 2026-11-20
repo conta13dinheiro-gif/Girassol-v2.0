@@ -31,6 +31,13 @@ internal object GeaSchema {
             })
         }
         for ((agent, mind) in transition.state.minds) {
+            if(mind.tsetlin.hex.isNotEmpty() && mind.tsetlin.hex != previous?.minds?.get(agent)?.tsetlin?.hex) {
+                val bytes=mind.tsetlin.bytes()
+                db.insertOrThrow("tsetlin_automata_blobs",null,ContentValues().apply {
+                    put("event_id",event.eventId);put("agent_id",agent);put("format_version",1);put("automata",bytes)
+                    put("digest",java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) })
+                })
+            }
             val old = previous?.minds?.get(agent)?.memory?.learning.orEmpty().associateBy { it.action }
             for (trace in mind.memory.learning) {
                 if (old[trace.action] == trace) continue
@@ -60,11 +67,15 @@ internal object GeaSchema {
                 check(if (revision.sourceTick == 0L) rows.isNull(3) else !rows.isNull(3) && revision.sourceTick == rows.getLong(3))
             }
         }
-        db.rawQuery("SELECT automata,digest FROM tsetlin_automata_blobs", null).use { rows ->
+        db.rawQuery("SELECT t.automata,t.digest,t.agent_id,t.format_version,e.payload FROM tsetlin_automata_blobs t JOIN events e ON e.id=t.event_id", null).use { rows ->
             while (rows.moveToNext()) {
                 val digest = java.security.MessageDigest.getInstance("SHA-256").digest(rows.getBlob(0))
                     .joinToString("") { "%02x".format(it) }
                 check(digest == rows.getString(1)) { "Tsetlin blob digest mismatch" }
+                val recorded=Canonical.event(rows.getString(4)).cognition?.minds?.get(rows.getString(2))?.tsetlin
+                check(rows.getInt(3)==1 && recorded!=null && recorded.bytes().contentEquals(rows.getBlob(0))) {
+                    "Tsetlin blob differs from canonical event"
+                }
             }
         }
         db.rawQuery("PRAGMA quick_check", null).use {

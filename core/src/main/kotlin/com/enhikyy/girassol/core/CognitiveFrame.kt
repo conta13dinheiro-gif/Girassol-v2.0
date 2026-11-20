@@ -91,16 +91,17 @@ import kotlin.math.*
 
 /** Serialized learned state, distinct from inherited loci. Native output is journal input. */
 @OptIn(ExperimentalSerializationApi::class)
-@Serializable data class MindState(val parameters: List<Double>,val hidden: List<Double>,
+@Serializable data class MindState @JvmOverloads constructor(val parameters: List<Double>,val hidden: List<Double>,
     val personality: List<Double>,val exposure: List<Int> = List(8) { 0 },
     val learnedTick: Long = -1,val novelty: Double = 0.0,val behaviors: List<List<Double>> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val memory: MemoryBank = MemoryBank(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel()) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val tsetlin: TsetlinState = TsetlinState()) {
     fun valid(tick: Long): Boolean = parameters.size==248 && parameters.all { it.isFinite() && abs(it)<=8 } &&
         parameters.subList(168,176).all { it in .2..8.0 } && hidden.size==8 && hidden.all { it.isFinite() && abs(it)<=1.00001 } &&
         personality.size==5 && personality.all { it.isFinite() && it in 0.0..1.0 } && exposure.size==8 && exposure.all { it>=0 } &&
         learnedTick in -1..tick && novelty.isFinite() && novelty in 0.0..1.0 &&
-        memory.valid(tick) && psyche.valid() && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
+        memory.valid(tick) && tsetlin.valid(tick) && psyche.valid() && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
 
         fun inherit(world: WorldState,citizen: Citizen,firstId: String,secondId: String,first: MindState,second: MindState): MindState {

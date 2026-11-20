@@ -106,6 +106,17 @@ class MigrationTest(unittest.TestCase):
             finally:
                 db.close()
 
+    def test_constraint_failure_rolls_back_event_and_other_writes(self):
+        with baseline() as db:
+            migrate(db)
+            with self.assertRaises(sqlite3.IntegrityError):
+                with db:
+                    db.execute("INSERT INTO events VALUES(2,2,'new')")
+                    insert(db, TABLES[3], (2, 'a', 1, bytes(516), 'a'*64))
+                    insert(db, TABLES[5], (2, 0, 'same', 'same', 'coins', 1))
+            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0], 1)
+            self.assertEqual(db.execute('SELECT count(*) FROM tsetlin_automata_blobs').fetchone()[0], 0)
+
     def test_corrupt_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory)/'world.db'

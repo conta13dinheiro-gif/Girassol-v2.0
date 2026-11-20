@@ -8,6 +8,18 @@ public final class GeaContractIntegration {
         }
         if (expected) {
             GeaNativeBridge.INSTANCE.requireAvailable();
+            byte[] state = new byte[0];
+            for(int i=0;i<20000;i++) state=GeaNativeBridge.INSTANCE.tsetlinTrain(state,i%2,i%2,i+1);
+            if(state.length!=516) throw new AssertionError("unbounded Tsetlin state");
+            if(GeaNativeBridge.INSTANCE.tsetlinVote(state,1,false)<=0 || GeaNativeBridge.INSTANCE.tsetlinVote(state,0,false)>=0)
+                throw new AssertionError("Tsetlin failed binary learning");
+            byte[] restored=state.clone();
+            if(GeaNativeBridge.INSTANCE.tsetlinVote(restored,1,false)!=GeaNativeBridge.INSTANCE.tsetlinVote(state,1,false))
+                throw new AssertionError("binary restore differs");
+            try { GeaNativeBridge.INSTANCE.tsetlinTrain(new byte[3],0,1,1);throw new AssertionError("corrupt blob accepted"); }
+            catch(IllegalArgumentException correct) { }
+            try { GeaNativeBridge.INSTANCE.tsetlinVote(state,65536,false);throw new AssertionError("invalid bits accepted"); }
+            catch(IllegalArgumentException correct) { }
         } else {
             try {
                 GeaNativeBridge.INSTANCE.requireAvailable();

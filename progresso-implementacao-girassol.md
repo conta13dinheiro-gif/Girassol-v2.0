@@ -1,6 +1,28 @@
 # Continuação do Girassol — estado verificável
 
-Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretrizes.md`. **Objetivo ainda não atingido.** Este registro não atribui percentual por contagem de arquivos.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:b82755fed364719e77b3e00af5b3682d152464e284a1083d99c837b421fde920 -->
+
+Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretrizes.md`. **Objetivo ainda não atingido.**
+
+## Entrega atual — Frente 3 (2026-11-20)
+
+**Cobertura funcional local: 9,1% (1/11 frentes com implementação integrada e testes locais nesta continuação).** O denominador são as onze frentes das diretrizes, com peso igual; não é estimativa de esforço, de RAM medida ou de prontidão de produção. As dez restantes continuam pendentes, incluindo RSI e PIANO. O aceite em CI e aparelho é acompanhado separadamente. A métrica numérica foi introduzida por solicitação posterior do proprietário, sem inferir avanço por número de arquivos.
+
+- Tsetlin C++20 de tamanho fixo: 16 cláusulas, 16 bits de entrada, literais positivos/negados, 64 estados por decisão, feedback I/II com especificidade 3 e limiar de voto 4. Early-exit preserva a classificação fora do limiar; o voto parcial não é apresentado como soma exata de todas as cláusulas.
+- Ponte JNI versão 2 com 18 assinaturas conferidas. As duas novas chamadas validam dimensões, cabeçalho, bits e intervalos. O processamento C++ da Tsetlin não usa heap, handles ou pools globais: estado de 516 bytes e arrays locais fixos. Falha na alocação do array Java conserva a exceção JVM pendente.
+- NativeMind treina com resultados reais, semente determinística e features da decisão anterior; usa o classificador na prioridade das ações. O estado imutável entra no evento/checkpoint e é projetado em tsetlin_automata_blobs na mesma transação. Auditoria compara digest e bytes com o evento canônico; fork copia somente o prefixo histórico. Defaults omitidos conservam a codificação dos eventos antigos.
+- scripts/test-native.sh passou: dez suítes funcionais com ASan/UBSan, mais a injeção de falhas HNSW. Teste Tsetlin cobre XOR, determinismo, serialização/corrupção e as 65.536 entradas para equivalência da classificação com early-exit. Uma execução adicional do teste ampliado passou com 10% de rótulos ruidosos.
+- scripts/test-mind-jni.sh passou: classificador JNI, estado restaurado, entradas inválidas, biblioteca ausente/presente, 500 transições canônicas, live/shadow, busca/isolamento/cancelamento, idade Double. Nenhuma política foi promovida na busca de regressão.
+- :core:test :host-validation:check testDebugUnitTest lintDebug passou. Sete testes SQLite passaram, incluindo disco cheio, corrupção e rollback após constraint violation envolvendo evento e blob. Os testes instrumentados Android continuam sem execução em aparelho.
+- O workflow Android CI executa em cada push e manualmente. Passa a exigir quatro APKs Debug e quatro Release, publicar Girassol-debug, Girassol-release e Girassol-checksums por 30 dias e explicar o download no resumo. O YAML foi validado localmente. Aprovação remota e novos APKs não são presumidos a partir dessa validação.
+- Build local Debug/Release desta entrega ainda em execução ao registrar esta seção. As assinaturas da Fase 1 não validam estes novos APKs. Não foi medida a latência alvo nem o consumo total no Moto G62 de 4 GB; 150 estados binários ativos da Tsetlin somam 77.400 bytes, excluindo cópias Kotlin/eventos e demais motores.
+
+O texto abaixo preserva o histórico das etapas anteriores.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## Alterações desta etapa
 

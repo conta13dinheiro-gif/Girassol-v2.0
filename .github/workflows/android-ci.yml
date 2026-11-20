@@ -83,9 +83,9 @@ jobs:
       - name: Run unit tests and lint
         id: validation
         continue-on-error: true
-        run: ./gradlew test testDebugUnitTest lintDebug --no-daemon
+        run: ./gradlew test :host-validation:check testDebugUnitTest lintDebug --no-daemon
 
-      - name: Build ARM64 debug and release APKs
+      - name: Build debug and release APKs for three ABIs and universal
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
 
       - name: Stage distributable APKs
@@ -102,10 +102,33 @@ jobs:
           cp "${release_apks[@]}" dist/release/
           test -n "$(find dist/debug -name '*.apk' -print -quit)"
           test -n "$(find dist/release -name '*.apk' -print -quit)"
-          sha256sum dist/debug/*.apk dist/release/*.apk
+          test "${#debug_apks[@]}" -eq 4
+          test "${#release_apks[@]}" -eq 4
+          sha256sum dist/debug/*.apk dist/release/*.apk | tee dist/SHA256SUMS.txt
           for apk in dist/debug/*.apk dist/release/*.apk; do
             "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk"
           done
+
+      - name: Publish APK checksums
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Girassol-checksums
+          path: dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Explain APK download
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## APKs para teste'
+            echo 'Baixe Girassol-debug nos Artifacts desta execução. Para Moto G62, use app-arm64-v8a-debug.apk.'
+            echo 'Girassol-release usa a chave debug de desenvolvimento; os oito APKs são verificados com apksigner.'
+            echo "Commit: $GITHUB_SHA"
+            echo 'Confira os arquivos usando Girassol-checksums.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish debug APK artifact
         if: always()

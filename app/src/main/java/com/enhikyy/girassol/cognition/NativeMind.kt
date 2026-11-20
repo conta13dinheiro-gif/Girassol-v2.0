@@ -74,6 +74,13 @@ internal object NativeMind {
             val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
             check(next.valid(world.tick))
             minds[citizen.id]=next
+            val previousGate=old.tsetlin
+            var gateBytes=previousGate.bytes()
+            if(previousGate.decisionTick==world.tick-1 && previousGate.action==citizen.activity.ordinal &&
+                outcome in listOf("OK","PRECONDITION_FAILED","RESERVED")) {
+                gateBytes=GeaNativeBridge.tsetlinTrain(gateBytes,previousGate.features,if(outcome=="OK") 1 else 0,
+                    Canonical.stream(world.seed,citizen.id,world.tick,"tsetlin-feedback-v1").nextLong())
+            }
             val scores=values(272,8).toMutableList()
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
             val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
@@ -90,6 +97,7 @@ internal object NativeMind {
                 val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
                 val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
                 scores[i]+=-ln(-ln(u))*temperature
+                scores[i]+=GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,activity),true)*.05
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
                 val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
@@ -115,6 +123,7 @@ internal object NativeMind {
                 world,citizen,decision,autonomy.actualSensory.getValue(citizen.id)
             )
             minds[citizen.id]=minds.getValue(citizen.id).copy(
+                tsetlin=TsetlinState(TsetlinState.encode(gateBytes),TsetlinState.features(citizen,decision),decision.ordinal,world.tick),
                 psyche=minds.getValue(citizen.id).psyche.copy(expectedSensory=expectedSensors,initialized=true)
             )
         }
