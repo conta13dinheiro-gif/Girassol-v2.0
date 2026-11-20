@@ -10,7 +10,8 @@ android {
     ndkVersion = "27.0.12077973"
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     defaultConfig {
-        ndk { abiFilters += girassolTargetAbis }
+        // ABI selection is owned exclusively by splits. Android Gradle Plugin
+        // rejects overlapping ndk.abiFilters and splits.abi filters.
         applicationId = "com.enhikyy.girassol"
         minSdk = 33
         targetSdk = 35
