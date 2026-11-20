@@ -44,9 +44,11 @@ class BiosphereService : Service() {
                 pendingNeural = null
                 val prior=actor!!.state
                 if(thermal>0 || memory.lowMemory) rsi.cancel()
-                val revision=rsi.take(prior)
                 val thermalTier = AllostaticThermalCoupling.fromPlatformThermalStatus(thermal)
-                val mind=research.deliberate(prior,research.enrich(prior,com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions,thermalTier=thermalTier).copy(evolution=revision)))
+                val evaluated = research.enrich(prior, com.enhikyy.girassol.cognition.NativeMind.evaluate(prior,lastActions,thermalTier=thermalTier))
+                // A shadow-replay revision is consumed only when the native four-e-gate consensus admits promotion.
+                val revision = if (evaluated.rsiPromotionGate) rsi.take(prior) else null
+                val mind=research.deliberate(prior,evaluated.copy(evolution=revision))
                 val candidate=WorldActor(actor!!.checkpoint(),7)
                 val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(prior,candidate.intentions(proposal,mind))
                 val transition = candidate.step(proposal,mind,spatial)
