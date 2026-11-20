@@ -80,7 +80,7 @@ inline DeterministicEngineOutput stepDeterministicEngines(
         + 0.25f * (1.0f - novelty));
 
     // Brier calibration is updated from the prior success probability and observed outcome.
-    const float predictedSuccess = unit(input.priorState[7]);
+    const float predictedSuccess = unit((oldQ + 1.0f) * 0.5f);
     const float targetSuccess = unit((outcome + 1.0f) * 0.5f);
     const float brier = unit(0.8f * predictedSuccess + 0.2f * (predictedSuccess - targetSuccess)
         * (predictedSuccess - targetSuccess));
