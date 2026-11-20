@@ -66,7 +66,10 @@ internal object GeaSchema {
             "SELECT automata,digest FROM tsetlin_automata_blobs WHERE agent_id=? ORDER BY event_id DESC LIMIT 1",
             arrayOf(com.enhikyy.girassol.cognition.TsetlinReflexEngine.persistenceKey)
         ).use { rows ->
-            if (!rows.moveToFirst()) return
+            if (!rows.moveToFirst()) {
+                com.enhikyy.girassol.cognition.TsetlinReflexEngine.reset()
+                return
+            }
             val blob = rows.getBlob(0)
             val digest = java.security.MessageDigest.getInstance("SHA-256").digest(blob)
                 .joinToString("") { "%02x".format(it) }
