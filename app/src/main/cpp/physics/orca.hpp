@@ -58,7 +58,6 @@ inline Line makeLine(
     double timeHorizon,
     double timeStep
 ) {
-    constexpr double epsilon = 1e-12;
     const Vec2 relativePosition = sub(other.position, position);
     const Vec2 relativeVelocity = sub(velocity, other.velocity);
     const double distanceSquared = normSq(relativePosition);
