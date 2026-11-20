@@ -1,7 +1,3 @@
-<!-- coderabbit-ai-generated:v1 -->
-
-<!-- coderabbit-ai-generated-section:v1:c39ac1ddf8130ad85c855629ba020db304b4e2364cb03841d14247eeeb3757b5 -->
-
 # Continuação do Girassol — estado verificável
 
 <!-- coderabbit-ai-generated:v1 -->
@@ -102,10 +98,15 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 
 <!-- /coderabbit-ai-generated:v1 -->
 - Sem `/dev/kvm` neste sandbox; nenhuma medição 24/7, de RAM no Moto G62 ou validação de dispositivo foi realizada.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:23cbead76df765fcca357aed87b8a0749a9492e5324a8f831da5b40824e0154a -->
+
 - Fases 2–4 permanecem pendentes conforme a lista inicial. Nenhuma classe/tabela criada nesta etapa comprova a conclusão dessas frentes.
 
+<!-- coderabbit-ai-generated:v1 -->
 
-<!-- /coderabbit-ai-generated:v1 -->
+<!-- coderabbit-ai-generated-section:v1:7fb9cca374902ba3700409832f07fcc06f64b57915a850c2c8ccafe248470f23 -->
 
 ## Entrega atual — Frente 5 (2026-11-20)
 
@@ -119,6 +120,26 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - Comando completo testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon passou em 6m17s (121 tarefas). Os oito APKs passaram em apksigner verify; as 18 exportações foram conferidas nas três ABIs do universal Release. Release segue usando chave debug. CI deste novo commit será disparado pelo push; sucesso remoto não é presumido.
 - Limites ainda sem medição: latência, RAM total e carga 24/7 no Moto G62; testes instrumentados Android não executados por ausência de dispositivo.
 
+## Entrega atual — Frente 1 / RSI (2026-11-20)
+
+**Cobertura funcional local: 27,3% (3/11 frentes: 3, 5 e 1).** São frentes implementadas e integradas com os testes locais descritos; não é percentual de esforço, de cobertura de linhas ou de aceite no aparelho. As oito frentes das Fases 3 e 4 continuam pendentes. A próxima é a Frente 8.
+
+- CognitivePolicyGenome limita sete parâmetros aos intervalos da referência; rejeita valores inválidos em vez de corrigi-los silenciosamente. Os parâmetros afetam exploração, gate de deliberação, histerese, atualização MemRL, decaimento ACT-R na consolidação e sensibilidade térmica. Pesos físicos/limites do mundo não são mutados.
+- VPO compila uma gramática GBNF finita em 27 regras condicionais permitidas. O compilador rejeita recursão, símbolos desconhecidos, construções não suportadas e expansões acima de 128 strings/140 caracteres. Genomas conservam no máximo oito regras. CMA-ES nativo usa suas oito dimensões fixas para sete parâmetros e seleção de produção gramatical; não gera código executável.
+- Replay usa WorldActor/NativeMind reais e a mesma versão corrente. Mede F médio, fração de agentes homeostaticamente viáveis, Brier apenas em resultados concluídos (MOVE não é rotulado como falha), entropia normalizada das atividades e chamadas neurais efetivas. A busca determinística não chama o LLM/research assíncrono: N_LLM foi zero, e isso não mede o custo do LLM em produção.
+- Promoção exige zero violações, H_sem ≥ 0,35, degradação Brier ≤ 0,010 e ΔJ ≥ 0,025 nas janelas de treino e validação independentes. Também mantém ganho legado >0,03 sem regressão nas quatro métricas. Regras v8, idade Double e CURRENT_RULES_VERSION não foram alterados. Revisões históricas mantêm a codificação e validação legadas.
+- Schema 6 acrescenta rsi_policy_trials sem modificar as oito tabelas de domínio do Schema 5. Propostas são gravadas antes de executar a avaliação; treino e resultados são registros imutáveis, com FK para a origem, digest, limite de 16 KiB e unicidade do terminal. O tick de gravação separa evidências futuras em forks. Recuperação marca propostas interrompidas em lotes de vinte. Promoções novas exigem evidência VERIFIED persistida e correspondência com o treino registrado.
+- A integração do serviço grava cada proposta/resultado, aguarda a finalização cooperativa antes de fechar/trocar a linha e bloqueia novos trabalhos após close. VERIFIED significa experimento verificado; a promoção efetiva continua no evento e em rsi_promotion_ledger, na transação do checkpoint.
+- Execuções locais finais: 97 testes core, 13 do app, host-validation e lintDebug passaram. Os onze testes SQLite reais passaram, incluindo disco cheio, corrupção, rollback, migrações 5/6, imutabilidade e cópia de prefixo com FK diferida. As dez suítes nativas e a injeção HNSW passaram com ASan/UBSan.
+- JNI final passou: 500 transições, equivalência live/shadow com genoma alterado, repetição determinística, vinte propostas com vinte resultados terminais, cancelamento preservando proposta e recusa de avaliação após falha do gravador. Todos os candidatos dessa busca foram recusados em treino; não houve promoção nem execução da janela de validação de um vencedor nessa rodada. Testes de unidade cobrem aceitação/recusa das duas janelas; não foi fabricado um vencedor.
+- Build com core/host/instrumentation compile/testDebugUnitTest/lintDebug/assembleDebug/assembleRelease passou em 7 minutos, 137 tarefas. Os oito APKs passaram em apksigner verify; 18 símbolos JNI foram conferidos em todas as três ABIs do universal Release. Release continua com chave debug. O push dispara nova Action; sucesso remoto deste commit ainda não é presumido.
+- Testes instrumentados de migração 1–5→6 e recuperação real do WorldStore compilaram, mas não executaram: adb não encontrou dispositivo, a lista de AVDs está vazia e /dev/kvm não existe. A verificação em software não foi iniciada sem emulador/imagem instalados. RAM total/latência/24 horas no Moto G62 continuam sem medição. Os limites novos de genoma, gramática, candidatos e payload não substituem essa medição nem fecham os limites dos motores das próximas frentes.
+
+
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 <!-- /coderabbit-ai-generated:v1 -->

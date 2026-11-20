@@ -11,11 +11,63 @@ import kotlinx.serialization.json.Json
 internal object GeaSchema {
     val tables = listOf("rsi_promotion_ledger", "subjective_beliefs", "ecological_niche_structures",
         "tsetlin_automata_blobs", "adico_institutions", "double_entry_ledger",
-        "bkt_fsrs_mastery", "voyager_skill_library")
+        "bkt_fsrs_mastery", "voyager_skill_library", "rsi_policy_trials")
 
     fun create(context: Context, db: SQLiteDatabase) {
         context.assets.open("database/gea-v5.sql").bufferedReader().use { reader ->
             reader.readText().split(';').map(String::trim).filter(String::isNotEmpty).forEach { db.execSQL(it) }
+        }
+    }
+
+    fun createV6(context: Context,db: SQLiteDatabase) {
+        context.assets.open("database/gea-v6.sql").bufferedReader().use { reader ->
+            reader.readText().split("-- @statement").map(String::trim).filter(String::isNotEmpty).forEach { db.execSQL(it) }
+        }
+    }
+
+    fun recordTrial(db: SQLiteDatabase,trial: RsiTrial) {
+        require(trial.valid() && trial.sourceTick>0)
+        db.beginTransaction()
+        try {
+            db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(trial.sourceTick.toString())).use { source ->
+                check(source.moveToFirst()) { "RSI source is absent from this timeline" }
+                val event=Canonical.event(source.getString(0))
+                check(event.valid() && event.hash==trial.sourceEventHash && event.stateHash==trial.sourceStateHash)
+            }
+            if(trial.stage!="PROPOSED") db.rawQuery("SELECT payload FROM rsi_policy_trials WHERE trial_id=? AND stage='PROPOSED'",arrayOf(trial.id)).use { row ->
+                check(row.moveToFirst())
+                val proposed=Json.decodeFromString<RsiTrial>(row.getString(0))
+                check(sameProposal(proposed,trial))
+            }
+            if(trial.stage=="VERIFIED") db.rawQuery("SELECT payload FROM rsi_policy_trials WHERE trial_id=? AND stage='TRAINED'",arrayOf(trial.id)).use { row ->
+                check(row.moveToFirst())
+                val trained=Json.decodeFromString<RsiTrial>(row.getString(0))
+                check(trained.trainingBaseline==trial.trainingBaseline && trained.trainingCandidate==trial.trainingCandidate)
+            }
+            val committedTick=db.rawQuery("SELECT event_id FROM checkpoint WHERE id=1",null).use { tip -> check(tip.moveToFirst()); tip.getLong(0) }
+            check(committedTick>=trial.sourceTick)
+            val payload=Json.encodeToString(trial)
+            require(payload.length<=16384)
+            db.insertOrThrow("rsi_policy_trials",null,ContentValues().apply {
+                put("event_id",committedTick); put("source_event_id",trial.sourceTick); put("trial_id",trial.id); put("stage",trial.stage)
+                put("rules_version",trial.rulesVersion); put("payload",payload); put("digest",Canonical.hash(payload))
+            })
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+    private fun sameProposal(a: RsiTrial,b: RsiTrial) = a.id==b.id && a.seed==b.seed && a.sourceTick==b.sourceTick &&
+        a.sourceStateHash==b.sourceStateHash && a.sourceEventHash==b.sourceEventHash && a.rulesVersion==b.rulesVersion &&
+        a.ordinal==b.ordinal && a.baseline==b.baseline && a.candidate==b.candidate
+
+    /** A process death leaves a durable proposal, never a fabricated promotion. */
+    fun recoverTrials(db: SQLiteDatabase) {
+        while(true) {
+            val abandoned=mutableListOf<RsiTrial>()
+            db.rawQuery("SELECT p.payload FROM rsi_policy_trials p WHERE p.stage='PROPOSED' AND NOT EXISTS (SELECT 1 FROM rsi_policy_trials t WHERE t.trial_id=p.trial_id AND t.stage NOT IN ('PROPOSED','TRAINED')) LIMIT 20",null).use { rows ->
+                while(rows.moveToNext()) abandoned+=Json.decodeFromString<RsiTrial>(rows.getString(0))
+            }
+            if(abandoned.isEmpty()) return
+            abandoned.forEach { recordTrial(db,it.copy(stage="CANCELLED",reason="RECOVERED_INTERRUPTION")) }
         }
     }
 
@@ -26,7 +78,11 @@ internal object GeaSchema {
             val payload = Json.encodeToString(revision)
             db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
                 put("event_id", event.eventId); put("rules_version", revision.rulesVersion)
-                if (revision.sourceTick == 0L) putNull("source_event_id") else put("source_event_id", revision.sourceTick)
+                if (revision.sourceTick == 0L) {
+                    putNull("source_event_id")
+                } else {
+                    put("source_event_id", revision.sourceTick)
+                }
                 put("payload", payload); put("digest", Canonical.hash(payload))
             })
         }
@@ -76,6 +132,17 @@ internal object GeaSchema {
                 check(rows.getInt(3)==1 && recorded!=null && recorded.bytes().contentEquals(rows.getBlob(0))) {
                     "Tsetlin blob differs from canonical event"
                 }
+            }
+        }
+        db.rawQuery("SELECT t.payload,t.digest,t.event_id,t.trial_id,t.stage,t.rules_version,e.payload,p.payload,t.source_event_id FROM rsi_policy_trials t JOIN events e ON e.id=t.source_event_id JOIN rsi_policy_trials p ON p.trial_id=t.trial_id AND p.stage='PROPOSED'",null).use { rows ->
+            while(rows.moveToNext()) {
+                val payload=rows.getString(0)
+                check(Canonical.hash(payload)==rows.getString(1))
+                val trial=Json.decodeFromString<RsiTrial>(payload)
+                val event=Canonical.event(rows.getString(6))
+                check(trial.valid() && trial.sourceTick<=rows.getLong(2) && trial.sourceTick==rows.getLong(8) && trial.id==rows.getString(3) && trial.stage==rows.getString(4) && trial.rulesVersion==rows.getInt(5))
+                check(event.valid() && event.hash==trial.sourceEventHash && event.stateHash==trial.sourceStateHash)
+                check(sameProposal(Json.decodeFromString<RsiTrial>(rows.getString(7)),trial))
             }
         }
         db.rawQuery("PRAGMA quick_check", null).use {

@@ -25,12 +25,14 @@ internal object NativeMind {
         return old.copy(parameters=List(248) { data.getDouble(it*8) },hidden=List(8) { data.getDouble((248+it)*8) },exposure=exposure,learnedTick=tick)
             .also { check(it.valid(tick)) }
     }
-    fun evaluate(
+    @JvmOverloads fun evaluate(
         world: WorldState,
         lastActions: List<ActionRecord> = emptyList(),
         policy: List<Double> = world.evolution?.weights ?: List(8) { 0.0 },
-        thermalTier: ThermalTier = ThermalTier.NONE_OR_LIGHT
+        thermalTier: ThermalTier = ThermalTier.NONE_OR_LIGHT,
+        genome: CognitivePolicyGenome = world.evolution?.cognitive?.candidate ?: CognitivePolicyGenome()
     ): CognitiveFrame {
+        require(genome.valid())
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
         val prepared=world.agents.associate { citizen ->
             val mind=world.minds[citizen.id] ?: run {
@@ -64,7 +66,7 @@ internal object NativeMind {
             val exposure=old.exposure.toMutableList()
             if(learn && exposure[citizen.activity.ordinal]<Int.MAX_VALUE) exposure[citizen.activity.ordinal]++
             val archive=if(learn && (distances.firstOrNull() ?: 1.0)>.06) old.behaviors+listOf(behavior) else old.behaviors
-            var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id })
+            var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id },genome.memRlLearningRate,genome.actRDecayExponent)
             if(citizen.acting && citizen.activity==Activity.TALK && outcome=="OK") {
                 val teacher=world.agents.filter { it.id!=citizen.id && hypot(it.x-citizen.x,it.z-citizen.z)<=2.5 }.minByOrNull { it.id }
                 if(teacher!=null) world.minds[teacher.id]?.let { bank=bank.learnFrom(teacher.id,it.memory,world.tick) }
@@ -83,9 +85,9 @@ internal object NativeMind {
             }
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
             val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
-            val thermalCost=AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier,1.0,n.energy)
+            val thermalCost=AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier,genome.thermalThrottleSensitivity,n.energy)
             val policyScale=1.0/(1.0+thermalCost)
-            val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
+            val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale*genome.epistemicExplorationWeight/.65
             val noise=List(8) { -ln(-ln(exploration.nextDouble().coerceIn(1e-12,1-1e-12)))*temperature }
             val decisionBank=bank
             val nativeScores=values(272,8) // Workers never retain the reusable JNI buffer.
@@ -125,7 +127,7 @@ internal object NativeMind {
             val likelihoods=Activity.entries.map {
                 (GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,it),false)+9.0)/18.0
             }
-            val selection=ActiveInferencePianoEngine.select(citizen,scores,likelihoods)
+            val selection=ActiveInferencePianoEngine.select(citizen,scores,likelihoods,genome)
             val decision=selection.action
             decisions[citizen.id]=decision
             val expectedSensors=NativeAutonomy.predictNext(
@@ -134,7 +136,9 @@ internal object NativeMind {
             minds[citizen.id]=minds.getValue(citizen.id).copy(
                 decision=DecisionTrace(selection.topThree,selection.evidence.map { it.freeEnergy },
                     selection.evidence.map { it.expectedFreeEnergy },selection.evidence.map { it.success },
-                    thermalTier==ThermalTier.NONE_OR_LIGHT && GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,decision),true)<4),
+                    thermalTier==ThermalTier.NONE_OR_LIGHT && GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,decision),true)<4 &&
+                        (1-minOf(n.energy,n.hydration,n.glucose)>=genome.cognitiveGateMinUrgency ||
+                         abs(selection.evidence[selection.topThree[0].ordinal].expectedFreeEnergy-selection.evidence[selection.topThree[1].ordinal].expectedFreeEnergy)<=genome.cognitiveGateTieThreshold)),
                 tsetlin=TsetlinState(TsetlinState.encode(gateBytes),TsetlinState.features(citizen,decision),decision.ordinal,world.tick),
                 psyche=minds.getValue(citizen.id).psyche.copy(expectedSensory=expectedSensors,initialized=true)
             )

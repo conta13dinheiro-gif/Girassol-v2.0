@@ -23,13 +23,15 @@ object ActiveInferencePianoEngine {
         val g=pragmatic-epistemic
         return Evidence(f,g,success,pragmatic,epistemic)
     }
-    fun select(citizen: Citizen, scores: List<Double>, likelihoods: List<Double>): Selection {
+    fun select(citizen: Citizen, scores: List<Double>, likelihoods: List<Double>,genome: CognitivePolicyGenome=CognitivePolicyGenome()): Selection {
+        require(genome.valid())
         require(scores.size==8 && scores.all(Double::isFinite) && likelihoods.size==8)
         val evidence=likelihoods.map { evidence(citizen.needs.energy,it) }
         val ranked=Activity.entries.sortedWith(compareBy<Activity> {
             val e=evidence[it.ordinal]
-            e.expectedFreeEnergy+.25*e.freeEnergy-scores[it.ordinal] -
-                if(it==citizen.activity) .05 else 0.0
+            e.expectedFreeEnergy+(1-genome.epistemicExplorationWeight)*e.epistemic+.25*e.freeEnergy-scores[it.ordinal] -
+                genome.activeVpoRules.mapNotNull(VpoRule::parse).filter { rule -> rule.action==it }.sumOf { rule -> rule.bonus(citizen) } -
+                if(it==citizen.activity) genome.intentionSwitchHysteresis else 0.0
         }.thenBy { it.ordinal })
         // PSelf homeostatic anchor constrains the workspace before policy execution.
         val anchor=CoreSelfAnchor.urgent(citizen)

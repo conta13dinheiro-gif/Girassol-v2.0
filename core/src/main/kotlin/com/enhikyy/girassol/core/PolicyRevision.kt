@@ -15,12 +15,18 @@ import kotlinx.serialization.ExperimentalSerializationApi
     val baseWeights: List<Double>,val weights: List<Double>,val trainingBaseline: ReplayMetrics,val trainingCandidate: ReplayMetrics,
     val validationBaseline: ReplayMetrics,val validationCandidate: ReplayMetrics,val horizon: Int,val evaluations: Int,
     val algorithm: String = "CMA-ES/positive-rank-mu-v1",
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val rulesVersion: Int = 5) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val rulesVersion: Int = 5,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val cognitive: VerifiedGenomeChange? = null) {
     fun valid(seed: Long,tick: Long): Boolean = this.seed==seed && rulesVersion in 5..WorldActor.CURRENT_RULES_VERSION && sourceTick in 0..tick &&
         sourceStateHash.matches(Regex("[0-9a-f]{64}")) && sourceEventHash.matches(Regex("[0-9a-f]{64}")) &&
         baseWeights.size==8 && weights.size==8 && (baseWeights+weights).all { it.isFinite() && it in -2.0..2.0 } &&
-        weights!=baseWeights && horizon>=100 && evaluations>=10 && algorithm=="CMA-ES/positive-rank-mu-v1" &&
+        horizon>=100 && evaluations>=10 &&
+        (if(cognitive==null) weights!=baseWeights && algorithm=="CMA-ES/positive-rank-mu-v1"
+         else weights==baseWeights && rulesVersion==WorldActor.CURRENT_RULES_VERSION && algorithm=="VPO/CMA-ES-genome-v1" &&
+             cognitive.valid() && cognitive.trainingBaseline.legacy==trainingBaseline && cognitive.trainingCandidate.legacy==trainingCandidate &&
+             cognitive.validationBaseline.legacy==validationBaseline && cognitive.validationCandidate.legacy==validationCandidate) &&
         trainingCandidate.dominates(trainingBaseline) && validationCandidate.dominates(validationBaseline)
-    fun applicable(world: WorldState) = valid(world.seed,world.tick) && baseWeights==(world.evolution?.weights ?: List(8) { 0.0 })
-    fun snapshot() = copy(baseWeights=baseWeights.toList(),weights=weights.toList())
+    fun applicable(world: WorldState) = valid(world.seed,world.tick) && baseWeights==(world.evolution?.weights ?: List(8) { 0.0 }) &&
+        (cognitive==null || cognitive.baseline==(world.evolution?.cognitive?.candidate ?: CognitivePolicyGenome()))
+    fun snapshot() = copy(baseWeights=baseWeights.toList(),weights=weights.toList(),cognitive=cognitive?.snapshot())
 }

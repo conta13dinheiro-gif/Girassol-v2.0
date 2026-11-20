@@ -9,7 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
-class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 5, DatabaseErrorHandler {
+class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 6, DatabaseErrorHandler {
     throw SQLiteDatabaseCorruptException("Banco corrompido; arquivo preservado para recuperação")
 }) {
     private val app=context.applicationContext
@@ -21,17 +21,22 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         createHistory(db)
         ResearchTables.create(db)
         GeaSchema.create(app, db)
+        GeaSchema.createV6(app, db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..4 && newVersion==5)
+        check(oldVersion in 1..5 && newVersion==6)
         if(oldVersion<2) createHistory(db)
         if(oldVersion<3) ResearchTables.create(db) else if(oldVersion<4) ResearchTables.createVectors(db)
-        GeaSchema.create(app, db)
+        if(oldVersion<5) GeaSchema.create(app, db)
+        GeaSchema.createV6(app, db)
     }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, tick INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, cause TEXT NOT NULL, agents TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, event_hash TEXT NOT NULL)")
         db.execSQL("CREATE INDEX milestones_tick ON milestones(tick)")
     }
+
+    fun recordRsiTrial(trial: RsiTrial) = GeaSchema.recordTrial(writableDatabase,trial)
+    fun recoverRsiTrials() = GeaSchema.recoverTrials(writableDatabase)
 
     fun load(): Checkpoint? {
         val db = readableDatabase
@@ -71,6 +76,17 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             }
             transition.event.cognition?.evolution?.let { revision->
                 check(previous!=null && revision.applicable(previous))
+                revision.cognitive?.let { change ->
+                    db.rawQuery("SELECT payload FROM rsi_policy_trials WHERE source_event_id=? AND stage='VERIFIED'",arrayOf(revision.sourceTick.toString())).use { trials ->
+                        var matched=false
+                        while(trials.moveToNext()) {
+                            val t=kotlinx.serialization.json.Json.decodeFromString<RsiTrial>(trials.getString(0))
+                            if(t.candidate==change.candidate && t.baseline==change.baseline && t.trainingBaseline==change.trainingBaseline &&
+                                t.trainingCandidate==change.trainingCandidate && t.validationBaseline==change.validationBaseline && t.validationCandidate==change.validationCandidate) matched=true
+                        }
+                        check(matched) { "RSI promotion lacks durable verified evidence" }
+                    }
+                }
                 if(revision.sourceTick==0L) check(revision.sourceEventHash==WorldActor.GENESIS_HASH && revision.sourceStateHash==Canonical.hash(Canonical.state(WorldActor.genesis(previous.seed))))
                 else db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(revision.sourceTick.toString())).use { source->
                     check(source.moveToFirst()) { "Origem da política ausente nesta linha" }

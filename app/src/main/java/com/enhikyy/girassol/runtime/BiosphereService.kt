@@ -26,7 +26,7 @@ class BiosphereService : Service() {
     private var actor: WorldActor? = null
     private var running = false
     private var speed = 1
-    private val rsi=com.enhikyy.girassol.cognition.RsiCoordinator()
+    private val rsi=com.enhikyy.girassol.cognition.RsiCoordinator { trial -> store.recordRsiTrial(trial) }
     private var lastActions: List<ActionRecord> = emptyList()
     private var pendingNeural: NeuralProposal? = null
     private var neuralResult = "Nenhuma proposta neural processada"
@@ -78,7 +78,7 @@ class BiosphereService : Service() {
         startForeground(10, notification())
         handler.post {
             try {
-                if (actor == null) { actor = store.load()?.let { WorldActor(it,WorldActor.CURRENT_RULES_VERSION) } ?: WorldActor(rulesVersion=WorldActor.CURRENT_RULES_VERSION); lastActions=store.lastActions() }
+                if (actor == null) { store.recoverRsiTrials(); actor = store.load()?.let { WorldActor(it,WorldActor.CURRENT_RULES_VERSION) } ?: WorldActor(rulesVersion=WorldActor.CURRENT_RULES_VERSION); lastActions=store.lastActions() }
                 research.refresh()
                 when (intent?.action) {
                     ACTION_DATASET -> {
@@ -172,6 +172,7 @@ class BiosphereService : Service() {
         var installed=false
         val oldName=WorldStore.activeName(this)
         try {
+            replacement.recoverRsiTrials()
             val point=checkNotNull(replacement.load())
             replacement.audit()
             val next=WorldActor(point,WorldActor.CURRENT_RULES_VERSION)

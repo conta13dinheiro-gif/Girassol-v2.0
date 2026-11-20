@@ -24,14 +24,21 @@ import com.enhikyy.girassol.ui.theme.Solar
     world.evolution?.let { policy->
         Spacer(Modifier.height(12.dp)); Text("Última política promovida",color=Solar.Biosphere,fontSize=12.sp)
         Text("${policy.evaluations} avaliações · duas janelas de ${policy.horizon} ciclos · origem ${policy.sourceTick}",color=Solar.Muted,fontSize=11.sp)
+        val change=policy.cognitive
+        if(change!=null) {
+            Text("Genoma cognitivo v${change.candidate.version} · regras verificadas ${change.candidate.activeVpoRules.size}",color=Solar.Biosphere,fontSize=11.sp)
+            Text("Diversidade ${"%.3f".format(java.util.Locale.ROOT,change.validationCandidate.safety.semanticEntropy)} · Brier ${"%.3f".format(java.util.Locale.ROOT,change.validationCandidate.safety.brierScore)}",color=Solar.Muted,fontSize=11.sp)
+        }
         Canvas(Modifier.fillMaxWidth().height(68.dp).padding(vertical=8.dp)) {
             val center=size.height/2
             drawLine(Solar.Muted.copy(alpha=.3f),Offset(0f,center),Offset(size.width,center))
-            policy.weights.zip(policy.baseWeights).forEachIndexed { i,(next,old)->
-                val x=size.width*(i+.5f)/8; val change=((next-old)/4).toFloat()
+            val nextValues=change?.candidate?.vector()?.take(7) ?: policy.weights
+            val oldValues=change?.baseline?.vector()?.take(7) ?: policy.baseWeights
+            nextValues.zip(oldValues).forEachIndexed { i,(next,old)->
+                val x=size.width*(i+.5f)/nextValues.size; val change=((next-old)/4).toFloat()
                 drawLine(if(change>=0) Solar.Biosphere else Solar.Cognitive,Offset(x,center),Offset(x,center-change*size.height),size.width/14)
             }
         }
-        Text("Diferença dos oito pesos de decisão. A evidência e os pesos anteriores estão preservados no diário.",color=Solar.Muted,fontSize=10.sp)
+        Text(if(change==null) "Diferença dos oito pesos de decisão; evidência preservada no diário." else "Diferença normalizada dos sete parâmetros cognitivos; evidência preservada no diário.",color=Solar.Muted,fontSize=10.sp)
     } ?: Text("Nenhuma política promovida. A biosfera segue aprendendo em suas redes locais.",color=Solar.Muted,fontSize=11.sp)
 }

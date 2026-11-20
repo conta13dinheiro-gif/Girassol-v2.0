@@ -107,7 +107,8 @@ import kotlin.math.*
         return copy(utilities=retainedUtilities,pendingRecallEventIds=pending,workingMemory=nextWorking)
     }
 
-    fun observe(world: WorldState,citizen: Citizen,record: ActionRecord?): MemoryBank {
+    fun observe(world: WorldState,citizen: Citizen,record: ActionRecord?,learningRate: Double=MEMRL_ALPHA,activationDecay: Double=.5): MemoryBank {
+        require(learningRate.isFinite() && learningRate in .05.. .50 && activationDecay.isFinite() && activationDecay in .20.. .85)
         val last=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick }
         val failed=record?.outcome=="PRECONDITION_FAILED" || record?.outcome=="RESERVED"
         var next=this
@@ -131,7 +132,7 @@ import kotlin.math.*
                 val byId=next.utilities.associateBy { it.eventId }.toMutableMap()
                 pendingRecallEventIds.forEach { id ->
                     val old=byId[id] ?: return@forEach
-                    val alpha=MEMRL_ALPHA
+                    val alpha=learningRate
                     byId[id]=old.copy(qValue=(old.qValue+alpha*(reward-old.qValue)).coerceIn(-5.0,5.0),lastFeedbackTick=world.tick)
                 }
                 next=next.copy(
@@ -173,7 +174,7 @@ import kotlin.math.*
             )
         }
         if (due || next.episodes.size > HippocampalSleepConsolidator.MAX_NODES_PER_AGENT) {
-            next = HippocampalSleepConsolidator.consolidate(next, world.tick).bank
+            next = HippocampalSleepConsolidator.consolidate(next, world.tick,activationDecay=activationDecay).bank
         }
         return next
     }

@@ -160,5 +160,106 @@ class MigrationTest(unittest.TestCase):
                 target.close()
 
 
+V6 = (ROOT / 'app/src/main/assets/database/gea-v6.sql').read_text().split('-- @statement')
+
+
+def migrate6(db):
+    db.execute('BEGIN')
+    with db:
+        for statement in V6:
+            db.execute(statement)
+        db.execute('PRAGMA user_version=6')
+
+
+def trial(db, stage='PROPOSED', identity='b'*64, payload='{}'):
+    db.execute('INSERT INTO rsi_policy_trials(event_id,source_event_id,trial_id,stage,rules_version,payload,digest) VALUES(?,?,?,?,?,?,?)',
+               (1, 1, identity, stage, 8, payload, 'a'*64))
+
+
+class RsiMigrationTest(unittest.TestCase):
+    def test_schema6_preserves_all_schema5_evidence_and_immutable_trials(self):
+        with baseline() as db:
+            migrate(db)
+            for table, row in zip(TABLES, ROWS):
+                insert(db, table, row)
+            db.commit()
+            migrate6(db)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 6)
+            for table, row in zip(TABLES, ROWS):
+                self.assertEqual(db.execute(f'SELECT * FROM {table}').fetchone(), row)
+            with db:
+                trial(db)
+                trial(db, 'TRAINED')
+                trial(db, 'REJECTED')
+            for sql in ["UPDATE rsi_policy_trials SET payload='changed'", 'DELETE FROM rsi_policy_trials']:
+                with self.assertRaises(sqlite3.IntegrityError):
+                    db.execute(sql)
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                trial(db, 'VERIFIED')
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                trial(db, 'REJECTED', 'c'*64)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_interrupted_schema6_rolls_back_without_losing_schema5(self):
+        with baseline() as db:
+            migrate(db)
+            insert(db, TABLES[0], ROWS[0])
+            db.commit()
+            db.set_authorizer(lambda action, name, *_: sqlite3.SQLITE_DENY if action==sqlite3.SQLITE_CREATE_INDEX and name=='rsi_one_terminal' else sqlite3.SQLITE_OK)
+            with self.assertRaises(sqlite3.DatabaseError):
+                migrate6(db)
+            db.set_authorizer(None)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 5)
+            self.assertEqual(db.execute('SELECT * FROM rsi_promotion_ledger').fetchone(), ROWS[0])
+            self.assertEqual(db.execute("SELECT count(*) FROM sqlite_master WHERE name='rsi_policy_trials'").fetchone()[0], 0)
+            migrate6(db)
+
+    def test_fork_excludes_experiment_written_after_selected_tick(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source=str(pathlib.Path(directory)/'source.db')
+            db=baseline(source)
+            migrate(db); migrate6(db)
+            with db:
+                db.execute("INSERT INTO events VALUES(2,2,'future')")
+                for stage in ('PROPOSED', 'TRAINED', 'REJECTED'):
+                    db.execute("INSERT INTO rsi_policy_trials(event_id,source_event_id,trial_id,stage,rules_version,payload,digest) VALUES(2,1,?,?,8,'{}',?)", ('b'*64, stage, 'a'*64))
+            db.close()
+            target=baseline()
+            try:
+                migrate(target); migrate6(target)
+                target.execute('ATTACH DATABASE ? AS origin', (source,))
+                with target:
+                    target.execute('INSERT INTO rsi_policy_trials SELECT * FROM origin.rsi_policy_trials WHERE event_id<=1')
+                self.assertEqual(target.execute('SELECT count(*) FROM rsi_policy_trials').fetchone()[0], 0)
+                with target:
+                    target.execute("INSERT INTO events VALUES(2,2,'future')")
+                    # Deferred self-FK permits a whole prefix even with terminals first.
+                    target.execute('INSERT INTO rsi_policy_trials SELECT * FROM origin.rsi_policy_trials WHERE event_id<=2 ORDER BY stage DESC')
+                self.assertEqual(target.execute('SELECT count(*) FROM rsi_policy_trials').fetchone()[0], 3)
+                self.assertEqual(target.execute('PRAGMA foreign_key_check').fetchall(), [])
+            finally:
+                target.close()
+
+    def test_failed_terminal_write_preserves_durable_proposal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db=baseline(str(pathlib.Path(directory)/'rsi.db'))
+            try:
+                migrate(db); migrate6(db)
+                with db:
+                    trial(db)
+                pages=db.execute('PRAGMA page_count').fetchone()[0]
+                db.execute(f'PRAGMA max_page_count={pages}')
+                with self.assertRaises(sqlite3.OperationalError) as failure, db:
+                    trial(db, 'REJECTED', payload='x'*16000)
+                self.assertEqual(failure.exception.sqlite_errorcode, sqlite3.SQLITE_FULL)
+                self.assertEqual(db.execute('SELECT stage FROM rsi_policy_trials').fetchall(), [('PROPOSED',)])
+                db.execute(f'PRAGMA max_page_count={pages+20}')
+                with db:
+                    trial(db, 'CANCELLED')
+                self.assertEqual(db.execute('SELECT count(*) FROM rsi_policy_trials').fetchone()[0], 2)
+            finally:
+                db.close()
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
