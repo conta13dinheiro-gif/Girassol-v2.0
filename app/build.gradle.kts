@@ -26,13 +26,35 @@ android {
     buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
+    val releaseSigningEnvironment = listOf(
+        "GIRASSOL_KEYSTORE_PATH",
+        "GIRASSOL_KEYSTORE_PASSWORD",
+        "GIRASSOL_KEY_ALIAS",
+        "GIRASSOL_KEY_PASSWORD"
+    ).associateWith { System.getenv(it) }
+    val configuredReleaseValues = releaseSigningEnvironment.values.count { !it.isNullOrBlank() }
+    signingConfigs {
+        create("release") {
+            if (configuredReleaseValues == 0) {
+                // Local development only: preserve a buildable variant when no release
+                // signing environment has been supplied at all.
+                initWith(getByName("debug"))
+            } else {
+                require(configuredReleaseValues == releaseSigningEnvironment.size) {
+                    "Release signing requires all four GIRASSOL_KEYSTORE_* / GIRASSOL_KEY_* environment variables."
+                }
+                storeFile = file(requireNotNull(releaseSigningEnvironment["GIRASSOL_KEYSTORE_PATH"]))
+                storePassword = requireNotNull(releaseSigningEnvironment["GIRASSOL_KEYSTORE_PASSWORD"])
+                keyAlias = requireNotNull(releaseSigningEnvironment["GIRASSOL_KEY_ALIAS"])
+                keyPassword = requireNotNull(releaseSigningEnvironment["GIRASSOL_KEY_PASSWORD"])
+            }
+        }
+    }
     buildTypes {
         debug { signingConfig = signingConfigs.getByName("debug") }
         release {
             isMinifyEnabled = true
-            // CI development artifact: valid Android signature, not a Play upload key.
-            // Replace with a private, persistent upload keystore before public distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
