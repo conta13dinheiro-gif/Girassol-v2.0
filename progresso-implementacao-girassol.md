@@ -255,7 +255,11 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 
 A medição de RAM/latência no Moto G62, carga 24/7 e execução dos testes instrumentados não foram realizadas. Release ainda usa identidade debug de desenvolvimento. O resultado local e os limites estruturais não comprovam adequação total a 4 GB. A Frente 4 exige FSRS/IRT completos e biblioteca executável Voyager; as frentes 7/9/10/11 ainda não foram declaradas concluídas.
 
-## Entrega atual — Frente 4 / Pedagogia e habilidades executáveis (2026-11-20)
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:5a011a362ba052c775b8ebc1f5546f4565e6e58b9432cdd5a9dd266c9b989493 -->
+
+## Histórico — Frente 4 / Pedagogia e habilidades executáveis (2026-11-20)
 
 **63,6% de cobertura funcional local (7/11 frentes: 3, 5, 1, 8, 2, 6 e 4).** Conta frentes integradas e verificadas com peso igual; não mede esforço, linhas, RAM, operação contínua ou aceite no aparelho. Permanecem 7, 9, 10 e 11.
 
@@ -280,6 +284,36 @@ A medição de RAM/latência no Moto G62, carga 24/7 e execução dos testes ins
 ### Pendências
 
 Frentes 7/9/10/11, execução instrumentada no Android, medição de RAM/latência no Moto G62, carga 24/7 e identidade persistente de assinatura. Não se atribui aceite dessas verificações à compilação ou aos limites estruturais. Detalhes do modelo pedagógico estão em `docs/pedagogia-fsrs45-voyager.md`.
+
+## Entrega atual — Frente 7 / MAP-Elites e AURORA (2026-11-20)
+
+**72,7% de cobertura funcional local (8/11 frentes: 3, 5, 1, 8, 2, 6, 4 e 7).** Conta frentes integradas e verificadas com peso igual. Não é esforço, cobertura de linhas, aceite no Moto G62 ou prontidão de distribuição. Permanecem 9, 10 e 11.
+
+### Implementação integrada
+
+- `map_elites_aurora.hpp` mantém uma grade 8×8×8 com 512 nichos. Oja aprende dois componentes de uma trajetória estruturada de 16 dimensões; o segundo componente usa deflação e dois passos explícitos de Gram-Schmidt. Média adaptativa, normalização e fallback degenerado são determinísticos. As trajetórias brutas de todos os elites são reprojetadas/reindexadas após cada atualização da PCA; colisões conservam maior qualidade e desempate por hash de proprietário.
+- Amostras vêm exclusivamente de aprendizado novo com resultado OK e recibo físico DONE do tick. MOVE/reserva/falha não recebem sucesso inventado. Usam frequências das oito ações nos últimos 32 episódios, cinco necessidades, posição x/z e recompensa. Eixo explícito: proporção TALK/BUILD/WRITE; os outros dois eixos são as projeções sigmoides. Qualidade: `0,5*média(necessidades)+0,3*tanh(recompensa/0,2)+0,2`, limitada a [-1,1]. São descritores operacionais, não embeddings de linguagem nem bem-estar empiricamente validado.
+- Cada elite guarda os oito valores reais do readout neural da decisão anterior. O resultado avalia o módulo que existia antes do feedback; valores pós-aprendizado não recebem crédito retroativo. Seleção uniforme entre nichos ocupados fornece uma contribuição limitada a 0,12 por ação na competição PIANO. O teste JNI altera o arquivo e comprova mudança da ordenação real de ações/Top-3. Esse consumo não promove CognitivePolicyGenome nem dispensa seus gates RSI.
+- Novo contrato JNI ABI 3, **19 funções**: lote de até 150 candidatos, capacidades exatas, saída gravável, finitude/faixas, ticks monotônicos e estado binário validados antes de alterar a saída. Sem handle/arquivo global entre mundos. Arrays C++ fixos: estado host de 131.480 bytes, wire de 125.852 bytes; asserção estática exige estado + reconstrução + lote abaixo de 300.000 bytes de pilha. O caminho passou pelo teste de zero alocação no heap.
+- Kotlin reutiliza um pool direto por thread (125.852 + 33.600 bytes, com vetor zero auxiliar de 125.852 bytes). Representação canônica esparsa contém cabeçalho e células ocupadas, com tamanho máximo explícito, preservada no evento/checkpoint SQLite e na transação existente. Cache de leitura não é serializado e não expõe vetores mutáveis. A interface exibe ocupação/cobertura/qualidade observadas do arquivo.
+- Histórico individual agora retém 256 comportamentos. Contador cumulativo separado preserva a contagem de descobertas RSI após a poda e migra pelo tamanho legado. Eventos antigos continuam sem os campos novos; replay histórico mantém bytes/regras. Foram preservados v8, teto 150, IDs por hash, segregação/dominância, idade Double e CURRENT_RULES_VERSION=8.
+
+### Evidência executada
+
+- **137 testes core, 13 testes JVM do app e 15 testes SQLite reais** passaram, sem falhas/erros/ignorados. Os quatro novos testes core cobrem codec esparso/round-trip de todos os bytes, projeções/corrupção/índices inválidos, defaults históricos/contador e descritores/qualidade medidos.
+- Build completo `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon`: sucesso em **8m38s**, 137 tarefas (52 executadas, 85 atualizadas). Lint: zero erros e 27 avisos existentes. **Oito APKs** passaram em `apksigner verify`; as 19 declarações JNI e exportações nas três ABIs foram conferidas.
+- `scripts/test-mind-jni.sh` terminou com sucesso: contrato ausente/presente, 500 transições com replay exato, integração QD, pedagogia, sociedade, memória/SWR/imunidade e economia física, três rollouts equivalentes de 256 ticks, busca RSI com 21 avaliações e vinte propostas/registros terminais, isolamento, cancelamento, falha de escrita e idade Double/entradas inválidas. Todos os vinte candidatos foram rejeitados no treino; promoção vencedora/janela independente continuam não exercitadas.
+- Testes instrumentados WorldStore agora conferem também o arquivo QD no checkpoint e na reabertura; **compilaram, mas não executaram** por ausência de alvo Android. Os insumos finais foram identificados por hashes no registro local de validação e permaneceram inalterados durante os gates.
+- Onze suítes C++ passaram com ASan/UBSan, incluindo convergência Oja em 100.000 amostras com componentes conhecidos (alinhamento >0,99), ortogonalidade, zeros/colinearidade, fronteiras dos bins, seleção/substituição por qualidade, reindexação, restauração binária exata, corrupção, limites de lote e zero heap. Recuperação HNSW nas 36/34 posições de falha de alocação passou.
+- Integração JNI dedicada: dez transições NativeMind→WorldActor v8→NativeSpatial, 18 recibos reais, contagem exata por recibo, produtor/consumidor de nichos, entradas inválidas sem mutar saída, duas threads isoladas, migração de histórico 300→256 com contador preservado e replay canônico exato passaram. O cenário inicialmente pressupunha que seis agentes sobrepostos trabalhariam todo tick; a física real manteve quatro em deslocamento. A conferência foi corrigida para exigir a contagem exata de recibos, preservando a navegação.
+- Base publicada: `52ce708d607adea67c3f857cb56d66d5db655e10`; sua [Action 44664873479](https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44664873479) terminou com sucesso e disponibiliza APKs/checksums. O workflow continua disparando por push e manualmente. Moto G62: `Girassol-debug` → `app-arm64-v8a-debug.apk`. O resultado remoto desta nova entrega será conferido após o push.
+
+### Pendências
+
+Frentes 9/10/11, execução dos testes instrumentados, RAM/latência e carga 24/7 no alvo. Release usa chave debug; identidade persistente de distribuição segue pendente. Limites estáticos e build não comprovam RAM total em 4 GB. Ver `docs/diversidade-map-elites-aurora.md` para formato, fórmulas e limites.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 <!-- /coderabbit-ai-generated:v1 -->

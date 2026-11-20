@@ -97,11 +97,14 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val memory: MemoryBank = MemoryBank(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val tsetlin: TsetlinState = TsetlinState(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val decision: DecisionTrace = DecisionTrace()) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val decision: DecisionTrace = DecisionTrace(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val noveltyAdmissions: Long? = null) {
+    val discoveredBehaviors get()=noveltyAdmissions ?: behaviors.size.toLong()
     fun valid(tick: Long): Boolean = parameters.size==248 && parameters.all { it.isFinite() && abs(it)<=8 } &&
         parameters.subList(168,176).all { it in .2..8.0 } && hidden.size==8 && hidden.all { it.isFinite() && abs(it)<=1.00001 } &&
         personality.size==5 && personality.all { it.isFinite() && it in 0.0..1.0 } && exposure.size==8 && exposure.all { it>=0 } &&
         learnedTick in -1..tick && novelty.isFinite() && novelty in 0.0..1.0 &&
+        (noveltyAdmissions==null || noveltyAdmissions in behaviors.size.toLong()..1_000_000_000_000L && behaviors.size<=256) &&
         memory.valid(tick) && tsetlin.valid(tick) && decision.valid() && psyche.valid() && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
 
@@ -168,16 +171,21 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val economyEnabled: Boolean = false,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val immunityEnabled: Boolean = false,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val societyEnabled: Boolean = false,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val pedagogyEnabled: Boolean = false) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val pedagogyEnabled: Boolean = false,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val qualityDiversity: QualityDiversityArchive? = null) {
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
-        decision=m.decision.copy(topThree=m.decision.topThree.toList(),freeEnergy=m.decision.freeEnergy.toList(),expectedFreeEnergy=m.decision.expectedFreeEnergy.toList(),successProbability=m.decision.successProbability.toList()),
+        decision=m.decision.copy(nativeActionValues=m.decision.nativeActionValues.toList(),topThree=m.decision.topThree.toList(),freeEnergy=m.decision.freeEnergy.toList(),expectedFreeEnergy=m.decision.expectedFreeEnergy.toList(),successProbability=m.decision.successProbability.toList()),
         exposure=m.exposure.toList(),behaviors=m.behaviors.map { it.toList() },memory=m.memory.snapshot(),
         psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList())) },
         decisions=decisions.toMap(),evolution=evolution?.snapshot(),innerSpeech=innerSpeech.toMap())
     fun applicable(world: WorldState): Boolean {
         val ids=world.agents.map { it.id }.toSet()
-        return (!pedagogyEnabled || economyEnabled) && (!societyEnabled || economyEnabled) && sourceTick==world.tick && sourceHash==Canonical.hash(Canonical.state(world)) && minds.keys==ids &&
+        val qd=qualityDiversity
+        val previous=world.qualityDiversity
+        val qdValid=if(qd==null) previous==null else qd.valid(world.tick) &&
+            (if(previous==null) qd.view().samples<=ids.size else qd.view().samples>=previous.view().samples && qd.view().samples-previous.view().samples<=ids.size && qd.view().tick>=previous.view().tick)
+        return qdValid && (!pedagogyEnabled || economyEnabled) && (!societyEnabled || economyEnabled) && sourceTick==world.tick && sourceHash==Canonical.hash(Canonical.state(world)) && minds.keys==ids &&
             socialSynchrony.isFinite() && socialSynchrony in 0.0..1.0 &&
             innerSpeech.keys.all { it in ids } && innerSpeech.values.all { text -> text.isNotBlank() && text.length<=240 && text.none { it.isISOControl() } } &&
             (evolution==null || evolution.applicable(world)) && (lesson==null || (lesson.applicable(world) && (!immunityEnabled ||

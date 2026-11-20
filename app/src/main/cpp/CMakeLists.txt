@@ -12,7 +12,7 @@ target_compile_features(girassol_core PRIVATE cxx_std_20)
 target_compile_options(girassol_core PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(girassol_core PRIVATE aaudio)
 
-set_source_files_properties(physics/spatial.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-fast-math")
+set_source_files_properties(physics/spatial.cpp girassol_gea_jni.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-fast-math")
 
 include(cognition/llama-dependency.cmake)
 add_library(girassol_llama SHARED cognition/inference.cpp cognition/llama_jni.cpp)

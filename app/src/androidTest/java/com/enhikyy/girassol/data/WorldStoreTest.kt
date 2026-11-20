@@ -146,6 +146,8 @@ class WorldStoreTest {
                     store.commit(transition);actions=transition.event.actions
                 }
                 assertTrue(injected);assertEquals(8L,store.audit())
+                assertNotNull(actor.state.qualityDiversity)
+                assertEquals(actor.state.qualityDiversity,store.load()!!.state.qualityDiversity)
                 store.readableDatabase.rawQuery("SELECT count(*) FROM voyager_skill_library",null).use { rows -> assertTrue(rows.moveToFirst());assertTrue(rows.getInt(0)>0) }
             }
             WorldStore(context,name).use { reopened ->

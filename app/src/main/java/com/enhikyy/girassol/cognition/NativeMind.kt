@@ -85,6 +85,8 @@ internal object NativeMind {
             .sortedWith(compareBy<Citizen> { prepared.getValue(it.id).memory.ripple?.tick ?: -30L }.thenBy { it.id }).take(2).map { it.id }.toSet()
         val autonomy=NativeAutonomy.evaluate(world,lastActions,prepared)
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
+        val qdView=world.qualityDiversity?.view()
+        val qdCandidates=ArrayList<NativeQualityDiversity.Candidate>(world.agents.size)
         world.agents.forEach { citizen->
             val old=prepared.getValue(citizen.id).copy(psyche=autonomy.psyches.getValue(citizen.id))
             val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
@@ -105,7 +107,9 @@ internal object NativeMind {
             val nativeScores=values(272,8)
             val exposure=old.exposure.toMutableList()
             if(learn && exposure[citizen.activity.ordinal]<Int.MAX_VALUE) exposure[citizen.activity.ordinal]++
-            val archive=if(learn && (distances.firstOrNull() ?: 1.0)>.06) old.behaviors+listOf(behavior) else old.behaviors
+            val discovered=learn && (distances.firstOrNull() ?: 1.0)>.06
+            val archive=(if(discovered) old.behaviors+listOf(behavior) else old.behaviors).takeLast(256)
+            val admissions=(old.discoveredBehaviors+if(discovered) 1 else 0).coerceAtMost(1_000_000_000_000L)
             var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id },genome.memRlLearningRate,genome.actRDecayExponent,true,sourceHash)
             if(citizen.acting && citizen.activity==Activity.TALK && outcome=="OK") {
                 val contact=world.society?.contacts?.firstOrNull { it.from==citizen.id && it.tick==world.tick }
@@ -119,7 +123,7 @@ internal object NativeMind {
             bank=AssociativeCognitiveMemory.connect(bank)
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
             bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
-            var next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
+            var next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive,noveltyAdmissions=admissions)
             if(citizen.id in replayAgents) next=ripple(next,world,citizen,thermalTier)
             bank=next.memory
             check(next.valid(world.tick))
@@ -138,6 +142,9 @@ internal object NativeMind {
             val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale*genome.epistemicExplorationWeight/.65
             val noise=List(8) { -ln(-ln(exploration.nextDouble().coerceIn(1e-12,1-1e-12)))*temperature }
             val decisionBank=bank
+            val donorBias=qdView?.let { view ->
+                view.actionBias(Canonical.stream(world.seed,citizen.id,world.tick,"qd-donor-v1").nextInt(view.occupied))
+            } ?: List(8) { 0.0 }
             // nativeScores was copied before SWR reused the fixed JNI buffer.
             val scores=PianoWorkspace.aggregate(
                 { Activity.entries.map { activity ->
@@ -176,7 +183,7 @@ internal object NativeMind {
                     if(SocietyAdicoCliodynamicsEngine.admit(institutionalWorld,citizen,activity,institutionalRules).action!=activity) value-=.8
                     value+GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,activity),true).coerceIn(-4,4)*.05
                 } },
-                { List(8) { i -> nativeScores[i]+noise[i]+.4/sqrt(exposure[i]+1.0) } }
+                { List(8) { i -> nativeScores[i]+donorBias[i]+noise[i]+.4/sqrt(exposure[i]+1.0) } }
             )
             val likelihoods=Activity.entries.map {
                 val gate=(GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,it),false)+9.0)/18.0
@@ -199,14 +206,19 @@ internal object NativeMind {
                     selection.evidence.map { it.expectedFreeEnergy },selection.evidence.map { it.success },
                     thermalTier==ThermalTier.NONE_OR_LIGHT && GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,decision),true)<4 &&
                         (1-minOf(n.energy,n.hydration,n.glucose)>=genome.cognitiveGateMinUrgency ||
-                         abs(selection.evidence[selection.topThree[0].ordinal].expectedFreeEnergy-selection.evidence[selection.topThree[1].ordinal].expectedFreeEnergy)<=genome.cognitiveGateTieThreshold)),
+                         abs(selection.evidence[selection.topThree[0].ordinal].expectedFreeEnergy-selection.evidence[selection.topThree[1].ordinal].expectedFreeEnergy)<=genome.cognitiveGateTieThreshold),nativeActionValues=nativeScores.map { it/8 }),
                 tsetlin=TsetlinState(TsetlinState.encode(gateBytes),TsetlinState.features(citizen,decision),decision.ordinal,world.tick),
                 psyche=minds.getValue(citizen.id).psyche.copy(expectedSensory=expectedSensors,initialized=true)
             )
+            val job=world.economy?.jobs?.firstOrNull { it.agent==citizen.id }
+            if(learn && outcome=="OK" && job?.phase=="DONE" && job.receiptTick==world.tick && old.decision.nativeActionValues.size==8) {
+                qdCandidates+=NativeQualityDiversity.Candidate(citizen,minds.getValue(citizen.id),reward,old.decision.nativeActionValues)
+            }
         }
+        val qd=NativeQualityDiversity.update(world,qdCandidates)
         return CognitiveFrame(
             world.tick,sourceHash,minds,decisions,
-            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true,pedagogyEnabled=true
+            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true,pedagogyEnabled=true,qualityDiversity=qd
         )
     }
 }

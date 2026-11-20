@@ -16,7 +16,7 @@ internal object ShadowReplay {
         var resilience=0.0; var harmony=0.0; var energy=0.0; var observations=0.0
         var freeEnergy=0.0; var brier=0.0; var forecasts=0; var llmCalls=0
         val behavior=LongArray(8)
-        val beforeNovel=origin.state.minds.values.sumOf { it.behaviors.size }
+        val beforeNovel=origin.state.minds.values.sumOf { it.discoveredBehaviors }
         val beforeConsumption=listOf(Activity.WATER,Activity.COFFEE,Activity.EAT).sumOf { origin.state.actionCounts[it.name] ?: 0 }
         repeat(horizon) {
             if(cancel() || Thread.currentThread().isInterrupted) throw CancellationException()
@@ -43,7 +43,7 @@ internal object ShadowReplay {
             energy+=people.map { it.needs.energy }.average()
         }
         val w=actor.state
-        val discoveries=(w.minds.values.sumOf { it.behaviors.size }-beforeNovel).coerceAtLeast(0).toDouble()
+        val discoveries=(w.minds.values.sumOf { it.discoveredBehaviors }-beforeNovel).coerceAtLeast(0).toDouble()
         val consumption=listOf(Activity.WATER,Activity.COFFEE,Activity.EAT).sumOf { w.actionCounts[it.name] ?: 0 }-beforeConsumption
         val metrics=ReplayMetrics((discoveries/observations).coerceIn(0.0,1.0),resilience/horizon,harmony/horizon,
             (energy/horizon/(1+consumption/observations)).coerceIn(0.0,1.0))

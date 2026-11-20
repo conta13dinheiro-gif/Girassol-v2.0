@@ -21,6 +21,12 @@ import com.enhikyy.girassol.ui.theme.Solar
         if(status.total>0) LinearProgressIndicator(progress={ (status.evaluated.toFloat()/status.total).coerceIn(0f,1f) },modifier=Modifier.fillMaxWidth()) else LinearProgressIndicator(Modifier.fillMaxWidth())
         Text("CMA-ES · ${status.evaluated} / ${status.total} mundos comparados · origem ${status.sourceTick}",fontSize=10.sp,color=Solar.Cognitive)
     }
+    world.qualityDiversity?.let { archive ->
+        val view=remember(archive) { archive.view() }
+        Spacer(Modifier.height(10.dp))
+        Text("Nichos comportamentais: ${view.occupied}/512 · ${"%.2f".format(java.util.Locale.ROOT,view.coverage*100)}%",color=Solar.Biosphere,fontSize=12.sp)
+        Text("${view.samples} resultados físicos · qualidade média ${"%.3f".format(java.util.Locale.ROOT,view.meanFitness())}",color=Solar.Muted,fontSize=11.sp)
+    }
     world.evolution?.let { policy->
         Spacer(Modifier.height(12.dp)); Text("Última política promovida",color=Solar.Biosphere,fontSize=12.sp)
         Text("${policy.evaluations} avaliações · duas janelas de ${policy.horizon} ciclos · origem ${policy.sourceTick}",color=Solar.Muted,fontSize=11.sp)

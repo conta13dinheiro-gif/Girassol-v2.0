@@ -40,6 +40,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 3-7: Perception, bounded memory, appraisal, utility and intention hysteresis.
         val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
+        require(state.qualityDiversity==null || cognitiveInput?.qualityDiversity!=null) { "Active QD archive requires canonical cognitive input" }
         val planned=plans(neural,cognitiveInput)
         val proposals=planned.mapValues { it.value.second.action }
         val physics=spatial?.snapshot()?.takeIf { rulesVersion>=5 && it.applicable(state,proposals) }
@@ -246,7 +247,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             }
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        var next = base.copy(economy=economy?.snapshot() ?: base.economy,socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        var next = base.copy(qualityDiversity=cognitiveInput?.qualityDiversity ?: base.qualityDiversity,economy=economy?.snapshot() ?: base.economy,socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
         if(society!=null) {
             val settlement=society.settle(base,next,records,contacts,cognitiveInput?.lesson)
             next=next.copy(society=settlement.state,ties=settlement.ties)
@@ -432,6 +433,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
+            if(s.qualityDiversity?.valid(s.tick)==false) add("Arquivo QD inválido")
             if(s.society?.valid(s)==false) add("Sociedade inválida")
             if(s.economy?.valid(s)==false) add("Economia inválida")
             if(!s.socialSynchrony.isFinite() || s.socialSynchrony !in 0.0..1.0) add("Sincronização social inválida")

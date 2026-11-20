@@ -19,6 +19,7 @@ mkdir "$build_root/absent"
 java -Djava.library.path="$build_root/absent" -cp "$host_cp" GeaContractIntegration absent
 java -Djava.library.path="$build_root" -cp "$host_cp" GeaContractIntegration present
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" MindIntegration
+java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" QualityDiversityIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" PedagogyIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" SocietyIntegration
 java -Xmx768m -Djava.library.path="$build_root" -cp "$host_cp" MemoryIntegration
