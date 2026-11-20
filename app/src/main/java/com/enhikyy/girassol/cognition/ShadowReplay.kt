@@ -11,10 +11,25 @@ internal object ShadowReplay {
         require(horizon > 0)
         val actor=WorldActor(origin,WorldActor.CURRENT_RULES_VERSION); var last=actions
         var resilience=0.0; var harmony=0.0; var energy=0.0; var observations=0.0
+        var brierSquaredError=0.0
+        var brierSamples=0L
         val beforeNovel=origin.state.minds.values.sumOf { it.behaviors.size }
         val beforeConsumption=listOf(Activity.WATER,Activity.COFFEE,Activity.EAT).sumOf { origin.state.actionCounts[it.name] ?: 0 }
         repeat(horizon) {
             if(cancel() || Thread.currentThread().isInterrupted) throw CancellationException()
+            // Score one-step sensory forecasts against the actual state before it advances.
+            actor.state.agents.forEach { citizen ->
+                val mind=actor.state.minds[citizen.id] ?: return@forEach
+                val prediction=mind.psyche.expectedSensory
+                if(mind.psyche.initialized && prediction.size>=5) {
+                    val actual=listOf(citizen.needs.energy,citizen.needs.hydration,citizen.needs.glucose,citizen.needs.social,citizen.needs.curiosity)
+                    for(index in 0 until 5) {
+                        val error=prediction[index].coerceIn(0.0,1.0)-actual[index]
+                        brierSquaredError+=error*error
+                        brierSamples++
+                    }
+                }
+            }
             val input=NativeMind.evaluate(actor.state,last,weights)
             val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(actor.state,actor.intentions(cognition=input))
             val next=actor.step(cognition=input,spatial=spatial); last=next.event.actions
@@ -27,8 +42,10 @@ internal object ShadowReplay {
         val w=actor.state
         val discoveries=(w.minds.values.sumOf { it.behaviors.size }-beforeNovel).coerceAtLeast(0).toDouble()
         val consumption=listOf(Activity.WATER,Activity.COFFEE,Activity.EAT).sumOf { w.actionCounts[it.name] ?: 0 }-beforeConsumption
+        val brierScore=if(brierSamples>0L) (brierSquaredError/brierSamples).coerceIn(0.0,1.0) else 1.0
+        val semanticEntropy=SemanticCollapseGuard.normalizedPopulationEntropy(w.actionCounts)
         return Rollout(ReplayMetrics((discoveries/observations).coerceIn(0.0,1.0),resilience/horizon,harmony/horizon,
-            (energy/horizon/(1+consumption/observations)).coerceIn(0.0,1.0)),actor.checkpoint(),last)
+            (energy/horizon/(1+consumption/observations)).coerceIn(0.0,1.0),brierScore,semanticEntropy),actor.checkpoint(),last)
     }
     fun search(origin: Checkpoint,actions: List<ActionRecord>,cancel: ()->Boolean,progress: (Int,Int)->Unit): Result {
         val horizon=256; val generations=2; val total=generations*10+3
