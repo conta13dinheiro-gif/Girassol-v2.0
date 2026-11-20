@@ -114,3 +114,11 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - GPU compute OpenCL/Vulkan/KleidiAI, pinagem de threads e ADPF continuam sem ativação real. Vulkan no Filament continua dependendo de teste em dispositivo.
 - LoRA real (forward/backward no modelo, LoRA+, AdamW, Fisher/EWC e persistência) continua pendente.
 - Nenhuma medição de 24/7, RAM no Moto G62, thermal throttle, áudio ou renderização física foi feita nesta rodada. Assinatura de distribuição permanente ainda depende de chave protegida.
+
+
+## Incremento de integração social e áudio — 2026-11-20
+
+- **Instituições ADICO:** `GeaSchema.record` grava por evento o catálogo normativo inicial do `biosphere-commons`: regras distintas deduplicadas por deôntica, ação, condição e consequência. Os estados `MUST/MAY/MUST_NOT` são mapeados para `OBRIGADO/PERMITIDO/PROIBIDO`; o ID é um hash determinístico dos campos e a auditoria recalcula esse hash. Teste instrumentado verifica sete regras e os três tipos deônticos. Isso persiste o catálogo de regras já existente, mas ainda não implementa negociação, sanção, votação ou revisão institucional por agentes.
+- **Áudio sidechain:** o ducking da trilha agora responde ao envelope transitório dos passos, com ataque de 18 ms e liberação de 240 ms, em vez de depender só da amplitude instantânea do ruído.
+- **CI intermediário:** a execução `44729997356` passou em integração JNI de produção, testes Kotlin/lint e compilação dos testes instrumentados Android; o build dos APKs ARM64 ainda estava em andamento na última consulta. Ela valida o commit `775a186`, não contém as últimas alterações de HRTF/ADICO/sidechain.
+- **CI da HEAD mais recente:** a execução `44730545295` foi criada para o commit `75a505d7`; ainda aguardava início de job na última consulta. A correção posterior de sidechain e este registro exigem também CI na HEAD subsequente. Não marcar a branch inteira como aprovada até todos os gates atuais concluírem.
