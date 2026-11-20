@@ -45,6 +45,12 @@ internal object NativeMind {
         val socialGraphIndex = SocietyAdicoCliodynamicsEngine.buildGraphIndex(world)
         val autonomy=NativeAutonomy.evaluate(world,lastActions,prepared)
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
+        var sleepReplayBudget=when {
+            world.agents.size>=100 -> 24
+            world.agents.size>=50 -> 32
+            world.agents.size>=16 -> 48
+            else -> 72
+        }
         world.agents.forEach { citizen->
             val old=prepared.getValue(citizen.id).copy(psyche=autonomy.psyches.getValue(citizen.id))
             val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
@@ -85,9 +91,11 @@ internal object NativeMind {
 
             // A successful low-thermal sleep opens a bounded prioritized ripple burst.
             // Each selected episode updates the real native LTC weights, not only a replay counter.
-            if (learn && citizen.activity==Activity.SLEEP && outcome=="OK" && policyScale>=0.65) {
-                val batchSize=if(policyScale>=0.90) HippocampalSleepConsolidator.DEFAULT_REPLAY_BATCH_SIZE else 4
+            if (learn && citizen.activity==Activity.SLEEP && outcome=="OK" && policyScale>=0.65 && sleepReplayBudget>0) {
+                val thermalBatch=if(policyScale>=0.90) HippocampalSleepConsolidator.DEFAULT_REPLAY_BATCH_SIZE else 4
+                val batchSize=minOf(thermalBatch,sleepReplayBudget)
                 val replayEpisodes=HippocampalSleepConsolidator.prioritizedReplay(bank,world.tick,batchSize)
+                sleepReplayBudget-=replayEpisodes.size
                 replayEpisodes.forEach { episode ->
                     val replayData=checkNotNull(networkBuffer.get()).apply { clear() }
                     learnedParameters.forEach(replayData::putDouble)
