@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <new>
 #include <unordered_map>
 #include <vector>
@@ -56,11 +57,10 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeCreateTsetlin(
             states, specificity, threshold, static_cast<std::uint64_t>(seed)
         );
         std::lock_guard<std::mutex> lock(gTsetlinMutex);
-        const jlong handle = gNextTsetlinHandle++;
-        if (handle <= 0) {
-            gNextTsetlinHandle = 2;
+        if (gNextTsetlinHandle <= 0 || gNextTsetlinHandle == std::numeric_limits<jlong>::max()) {
             throw std::overflow_error("Tsetlin handle space exhausted");
         }
+        const jlong handle = gNextTsetlinHandle++;
         gTsetlinModels.emplace(handle, std::move(model));
         return handle;
     } catch (const std::bad_alloc&) {
@@ -161,11 +161,10 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinRestore(
             return 0;
         }
         std::lock_guard<std::mutex> lock(gTsetlinMutex);
-        const jlong handle = gNextTsetlinHandle++;
-        if (handle <= 0) {
-            gNextTsetlinHandle = 2;
+        if (gNextTsetlinHandle <= 0 || gNextTsetlinHandle == std::numeric_limits<jlong>::max()) {
             throw std::overflow_error("Tsetlin handle space exhausted");
         }
+        const jlong handle = gNextTsetlinHandle++;
         gTsetlinModels.emplace(handle, std::move(model));
         return handle;
     } catch (const std::bad_alloc&) {
