@@ -50,7 +50,7 @@ private val palettes = mapOf(
     GirassolVisualTheme.ARAUCARIA to Palette(Color(0xFF07100C),Color(0xFF12231A),Color(0xFFE7F0E8),Color(0xFF9DB5A3),Color(0xFFB5C98A),Color(0xFF8CB99D),Color(0xFF9CB8A5),Color(0xFF52745F)),
     GirassolVisualTheme.TERRACOTTA to Palette(Color(0xFF120B09),Color(0xFF281713),Color(0xFFF4E6DD),Color(0xFFC8A99C),Color(0xFFD47B5C),Color(0xFFBA8A76),Color(0xFFE0B18B),Color(0xFF9D6652)),
     GirassolVisualTheme.OLIVE_STUDIO to Palette(Color(0xFF0D0E08),Color(0xFF1D2013),Color(0xFFECEEDC),Color(0xFFB0B49A),Color(0xFFC4B66A),Color(0xFFA7AC78),Color(0xFFB5A77A),Color(0xFF777B4C)),
-    GirassolVisualTheme.MONOCHROME to Palette(Color(0xFF080808),Color(0xFF181818),Color(0xFFF5F5F5),Color(0xFFA0A0A0),Color(0xFFE0E0E0),Color(0xFF777777),Color(0xFFBDBDBD),Color(0xFF555555)),
+    GirassolVisualTheme.MONOCHROME to Palette(Color(0xFF080808),Color(0xFF181818),Color(0xFFF5F5F5),Color(0xFFA0A0A0),Color(0xFFE0E0E0),Color(0xFF9C9C9C),Color(0xFFBDBDBD),Color(0xFF555555)),
     GirassolVisualTheme.MIDNIGHT_BLUE to Palette(Color(0xFF070B13),Color(0xFF111C2B),Color(0xFFE8F0FA),Color(0xFF9AAFC7),Color(0xFF83B8E8),Color(0xFF7FA7D6),Color(0xFFB4CBE1),Color(0xFF49698B)),
     GirassolVisualTheme.AMBER_FILM to Palette(Color(0xFF100B05),Color(0xFF24180A),Color(0xFFFFEBD0),Color(0xFFC6A982),Color(0xFFFFB84D),Color(0xFFB68B54),Color(0xFFE3C18A),Color(0xFF8B602D)),
     GirassolVisualTheme.FOREST to Palette(Color(0xFF06100A),Color(0xFF102319),Color(0xFFE6F1E9),Color(0xFF9BB5A2),Color(0xFF78C99B),Color(0xFF7FB998),Color(0xFFB0D0B9),Color(0xFF3D7251)),
