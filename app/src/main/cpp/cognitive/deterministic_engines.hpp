@@ -7,6 +7,79 @@
 
 namespace girassol::cognition {
 
+struct SubjectiveOpinion {
+    float belief = 0.0f;
+    float disbelief = 0.0f;
+    float uncertainty = 1.0f;
+    float baseRate = 0.5f;
+
+    bool valid(float tolerance = 1.0e-4f) const noexcept {
+        return std::isfinite(belief) && std::isfinite(disbelief)
+            && std::isfinite(uncertainty) && std::isfinite(baseRate)
+            && belief >= 0.0f && disbelief >= 0.0f && uncertainty >= 0.0f
+            && baseRate >= 0.0f && baseRate <= 1.0f
+            && std::fabs((belief + disbelief + uncertainty) - 1.0f) <= tolerance;
+    }
+
+    float expectation() const noexcept {
+        return belief + baseRate * uncertainty;
+    }
+};
+
+inline SubjectiveOpinion averageFusion(
+    const SubjectiveOpinion& left, const SubjectiveOpinion& right
+) noexcept {
+    if (!left.valid() || !right.valid()) return {};
+    return {
+        0.5f * (left.belief + right.belief),
+        0.5f * (left.disbelief + right.disbelief),
+        0.5f * (left.uncertainty + right.uncertainty),
+        0.5f * (left.baseRate + right.baseRate)
+    };
+}
+
+// Trust opinion ⊗ source opinion: belief in the source scales its evidence;
+// distrust and uncertainty are transferred to the resulting uncertainty.
+inline SubjectiveOpinion discountTrust(
+    const SubjectiveOpinion& trust, const SubjectiveOpinion& source
+) noexcept {
+    if (!trust.valid() || !source.valid()) return {};
+    return {
+        trust.belief * source.belief,
+        trust.belief * source.disbelief,
+        trust.disbelief + trust.uncertainty + trust.belief * source.uncertainty,
+        source.baseRate
+    };
+}
+
+// Cumulative fusion of independent evidence. The vacuous-denominator case
+// (two dogmatic opinions) uses a bounded arithmetic consensus rather than NaNs.
+inline SubjectiveOpinion cumulativeFusion(
+    const SubjectiveOpinion& left, const SubjectiveOpinion& right
+) noexcept {
+    if (!left.valid() || !right.valid()) return {};
+    const float denominator = left.uncertainty + right.uncertainty
+        - left.uncertainty * right.uncertainty;
+    if (denominator <= 1.0e-6f) {
+        return {
+            0.5f * (left.belief + right.belief),
+            0.5f * (left.disbelief + right.disbelief),
+            0.0f,
+            0.5f * (left.baseRate + right.baseRate)
+        };
+    }
+    const float rateWeight = left.uncertainty + right.uncertainty;
+    const float baseRate = rateWeight > 1.0e-6f
+        ? (left.baseRate * right.uncertainty + right.baseRate * left.uncertainty) / rateWeight
+        : 0.5f * (left.baseRate + right.baseRate);
+    return {
+        (left.belief * right.uncertainty + right.belief * left.uncertainty) / denominator,
+        (left.disbelief * right.uncertainty + right.disbelief * left.uncertainty) / denominator,
+        (left.uncertainty * right.uncertainty) / denominator,
+        std::clamp(baseRate, 0.0f, 1.0f)
+    };
+}
+
 struct DeterministicEngineInput {
     std::array<float, 8> priorState{};
     float threat = 0.0f;
@@ -66,16 +139,30 @@ inline DeterministicEngineOutput stepDeterministicEngines(
     const float q = std::clamp(oldQ + 0.20f * (outcome - oldQ), -1.0f, 1.0f);
     output.nextState[5] = unit((q + 1.0f) * 0.5f);
 
-    // Jøsang subjective opinion: evidence is discounted by relational warmth.
+    // Jøsang: create the observation opinion, discount it by relational trust,
+    // then combine it with the persisted prior using cumulative and average fusion.
     const float evidence = unit(0.15f + 0.70f * warmth + 0.15f * retention);
     const float priorUncertainty = unit(input.priorState[6]);
-    const float uncertainty = unit(0.75f * priorUncertainty + 0.25f * (1.0f - evidence));
-    const float evidenceMass = 1.0f - uncertainty;
-    const float belief = evidenceMass * unit((outcome + 1.0f) * 0.5f);
-    const float disbelief = evidenceMass - belief;
-    const float opinionMass = belief + disbelief + uncertainty;
-    const float projected = unit((belief + 0.5f * uncertainty) / std::max(opinionMass, 1e-6f));
-    output.nextState[6] = uncertainty;
+    const float priorProbability = unit((oldQ + 1.0f) * 0.5f);
+    const SubjectiveOpinion priorOpinion{
+        priorProbability * (1.0f - priorUncertainty),
+        (1.0f - priorProbability) * (1.0f - priorUncertainty),
+        priorUncertainty,
+        0.5f
+    };
+    const float observedProbability = unit((outcome + 1.0f) * 0.5f);
+    const SubjectiveOpinion observationOpinion{
+        evidence * observedProbability,
+        evidence * (1.0f - observedProbability),
+        1.0f - evidence,
+        0.5f
+    };
+    const SubjectiveOpinion trustOpinion{warmth, 0.0f, 1.0f - warmth, 0.5f};
+    const SubjectiveOpinion trustedObservation = discountTrust(trustOpinion, observationOpinion);
+    const SubjectiveOpinion fusedOpinion = cumulativeFusion(priorOpinion, trustedObservation);
+    const SubjectiveOpinion meanOpinion = averageFusion(priorOpinion, trustedObservation);
+    const float projected = unit(0.8f * fusedOpinion.expectation() + 0.2f * meanOpinion.expectation());
+    output.nextState[6] = fusedOpinion.uncertainty;
 
     // Variational free energy and expected free energy remain finite and bounded.
     const float freeEnergy = unit(0.55f * predictionError + 0.30f * threat + 0.15f * surprise);
