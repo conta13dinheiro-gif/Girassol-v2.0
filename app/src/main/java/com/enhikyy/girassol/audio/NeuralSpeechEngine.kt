@@ -319,6 +319,9 @@ object NeuralSpeechEngine {
     }
 
     private fun createEngine(): OfflineTts {
+        // Large ONNX/Sherpa native libraries are optional and installed into
+        // app-private storage only when the user first invokes neural speech.
+        SpeechNativeRuntime.ensureLoaded(checkNotNull(application))
         val memory = ActivityManager.MemoryInfo().also {
             checkNotNull(application).getSystemService(ActivityManager::class.java).getMemoryInfo(it)
         }
