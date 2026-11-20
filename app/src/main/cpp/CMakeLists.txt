@@ -10,7 +10,7 @@ add_library(girassol_projection SHARED physics/spatial.cpp physics/spatial_jni.c
 target_include_directories(girassol_projection SYSTEM PRIVATE third_party/rapidjson/include)
 target_compile_features(girassol_projection PRIVATE cxx_std_20)
 target_compile_options(girassol_projection PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(girassol_projection PRIVATE aaudio)
+target_link_libraries(girassol_projection PRIVATE aaudio dl)
 
 set_source_files_properties(physics/spatial.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off;-fno-fast-math")
 
