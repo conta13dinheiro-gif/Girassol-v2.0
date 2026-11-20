@@ -6,7 +6,7 @@ import org.junit.Test
 class CivicEvolutionTest {
     @Test fun advancesBoundedSocialEducationEconomyAndArchiveState() {
         val before=WorldActor.genesis()
-        val actor=WorldActor(before.copy(civic=CivicEvolutionState()))
+        val actor=WorldActor(Checkpoint(before.copy(civic=CivicEvolutionState()),0,WorldActor.GENESIS_HASH))
         val transition=actor.step()
         val civic=transition.state.civic
         assertTrue(civic.valid(transition.state.tick))
