@@ -22,6 +22,7 @@ internal object GeaSchema {
     /** Derived records commit with their canonical event, never before it. */
     fun record(db: SQLiteDatabase, transition: Transition, previous: WorldState?) {
         val event = transition.event
+        recordDoubleEntryLedger(db, event.eventId, previous?.balances, transition.state.balances)
         event.cognition?.evolution?.let { revision ->
             val payload = Json.encodeToString(revision)
             db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
@@ -61,6 +62,69 @@ internal object GeaSchema {
         }
     }
 
+
+    /**
+     * Materializes balanced postings from the net account deltas of a committed
+     * transition. Each resource is balanced independently; matching is stable
+     * by account name and cannot mint or destroy units.
+     */
+    private fun recordDoubleEntryLedger(
+        db: SQLiteDatabase,
+        eventId: Long,
+        before: Map<String, Int>?,
+        after: Map<String, Int>
+    ) {
+        if (before == null) return
+        val keys = (before.keys + after.keys).toSortedSet()
+        val byResource = linkedMapOf<String, MutableList<Pair<String, Long>>>()
+        for (key in keys) {
+            val separator = key.lastIndexOf('/')
+            check(separator > 0 && separator < key.lastIndex) { "Invalid balance key: $key" }
+            val account = key.substring(0, separator)
+            val resource = key.substring(separator + 1)
+            val delta = (after[key] ?: 0).toLong() - (before[key] ?: 0).toLong()
+            if (delta != 0L) byResource.getOrPut(resource) { mutableListOf() }.add(account to delta)
+        }
+
+        var entryId = 0
+        for ((resource, movements) in byResource.toSortedMap()) {
+            val debits = movements.filter { it.second < 0L }
+                .map { it.first to -it.second }.sortedBy { it.first }.toMutableList()
+            val credits = movements.filter { it.second > 0L }
+                .sortedBy { it.first }.toMutableList()
+            val debitTotal = debits.sumOf { it.second }
+            val creditTotal = credits.sumOf { it.second }
+            check(debitTotal == creditTotal) {
+                "Unbalanced resource movement for $resource at event $eventId: $debitTotal != $creditTotal"
+            }
+
+            var debitIndex = 0
+            var creditIndex = 0
+            while (debitIndex < debits.size && creditIndex < credits.size) {
+                val (debitAccount, debitRemaining) = debits[debitIndex]
+                val (creditAccount, creditRemaining) = credits[creditIndex]
+                val amount = minOf(debitRemaining, creditRemaining)
+                check(amount in 1L..Int.MAX_VALUE.toLong())
+                check(debitAccount != creditAccount)
+                db.insertOrThrow("double_entry_ledger", null, ContentValues().apply {
+                    put("event_id", eventId)
+                    put("entry_id", entryId++)
+                    put("debit_account", debitAccount)
+                    put("credit_account", creditAccount)
+                    put("resource", resource)
+                    put("amount", amount.toInt())
+                })
+                if (debitRemaining == amount) debitIndex++
+                else debits[debitIndex] = debitAccount to (debitRemaining - amount)
+                if (creditRemaining == amount) creditIndex++
+                else credits[creditIndex] = creditAccount to (creditRemaining - amount)
+            }
+            check(debitIndex == debits.size && creditIndex == credits.size) {
+                "Ledger residual for $resource at event $eventId"
+            }
+        }
+    }
+
     fun restoreTsetlin(db: SQLiteDatabase) {
         db.rawQuery(
             "SELECT automata,digest FROM tsetlin_automata_blobs WHERE agent_id=? ORDER BY event_id DESC LIMIT 1",
@@ -92,6 +156,18 @@ internal object GeaSchema {
                 check(revision.rulesVersion == rows.getInt(2))
                 check(if (revision.sourceTick == 0L) rows.isNull(3) else !rows.isNull(3) && revision.sourceTick == rows.getLong(3))
             }
+        }
+        db.rawQuery(
+            "SELECT 1 FROM double_entry_ledger WHERE amount<=0 OR debit_account=credit_account LIMIT 1",
+            null
+        ).use { rows ->
+            check(!rows.moveToFirst()) { "Invalid double-entry posting" }
+        }
+        db.rawQuery(
+            "SELECT event_id,resource,SUM(amount) FROM double_entry_ledger GROUP BY event_id,resource ORDER BY event_id,resource",
+            null
+        ).use { rows ->
+            while (rows.moveToNext()) check(rows.getLong(2) > 0L) { "Empty double-entry resource batch" }
         }
         db.rawQuery("SELECT belief,disbelief,uncertainty,base_rate FROM subjective_beliefs", null).use { rows ->
             while (rows.moveToNext()) {
