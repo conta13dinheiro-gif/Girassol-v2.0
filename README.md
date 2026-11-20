@@ -97,6 +97,10 @@ O LoRA é aplicado com `llama_adapter_lora_init`/`llama_set_adapter_lora`, usand
 
 Teste GGUF host: `scripts/test-cognition.sh /caminho/modelo.gguf`. O smoke realizado usa SmolLM2-135M-Instruct Q4_K_M, revisão bartowski09816acd5d99df7be770d85ea30822623dab342c, SHA2562e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d. Cards bartowski e HuggingFaceTB declaram Apache2.0; os pesos não são redistribuídos.
 
+## Probe SoC e alostase de runtime
+
+`HardwareAutoTuner` combina inventário Android com `soc_hardware_probe.hpp` via JNI: lê HWCAP/HWCAP2 e consulta símbolos públicos dos loaders OpenCL/Vulkan por `dlopen`. A presença do loader não habilita automaticamente um backend; enumeração de dispositivo, inicialização e inferência real ainda são gates separados. `PersistenceAndPriorityGuardian` usa ADPF opcional, leases `PARTIAL_WAKE_LOCK` com timeout renovadas por ciclo e reduz a frequência de ticks sob pressão térmica, memória baixa ou economia de bateria. Não força afinidade Big/Prime, não solicita exclusão do Doze e não mantém locks indefinidos. O comportamento térmico sustentado ainda exige validação em hardware físico.
+
 ## Shizuku opcional e telemetria somente de leitura
 
 A área Sistema permite pedir autorização explícita e conectar um UserService Shizuku. Quando o serviço está disponível, ele lê `/proc/meminfo`, a primeira zona térmica e estatísticas de zRAM e informa o UID do processo remoto. O contrato AIDL não expõe shell, execução de comandos, escrita em sysfs, ajuste de prioridades ou acesso arbitrário ao armazenamento. Sem Shizuku, sem permissão ou após a morte do Binder, a simulação permanece no processo normal com telemetria local. A pessoa precisa iniciar Shizuku por ADB/depuração sem fio e autorizar o app; isto não contorna root nem garante execução após reinicializações.
