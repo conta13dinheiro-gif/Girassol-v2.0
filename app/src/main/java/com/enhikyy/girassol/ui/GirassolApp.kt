@@ -174,7 +174,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                                         .background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent)
                                         .clickable(role=Role.Tab) { tab=i }
                                         .semantics {
-                                            selected = tab==i
+                                            this.selected = tab==i
                                             contentDescription = "$label, ${if(tab==i) "selecionado" else "aba"}"
                                         }
                                         .padding(vertical=6.dp),
