@@ -39,7 +39,7 @@ inline bool hasOpenClDevice() noexcept {
     using ClPlatform = void*;
     using ClDevice = void*;
     constexpr ClInt kSuccess = 0;
-    constexpr ClDeviceType kAllDevices = 0xFFFFFFFFULL;
+    constexpr ClDeviceType kGpuDevices = 0x4ULL;
     void* library = dlopen("libOpenCL.so", RTLD_NOW | RTLD_LOCAL);
     if (library == nullptr) return false;
     const auto getPlatforms = reinterpret_cast<ClInt (*)(ClUInt, ClPlatform*, ClUInt*)>(
@@ -54,7 +54,7 @@ inline bool hasOpenClDevice() noexcept {
             if (getPlatforms(platformCount, platforms.data(), nullptr) == kSuccess) {
                 for (ClUInt i = 0; i < platformCount; ++i) {
                     ClUInt deviceCount = 0;
-                    if (getDevices(platforms[i], kAllDevices, 0, nullptr, &deviceCount) == kSuccess && deviceCount > 0) {
+                    if (getDevices(platforms[i], kGpuDevices, 0, nullptr, &deviceCount) == kSuccess && deviceCount > 0) {
                         found = true;
                         break;
                     }
@@ -79,6 +79,13 @@ inline bool hasVulkanPhysicalDevice() noexcept {
         std::uint32_t engineVersion;
         std::uint32_t apiVersion;
     };
+    struct VkPhysicalDevicePropertiesPrefix {
+        std::uint32_t apiVersion;
+        std::uint32_t driverVersion;
+        std::uint32_t vendorId;
+        std::uint32_t deviceId;
+        std::uint32_t deviceType;
+    };
     struct VkInstanceCreateInfo {
         std::uint32_t sType;
         const void* pNext;
@@ -95,10 +102,12 @@ inline bool hasVulkanPhysicalDevice() noexcept {
         dlsym(library, "vkCreateInstance"));
     const auto enumerate = reinterpret_cast<VkResult (*)(VkInstance, std::uint32_t*, VkPhysicalDevice*)>(
         dlsym(library, "vkEnumeratePhysicalDevices"));
+    const auto getProperties = reinterpret_cast<void (*)(VkPhysicalDevice, void*)>(
+        dlsym(library, "vkGetPhysicalDeviceProperties"));
     const auto destroy = reinterpret_cast<void (*)(VkInstance, const void*)>(
         dlsym(library, "vkDestroyInstance"));
     bool found = false;
-    if (createInstance != nullptr && enumerate != nullptr && destroy != nullptr) {
+    if (createInstance != nullptr && enumerate != nullptr && getProperties != nullptr && destroy != nullptr) {
         const VkApplicationInfo appInfo{0, nullptr, "GirassolProbe", 1, "Girassol", 1, 0};
         const VkInstanceCreateInfo createInfo{1, nullptr, 0, &appInfo, 0, nullptr, 0, nullptr};
         VkInstance instance = nullptr;
@@ -106,8 +115,19 @@ inline bool hasVulkanPhysicalDevice() noexcept {
             std::uint32_t count = 0;
             if (enumerate(instance, &count, nullptr) == 0 && count > 0 && count <= 256) {
                 std::array<VkPhysicalDevice, 256> devices{};
-                found = enumerate(instance, &count, devices.data()) == 0 && count > 0 && count <= devices.size() &&
-                    std::any_of(devices.begin(), devices.begin() + count, [](auto device) { return device != nullptr; });
+                if (enumerate(instance, &count, devices.data()) == 0 && count > 0 && count <= devices.size()) {
+                    for (std::uint32_t i = 0; i < count; ++i) {
+                        if (devices[i] == nullptr) continue;
+                        alignas(8) std::array<std::uint64_t, 256> properties{};
+                        getProperties(devices[i], properties.data());
+                        const auto* prefix = reinterpret_cast<const VkPhysicalDevicePropertiesPrefix*>(properties.data());
+                        // Vulkan device types 1/2/3 are integrated/discrete/virtual GPUs; 4 is CPU.
+                        if (prefix->deviceType >= 1 && prefix->deviceType <= 3) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
             }
             destroy(instance, nullptr);
         }
