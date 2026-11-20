@@ -24,6 +24,7 @@ internal object GeaSchema {
     fun record(db: SQLiteDatabase, transition: Transition, previous: WorldState?) {
         val event = transition.event
         recordDoubleEntryLedger(db, event.eventId, previous?.balances, transition.state.balances)
+        recordAuroraArchive(db, event, transition.state)
         event.cognition?.evolution?.let { revision ->
             val payload = Json.encodeToString(revision)
             db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
@@ -94,6 +95,140 @@ internal object GeaSchema {
         }
     }
 
+
+    /**
+     * Projects committed cognitive features into a persistent 3D MAP-Elites archive.
+     * Oja state is checkpointed every 30 ticks; only improved cells add event rows.
+     */
+    private fun recordAuroraArchive(
+        db: SQLiteDatabase,
+        event: CanonicalEvent,
+        world: WorldState
+    ) {
+        if (world.minds.isEmpty()) return
+        val tick = event.tick
+        val ttl = 86_400L
+        val expiry = Math.addExact(tick, ttl)
+
+        var projector = db.rawQuery(
+            "SELECT payload,expires_tick FROM ecological_niche_structures " +
+                "WHERE structure_id='aurora-projector' ORDER BY event_id DESC LIMIT 1",
+            null
+        ).use { rows ->
+            if (rows.moveToFirst() && rows.getLong(1) >= tick) {
+                Json.decodeFromString<AuroraOjaProjectorState>(rows.getString(0))
+                    .also { check(it.valid()) { "Stored AURORA projector is invalid" } }
+            } else {
+                AuroraOjaProjectorState.create(inputDimensions = 6, seed = world.seed)
+            }
+        }
+
+        val elites = db.rawQuery(
+            "SELECT n.payload FROM ecological_niche_structures n " +
+                "WHERE n.structure_id LIKE 'aurora-cell-%' AND n.expires_tick>=? " +
+                "AND n.event_id=(SELECT MAX(p.event_id) FROM ecological_niche_structures p " +
+                "WHERE p.structure_id=n.structure_id) ORDER BY n.structure_id",
+            arrayOf(tick.toString())
+        ).use { rows ->
+            buildList {
+                while (rows.moveToNext()) add(Json.decodeFromString<AuroraCandidate>(rows.getString(0)))
+            }
+        }
+        var archive = AuroraMapElitesState(binsPerAxis = 8, genomeDimensions = 8, elites = elites)
+        check(archive.valid()) { "Stored AURORA archive violates niche invariants" }
+
+        val semanticEntropy = SemanticCollapseGuard.normalizedPopulationEntropy(world.actionCounts)
+        for (citizen in world.agents.sortedBy { it.id }) {
+            val mind = world.minds[citizen.id] ?: continue
+            val features = listOf(
+                mind.personality[0],
+                mind.personality[2],
+                citizen.skill.mastery,
+                mind.novelty,
+                citizen.needs.social,
+                citizen.needs.energy
+            )
+            val descriptor = projector.project(features)
+            val actual = listOf(
+                citizen.needs.energy,
+                citizen.needs.hydration,
+                citizen.needs.glucose,
+                citizen.needs.social,
+                citizen.needs.curiosity
+            )
+            val prediction = mind.psyche.expectedSensory
+            val brier = if (mind.psyche.initialized && prediction.size >= 5) {
+                (0 until 5).map { index ->
+                    val error = prediction[index].coerceIn(0.0, 1.0) - actual[index]
+                    error * error
+                }.average().coerceIn(0.0, 1.0)
+            } else 1.0
+            val harmony = world.ties.asSequence().filter { it.from == citizen.id }
+                .map { it.affinity.coerceIn(0.0, 1.0) }.average()
+                .let { if (it.isFinite()) it else 0.5 }
+            val fitness = ReplayMetrics(
+                innovation = mind.novelty.coerceIn(0.0, 1.0),
+                resilience = minOf(citizen.needs.energy, citizen.needs.hydration, citizen.needs.glucose),
+                harmony = harmony,
+                energyEfficiency = citizen.needs.energy,
+                brierScore = brier,
+                semanticEntropy = semanticEntropy
+            )
+            val genome = listOf(
+                citizen.genome.curiosity.maternal,
+                citizen.genome.curiosity.paternal,
+                citizen.genome.sociability.maternal,
+                citizen.genome.sociability.paternal,
+                citizen.genome.symbiosis.maternal,
+                citizen.genome.symbiosis.paternal,
+                citizen.genome.symbiosis.dominanceA,
+                citizen.genome.symbiosis.dominanceB
+            )
+            val candidate = AuroraCandidate(
+                id = "aurora-" + Canonical.hash("\${citizen.id}:\${event.eventId}".toByteArray()).take(24),
+                eventId = event.eventId,
+                sourceEventHash = event.hash,
+                descriptor = descriptor,
+                genome = genome,
+                metrics = fitness,
+                generation = citizen.genome.generation.toLong()
+            )
+            val update = AuroraMapElites.insert(archive, candidate)
+            if (update.disposition == AuroraInsertDisposition.INSERTED ||
+                update.disposition == AuroraInsertDisposition.REPLACED
+            ) {
+                archive = update.state
+                val cell = update.cell
+                db.insertOrThrow("ecological_niche_structures", null, ContentValues().apply {
+                    put("event_id", event.eventId)
+                    put("structure_id", "aurora-cell-\${cell.first}-\${cell.second}-\${cell.third}")
+                    put("owner_id", citizen.id)
+                    put("expires_tick", expiry)
+                    put("payload", Json.encodeToString(candidate))
+                })
+            }
+            if (tick % 30L == 0L) projector = projector.observe(features)
+        }
+
+        val projectorAlreadyRecorded = db.rawQuery(
+            "SELECT 1 FROM ecological_niche_structures WHERE event_id=? AND structure_id='aurora-projector'",
+            arrayOf(event.eventId.toString())
+        ).use { it.moveToFirst() }
+        if (projectorAlreadyRecorded) return
+        if (tick % 30L == 0L || db.rawQuery(
+                "SELECT 1 FROM ecological_niche_structures WHERE structure_id='aurora-projector' LIMIT 1",
+                null
+            ).use { !it.moveToFirst() }
+        ) {
+            db.insertOrThrow("ecological_niche_structures", null, ContentValues().apply {
+                put("event_id", event.eventId)
+                put("structure_id", "aurora-projector")
+                put("owner_id", "aurora-system")
+                put("expires_tick", expiry)
+                put("payload", Json.encodeToString(projector))
+            })
+        }
+    }
 
     /**
      * Materializes balanced postings from the net account deltas of a committed
@@ -194,6 +329,36 @@ internal object GeaSchema {
             null
         ).use { rows ->
             check(!rows.moveToFirst()) { "Invalid double-entry posting" }
+        }
+
+        db.rawQuery(
+            "SELECT n.event_id,n.structure_id,n.owner_id,n.expires_tick,n.payload,e.payload " +
+                "FROM ecological_niche_structures n JOIN events e ON e.id=n.event_id " +
+                "WHERE n.structure_id='aurora-projector' OR n.structure_id LIKE 'aurora-cell-%'",
+            null
+        ).use { rows ->
+            while (rows.moveToNext()) {
+                val eventId = rows.getLong(0)
+                val structureId = rows.getString(1)
+                val owner = rows.getString(2)
+                val expires = rows.getLong(3)
+                val event = Canonical.event(rows.getString(5))
+                check(event.eventId == eventId && expires >= event.tick)
+                when {
+                    structureId == "aurora-projector" -> {
+                        check(owner == "aurora-system")
+                        val projector = Json.decodeFromString<AuroraOjaProjectorState>(rows.getString(4))
+                        check(projector.valid())
+                    }
+                    structureId.startsWith("aurora-cell-") -> {
+                        check(owner.isNotBlank())
+                        val candidate = Json.decodeFromString<AuroraCandidate>(rows.getString(4))
+                        check(candidate.valid(8) && candidate.eventId == eventId && candidate.sourceEventHash == event.hash)
+                        val cell = AuroraMapElites.cellOf(candidate.descriptor, 8)
+                        check(structureId == "aurora-cell-${cell.first}-${cell.second}-${cell.third}")
+                    }
+                }
+            }
         }
         db.rawQuery(
             "SELECT event_id,resource,SUM(amount) FROM double_entry_ledger GROUP BY event_id,resource ORDER BY event_id,resource",
