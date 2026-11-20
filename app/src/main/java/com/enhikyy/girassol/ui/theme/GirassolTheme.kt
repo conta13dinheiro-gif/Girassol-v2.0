@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -57,16 +59,19 @@ private val palettes = mapOf(
     GirassolVisualTheme.HIGH_CONTRAST to Palette(Color(0xFF000000),Color(0xFF101010),Color(0xFFFFFFFF),Color(0xFFD0D0D0),Color(0xFFFFD400),Color(0xFF00E5A8),Color(0xFF66CFFF),Color(0xFFFFFFFF))
 )
 
+private val solarPaletteState = mutableStateOf(palettes.getValue(GirassolVisualTheme.OLED_KODAK_70MM))
+
 object Solar {
-    // Resolve semantic colors from the selected palette rather than a hard-coded OLED fallback.
-    val Black: Color @Composable get() = MaterialTheme.colorScheme.background
-    val Surface: Color @Composable get() = MaterialTheme.colorScheme.surface
-    val Ink: Color @Composable get() = MaterialTheme.colorScheme.onBackground
-    val Muted: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
-    val Amber: Color @Composable get() = MaterialTheme.colorScheme.primary
-    val Biosphere: Color @Composable get() = MaterialTheme.colorScheme.secondary
-    val Cognitive: Color @Composable get() = MaterialTheme.colorScheme.tertiary
-    val Border: Color @Composable get() = MaterialTheme.colorScheme.outline.copy(alpha=.20f)
+    // Snapshot-backed getters remain ordinary Kotlin properties so non-composable
+    // render helpers can read the active semantic palette without composable calls.
+    val Black: Color get() = solarPaletteState.value.background
+    val Surface: Color get() = solarPaletteState.value.surface
+    val Ink: Color get() = solarPaletteState.value.ink
+    val Muted: Color get() = solarPaletteState.value.muted
+    val Amber: Color get() = solarPaletteState.value.accent
+    val Biosphere: Color get() = solarPaletteState.value.secondary
+    val Cognitive: Color get() = solarPaletteState.value.tertiary
+    val Border: Color get() = solarPaletteState.value.border.copy(alpha=.20f)
     val Metric=TextStyle(fontFamily=FontFamily.Monospace,fontFeatureSettings="tnum",fontWeight=FontWeight.Medium)
 }
 
@@ -75,6 +80,7 @@ object Solar {
     content: @Composable ()->Unit
 ) {
     val p=palettes.getValue(theme)
+    SideEffect { solarPaletteState.value = p }
     MaterialTheme(colorScheme=darkColorScheme(
         primary=p.accent,onPrimary=p.background,secondary=p.secondary,tertiary=p.tertiary,
         background=p.background,onBackground=p.ink,surface=p.surface,onSurface=p.ink,
