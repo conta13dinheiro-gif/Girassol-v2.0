@@ -11,7 +11,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         private set
     private var eventId = checkpoint.eventId
     private var previousHash = checkpoint.eventHash
-    init { require(rulesVersion in 1..8); require(state.version == 1); require(violations(state).isEmpty()) }
+    init { require(rulesVersion in 1..9); require(state.version == 1); require(violations(state).isEmpty()) }
     fun checkpoint() = Checkpoint(state, eventId, previousHash)
 
     /** Same admitted intentions used by the native planner and by execution. */
@@ -202,7 +202,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 12: Bounded social/memory outputs; immutable publication follows validation.
         val next = base.copy(socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
         check(violations(next).isEmpty()) { violations(next).joinToString() }
-        val raw = CanonicalEvent(version = if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        val raw = CanonicalEvent(version = if(rulesVersion>=9 && physics!=null) 9 else if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -259,11 +259,22 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                 if (paternal) two.dominanceA else two.dominanceB
             )
         }
-        val genome = Genome(
-            curiosity = inherit(current.genome.curiosity, partner.genome.curiosity),
-            sociability = inherit(current.genome.sociability, partner.genome.sociability),
-            generation = generation
-        )
+        val genome = if (rulesVersion >= 9) {
+            BaldwinSymbiogenesisEngine.inheritGenome(
+                first = current.genome,
+                second = partner.genome,
+                firstLearningMastery = current.skill.mastery,
+                secondLearningMastery = partner.skill.mastery,
+                generation = generation,
+                random = rng
+            )
+        } else {
+            Genome(
+                curiosity = inherit(current.genome.curiosity, partner.genome.curiosity),
+                sociability = inherit(current.genome.sociability, partner.genome.sociability),
+                generation = generation
+            )
+        }
         val red = (((current.color shr 16) and 255) + ((partner.color shr 16) and 255)) / 2
         val green = (((current.color shr 8) and 255) + ((partner.color shr 8) and 255)) / 2
         val blue = ((current.color and 255) + (partner.color and 255)) / 2
@@ -334,7 +345,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
     }
 
     companion object {
-        const val CURRENT_RULES_VERSION = 8
+        const val CURRENT_RULES_VERSION = 9
         // Admission budget, not a claim of measured 4 GB performance. Legacy replay is unchanged.
         const val MAX_LIVE_POPULATION = 150
         val GENESIS_HASH = "0".repeat(64)
