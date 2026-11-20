@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - "**"
-  # Push already covers PR synchronize events. Keep PR events only for opening/reopening
-  # so a single commit does not launch two identical builds.
   pull_request:
     types: [opened, reopened]
   workflow_dispatch:
@@ -18,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Test, lint and build Android APKs
+  build-and-publish:
+    name: Native tests, unit tests, lint and APK publication
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -74,12 +72,127 @@ jobs:
         run: scripts/test-native.sh
 
       - name: Run unit tests and lint
-        id: validation
-        continue-on-error: true
         run: ./gradlew test testDebugUnitTest lintDebug --no-daemon
 
-      - name: Build ARM64 debug and release APKs
+      - name: Prepare Release signing key
+        shell: bash
+        env:
+          GIRASSOL_KEYSTORE_BASE64: ${{ secrets.GIRASSOL_KEYSTORE_BASE64 }}
+          GIRASSOL_KEYSTORE_PASSWORD: ${{ secrets.GIRASSOL_KEYSTORE_PASSWORD }}
+          GIRASSOL_KEY_ALIAS: ${{ secrets.GIRASSOL_KEY_ALIAS }}
+          GIRASSOL_KEY_PASSWORD: ${{ secrets.GIRASSOL_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          STORE_PATH="$RUNNER_TEMP/girassol-ci.jks"
+          if [[ -n "${GIRASSOL_KEYSTORE_BASE64:-}" ]]; then
+            printf '%s' "$GIRASSOL_KEYSTORE_BASE64" | base64 --decode > "$STORE_PATH"
+            : "${GIRASSOL_KEYSTORE_PASSWORD:?GIRASSOL_KEYSTORE_PASSWORD is required with GIRASSOL_KEYSTORE_BASE64}"
+            : "${GIRASSOL_KEY_ALIAS:?GIRASSOL_KEY_ALIAS is required with GIRASSOL_KEYSTORE_BASE64}"
+            : "${GIRASSOL_KEY_PASSWORD:?GIRASSOL_KEY_PASSWORD is required with GIRASSOL_KEYSTORE_BASE64}"
+          else
+            STORE_PASSWORD="$(openssl rand -hex 16)"
+            KEY_PASSWORD="$(openssl rand -hex 16)"
+            KEY_ALIAS="girassol-ci"
+            keytool -genkeypair -noprompt -keystore "$STORE_PATH" -storetype JKS \
+              -storepass "$STORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+              -alias "$KEY_ALIAS" -dname "CN=Girassol CI, OU=Build, O=Girassol, L=NA, ST=NA, C=BR" \
+              -keyalg RSA -keysize 3072 -validity 30
+            GIRASSOL_KEYSTORE_PASSWORD="$STORE_PASSWORD"
+            GIRASSOL_KEY_ALIAS="$KEY_ALIAS"
+            GIRASSOL_KEY_PASSWORD="$KEY_PASSWORD"
+          fi
+          {
+            echo "GIRASSOL_KEYSTORE_PATH=$STORE_PATH"
+            echo "GIRASSOL_KEYSTORE_PASSWORD=$GIRASSOL_KEYSTORE_PASSWORD"
+            echo "GIRASSOL_KEY_ALIAS=$GIRASSOL_KEY_ALIAS"
+            echo "GIRASSOL_KEY_PASSWORD=$GIRASSOL_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          chmod 600 "$STORE_PATH"
+
+      - name: Build multi-ABI Debug and Release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
+
+      - name: Stage named APK artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*universal*.apk' -print -quit)"
+          RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*universal*.apk' -print -quit)"
+          [[ -n "$DEBUG_APK" ]] || DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          [[ -n "$RELEASE_APK" ]] || RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          [[ -n "$DEBUG_APK" && -n "$RELEASE_APK" ]]
+          cp "$DEBUG_APK" dist/Girassol-debug.apk
+          cp "$RELEASE_APK" dist/Girassol-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Girassol-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Girassol-release.apk
+          sha256sum dist/Girassol-debug.apk dist/Girassol-release.apk
+
+      - name: Publish Girassol-debug.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: Girassol-debug.apk
+          path: dist/Girassol-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Girassol-release.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: Girassol-release.apk
+          path: dist/Girassol-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  instrumentation:
+    name: Instrumented tests on Android API 35 / 4 GiB emulator
+    needs: build-and-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          accept-android-sdk-licenses: true
+
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.0.12077973" \
+            "cmake;3.22.1"
+
+      - name: Prepare pinned Filament 1.56.0 material compiler
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 https://github.com/google/filament/releases/download/v1.56.0/filament-v1.56.0-linux.tgz -o "$RUNNER_TEMP/filament.tgz"
+          echo '393dcc066987345282f4b5c3f525ab053d9c21087141cdc8015f403cddf455f0  '"$RUNNER_TEMP/filament.tgz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/filament"
+          tar -xzf "$RUNNER_TEMP/filament.tgz" --strip-components=1 -C "$RUNNER_TEMP/filament"
+          echo "FILAMENT_TOOLS_DIR=$RUNNER_TEMP/filament" >> "$GITHUB_ENV"
+
+      - name: Compile Filament materials and shaders
+        run: scripts/compile-materials.sh
+
+      - name: Fetch pinned Sherpa-ONNX Android runtime
+        run: bash scripts/fetch-sherpa-onnx-aar.sh
+
+      - name: Grant Gradle permission
+        run: chmod +x gradlew
 
       - name: Run Android instrumentation tests on a 4 GiB emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -91,53 +204,9 @@ jobs:
           ram-size: 4096M
           heap-size: 512M
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
-          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
-
-      - name: Stage distributable APKs
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist/debug dist/release
-          mapfile -d '' debug_apks < <(find app/build/outputs/apk/debug -type f -name '*.apk' -print0)
-          ((${#debug_apks[@]} > 0)) || { echo "::error::No debug APK was generated"; exit 1; }
-          cp "${debug_apks[@]}" dist/debug/
-          mapfile -d '' release_apks < <(find app/build/outputs/apk/release -type f -name '*.apk' -print0)
-          ((${#release_apks[@]} > 0)) || { echo "::error::No release APK was generated"; exit 1; }
-          cp "${release_apks[@]}" dist/release/
-          test -n "$(find dist/debug -name '*.apk' -print -quit)"
-          test -n "$(find dist/release -name '*.apk' -print -quit)"
-          sha256sum dist/debug/*.apk dist/release/*.apk
-          for apk in dist/debug/*.apk dist/release/*.apk; do
-            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk"
-          done
-
-      - name: Publish debug APK artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Girassol-debug
-          path: dist/debug/
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish release APK artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Girassol-release
-          path: dist/release/
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Enforce test and lint gates
-        if: always()
-        shell: bash
-        env:
-          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
-        run: |
-          if [[ "$VALIDATION_OUTCOME" != "success" ]]; then
-            echo "::error::Unit tests, Android unit tests or lint failed."
-            exit 1
-          fi
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon
