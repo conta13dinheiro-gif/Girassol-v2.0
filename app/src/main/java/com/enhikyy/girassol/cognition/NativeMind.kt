@@ -87,11 +87,12 @@ internal object NativeMind {
                 predictionError = old.psyche.lastPredictionError,
                 openness = old.personality[0],
                 dopamine = old.psyche.dopamine,
-                previousReward = reward,
-                thermalScale = policyScale,
+                previousReward = reward.coerceIn(-1.0, 1.0),
+                thermalScale = policyScale.coerceIn(0.0, 1.0),
                 currentActivity = citizen.activity,
-                learnedValues = bank.reflections.associate { it.action to it.expectedReward }
+                learnedValues = bank.reflections.associate { it.action to (it.expectedReward / 5.0).coerceIn(-1.0, 1.0) }
             )
+            val activeWorkspace = activeInference.globalWorkspaceTopThree.map { it.activity }.toSet()
             val scores=values(272,8).toMutableList()
             scores[citizen.activity.ordinal]+=reflexVote*0.015
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
@@ -110,7 +111,8 @@ internal object NativeMind {
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
                 val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
-                scores[i]+=(activeInference.utilityByActivity[activity] ?: 0.0)*0.25+
+                val attentionWeight = if (activity in activeWorkspace) 0.25 else 0.05
+                scores[i]+=(activeInference.utilityByActivity[activity] ?: 0.0)*attentionWeight+
                     policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
                     bank.learningFor(activity).practiceBonus(world.tick)+bank.workingMemoryBonus(activity,world.tick)+
                     needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-
