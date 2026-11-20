@@ -69,7 +69,7 @@ class BiosphereService : Service() {
     override fun onCreate() {
         super.onCreate()
         thread = HandlerThread("WorldActor").apply { start() }; handler = Handler(thread.looper)
-        guardian = PersistenceAndPriorityGuardian(this)
+        guardian = PersistenceAndPriorityGuardian(this, handler)
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("biosphere", "Biosfera em execução", NotificationManager.IMPORTANCE_LOW))
         store = WorldStore(this)
         research=com.enhikyy.girassol.research.ResearchCoordinator(this,handler) { store }
@@ -201,6 +201,12 @@ class BiosphereService : Service() {
             .setContentText("Ciclo ${BiosphereHub.state.value.world?.tick ?: 0} · simulação local")
             .setContentIntent(open).addAction(0, "Pausar", pause).setOngoing(true).setSilent(true).build()
     }
+    /** LAN sync acquires Wi-Fi performance only for a bounded transfer window. */
+    internal fun acquireLanIngestionLease(timeoutMs: Long = 60_000L): Boolean =
+        guardian.acquireLanWifiLease(timeoutMs)
+
+    internal fun releaseLanIngestionLease() = guardian.releaseLanWifiLease()
+
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() {
         handler.removeCallbacks(tick)
