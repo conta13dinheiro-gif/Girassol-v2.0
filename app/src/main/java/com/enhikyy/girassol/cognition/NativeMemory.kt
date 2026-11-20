@@ -5,12 +5,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 internal object NativeMemory {
-    init { System.loadLibrary("girassol_projection") }
+    init { com.enhikyy.girassol.cognition.GeaNativeBridge.requireAvailable() }
     private external fun rank(input: ByteBuffer,count: Int,limit: Int,output: ByteBuffer): Int
     /** score is a non-negative aggregation weight; similarity preserves the raw cosine value for ranking. */
     data class Hit(val episode: Episode,val score: Float,val similarity: Float = score)
     fun recall(bank: MemoryBank,citizen: Citizen,tick: Long,limit: Int=8): List<Hit> {
-        require(limit>=0)
+        require(limit>=0 && bank.episodes.size<=2048)
         if(bank.episodes.isEmpty() || limit==0) return emptyList()
         val count=bank.episodes.size; val size=minOf(limit,count)
         val input=ByteBuffer.allocateDirect(Math.addExact(64,Math.multiplyExact(count,72))).order(ByteOrder.nativeOrder())

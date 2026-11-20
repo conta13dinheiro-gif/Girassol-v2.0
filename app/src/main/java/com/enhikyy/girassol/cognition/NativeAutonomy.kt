@@ -7,7 +7,7 @@ import kotlin.math.hypot
 internal object NativeAutonomy {
     private const val STRIDE = 56
     private const val DT = 1.0 / 60.0
-    init { System.loadLibrary("girassol_projection") }
+    init { com.enhikyy.girassol.cognition.GeaNativeBridge.requireAvailable() }
     private external fun advance(ids: LongArray, packed: FloatArray, couplingK: Float): Float
 
     data class Result(

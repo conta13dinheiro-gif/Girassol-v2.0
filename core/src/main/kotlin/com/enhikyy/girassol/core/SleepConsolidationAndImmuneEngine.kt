@@ -61,6 +61,27 @@ data class SubjectiveOpinion(
             require(norm.isFinite() && norm > 0.0)
             return SubjectiveOpinion(belief / norm, disbelief / norm, uncertainty / norm, baseRate)
         }
+
+        /** Averaging fusion for correlated reports/echoes; repeated transmission is not independent evidence. */
+        internal fun averagingFuseCorrelated(first: SubjectiveOpinion, second: SubjectiveOpinion): SubjectiveOpinion {
+            val kappa = first.uncertainty + second.uncertainty -
+                2.0 * first.uncertainty * second.uncertainty
+            val baseRate = (first.baseRate + second.baseRate) / 2.0
+            if (kappa <= 1e-12) {
+                if (first.uncertainty >= 1.0 - 1e-12 && second.uncertainty >= 1.0 - 1e-12) {
+                    return SubjectiveOpinion(0.0, 0.0, 1.0, baseRate)
+                }
+                val belief = (first.belief + second.belief) / 2.0
+                val disbelief = (first.disbelief + second.disbelief) / 2.0
+                return SubjectiveOpinion(belief, disbelief, (1.0 - belief - disbelief).coerceIn(0.0, 1.0), baseRate)
+            }
+            val belief = (first.belief * second.uncertainty + second.belief * first.uncertainty) / kappa
+            val disbelief = (first.disbelief * second.uncertainty + second.disbelief * first.uncertainty) / kappa
+            val uncertainty = (2.0 * first.uncertainty * second.uncertainty) / kappa
+            val norm = belief + disbelief + uncertainty
+            require(norm.isFinite() && norm > 0.0)
+            return SubjectiveOpinion(belief / norm, disbelief / norm, uncertainty / norm, baseRate)
+        }
     }
 }
 
@@ -115,6 +136,31 @@ object EpistemicImmunityEngine {
             ignoredDuplicateCount = ordered.size - independent.size
         )
     }
+
+    /** Fold correlated reports with averaging fusion so social echoes do not inflate certainty. */
+    fun fuseCorrelated(witnesses: List<EpistemicWitness>): EpistemicFusionResult? {
+        if (witnesses.isEmpty()) return null
+        val claimHashes = witnesses.map { it.claimHash }.distinct()
+        require(claimHashes.size == 1) { "A fusion batch must refer to one claim" }
+        val ordered = witnesses.sortedWith(
+            compareBy<EpistemicWitness> { it.sourceEventHash }
+                .thenBy { it.sourceAgentId }
+                .thenBy { it.opinion.projectedProbability() }
+        )
+        // Same agent repeating the same source event is a duplicate. Different agents
+        // reviewing the same acquisition remain correlated and are combined by averaging.
+        val unique = ordered.distinctBy { it.sourceEventHash to it.sourceAgentId }
+        var fused = unique.first().opinion
+        unique.drop(1).forEach { witness ->
+            fused = SubjectiveOpinion.averagingFuseCorrelated(fused, witness.opinion)
+        }
+        return EpistemicFusionResult(
+            claimHash = claimHashes.single(),
+            opinion = fused,
+            acceptedSourceEventHashes = unique.map { it.sourceEventHash }.distinct(),
+            ignoredDuplicateCount = ordered.size - unique.size
+        )
+    }
 }
 
 data class MemoryConsolidationReport(
@@ -139,6 +185,35 @@ object HippocampalSleepConsolidator {
     const val MAX_NODES_PER_AGENT = 512
     const val DEFAULT_REPLAY_BATCH_SIZE = 12
 
+    /**
+     * Returns a deterministic ripple batch using both prediction error and the
+     * event-specific TD MemRL utility. The selected episodes are replayed by the
+     * native plasticity loop; this method itself never mutates the memory bank.
+     */
+    fun prioritizedReplay(
+        bank: MemoryBank,
+        currentTick: Long,
+        replayBatchSize: Int = DEFAULT_REPLAY_BATCH_SIZE
+    ): List<Episode> {
+        require(bank.valid(currentTick)) { "Memory bank is not valid at the requested tick" }
+        require(replayBatchSize > 0)
+        val expectedByAction = bank.reflections.associate { it.action to it.expectedReward }
+        val qByEvent = bank.utilities.associate { it.eventId to it.qValue }
+        fun expected(episode: Episode): Double =
+            qByEvent[episode.eventId] ?: (expectedByAction[episode.action] ?: 0.0)
+        fun priority(episode: Episode): Double {
+            val q = expected(episode)
+            return 0.65 * abs(episode.reward - q) + 0.35 * abs(q)
+        }
+        return bank.episodes.sortedWith(
+            compareByDescending<Episode> { priority(it) }
+                .thenByDescending { it.importance }
+                .thenByDescending { it.tick }
+                .thenByDescending { it.eventId }
+                .thenBy { it.action.ordinal }
+        ).take(replayBatchSize)
+    }
+
     fun consolidate(
         bank: MemoryBank,
         currentTick: Long,
@@ -152,10 +227,10 @@ object HippocampalSleepConsolidator {
         require(activationDecay.isFinite() && activationDecay in 0.0..1.0)
 
         val expectedByAction = bank.reflections.associate { it.action to it.expectedReward }
-        fun expected(episode: Episode) = expectedByAction[episode.action] ?: 0.0
+        val qByEvent = bank.utilities.associate { it.eventId to it.qValue }
+        fun expected(episode: Episode) =
+            qByEvent[episode.eventId] ?: (expectedByAction[episode.action] ?: 0.0)
         fun predictionError(episode: Episode) = episode.reward - expected(episode)
-        fun replayPriority(episode: Episode) =
-            0.65 * abs(predictionError(episode)) + 0.35 * abs(expected(episode))
         fun retentionScore(episode: Episode): Double {
             val age = (currentTick - episode.tick).coerceAtLeast(0L).toDouble()
             val activation = ln(episode.importance.coerceAtLeast(1e-6)) -
@@ -163,14 +238,7 @@ object HippocampalSleepConsolidator {
             return activation + 1.5 * abs(expected(episode)) + 0.65 * abs(predictionError(episode))
         }
 
-        val selectedReplay = bank.episodes
-            .sortedWith(
-                compareByDescending<Episode> { replayPriority(it) }
-                    .thenByDescending { it.importance }
-                    .thenByDescending { it.tick }
-                    .thenByDescending { it.eventId }
-            )
-            .take(replayBatchSize)
+        val selectedReplay = prioritizedReplay(bank, currentTick, replayBatchSize)
             .map { it.eventId }
             .distinct()
 

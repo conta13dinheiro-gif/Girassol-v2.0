@@ -86,6 +86,37 @@ class SleepConsolidationAndImmuneEngineTest {
         assertEquals(520, bank.episodes.size)
     }
 
+    @Test fun eventSpecificMemRlUtilityChangesTheDeterministicRippleBatch() {
+        val citizen = WorldActor.genesis().agents.first()
+        val embedding = MemoryBank.embedding(citizen)
+        val episodes = listOf(
+            Episode(1, 1, Activity.STUDY, .5, citizen.x, citizen.z, .2, .6, embedding),
+            Episode(2, 2, Activity.WATER, 2.0, citizen.x, citizen.z, .2, .6, embedding)
+        )
+        val plain = MemoryBank(episodes = episodes)
+        val withoutUtility = HippocampalSleepConsolidator.prioritizedReplay(plain, 2, 1)
+        assertEquals(2L, withoutUtility.single().eventId)
+
+        val learned = plain.copy(
+            utilities = listOf(
+                MemoryUtility(
+                    eventId = 1,
+                    qValue = 4.0,
+                    retrievals = 1,
+                    lastRetrievedTick = 2,
+                    lastFeedbackTick = 2
+                )
+            )
+        )
+        assertTrue(learned.valid(2))
+        val withUtility = HippocampalSleepConsolidator.prioritizedReplay(learned, 2, 1)
+        assertEquals(1L, withUtility.single().eventId)
+        assertEquals(
+            withUtility,
+            HippocampalSleepConsolidator.prioritizedReplay(learned, 2, 1)
+        )
+    }
+
     @Test fun consolidationLeavesSmallBanksUnchanged() {
         val world = WorldActor.genesis().copy(tick = 1)
         val citizen = world.agents.first()

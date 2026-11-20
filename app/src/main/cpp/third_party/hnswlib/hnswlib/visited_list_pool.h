@@ -3,6 +3,8 @@
 #include <mutex>
 #include <string.h>
 #include <deque>
+#include <memory>
+#include <vector>
 
 namespace hnswlib {
 typedef unsigned short int vl_type;
@@ -37,14 +39,18 @@ class VisitedList {
 
 class VisitedListPool {
     std::deque<VisitedList *> pool;
+    // Retain ownership even when a search unwinds while borrowing a list.
+    std::vector<std::unique_ptr<VisitedList>> owned;
     std::mutex poolguard;
     int numelements;
 
  public:
     VisitedListPool(int initmaxpools, int numelements1) {
         numelements = numelements1;
-        for (int i = 0; i < initmaxpools; i++)
-            pool.push_front(new VisitedList(numelements));
+        for (int i = 0; i < initmaxpools; i++) {
+            owned.push_back(std::make_unique<VisitedList>(numelements));
+            pool.push_front(owned.back().get());
+        }
     }
 
     VisitedList *getFreeVisitedList() {
@@ -55,7 +61,8 @@ class VisitedListPool {
                 rez = pool.front();
                 pool.pop_front();
             } else {
-                rez = new VisitedList(numelements);
+                owned.push_back(std::make_unique<VisitedList>(numelements));
+                rez = owned.back().get();
             }
         }
         rez->reset();
@@ -67,12 +74,7 @@ class VisitedListPool {
         pool.push_front(vl);
     }
 
-    ~VisitedListPool() {
-        while (pool.size()) {
-            VisitedList *rez = pool.front();
-            pool.pop_front();
-            delete rez;
-        }
-    }
+    ~VisitedListPool() = default;
+
 };
 }  // namespace hnswlib

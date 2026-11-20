@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Published snapshots only. The service thread owns the actor and SQLite connection. */
 data class BiosphereUi(val world: WorldState? = null, val running: Boolean = false, val loading: Boolean = true,
-    val neuralResult: String = "Nenhuma proposta neural processada", val speed: Int = 1, val thermal: Int = 0, val availableMb: Long = 0, val error: String? = null, val hash: String = "")
+    val neuralResult: String = "Nenhuma proposta neural processada", val speed: Int = 1, val thermal: Int = 0, val availableMb: Long = 0, val error: String? = null, val hash: String = "", val wakeLockHeld: Boolean = false)
 object BiosphereHub {
     internal val mutable = MutableStateFlow(BiosphereUi())
     val state = mutable.asStateFlow()
@@ -59,7 +59,7 @@ class BiosphereService : Service() {
                 research.committed(transition)
                 research.consider(candidate.checkpoint(),lastActions)
                 rsi.consider(prior,transition,thermal==0 && !memory.lowMemory)
-                BiosphereHub.mutable.value = BiosphereUi(world = transition.state, running = true, loading = false, neuralResult = neuralResult, speed = speed, thermal = thermal, availableMb = memory.availMem / 1048576, hash = transition.event.hash)
+                BiosphereHub.mutable.value = BiosphereUi(world = transition.state, running = true, loading = false, neuralResult = neuralResult, speed = speed, thermal = thermal, availableMb = memory.availMem / 1048576, hash = transition.event.hash, wakeLockHeld = wakeLock.isHeld)
                 if (transition.state.tick % 30 == 0L) getSystemService(NotificationManager::class.java).notify(10, notification())
                 val delay = if (thermal >= PowerManager.THERMAL_STATUS_SEVERE || memory.lowMemory) 2000L else 500L / speed
                 handler.postDelayed(this, delay)
@@ -72,6 +72,7 @@ class BiosphereService : Service() {
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Girassol:Biosphere")
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("biosphere", "Biosfera em execução", NotificationManager.IMPORTANCE_LOW))
         store = WorldStore(this)
+        store.restoreTsetlin()
         research=com.enhikyy.girassol.research.ResearchCoordinator(this,handler) { store }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -152,7 +153,7 @@ class BiosphereService : Service() {
                         pendingNeural = null; rsi.cancel(); research.cancel()
                         running = false; handler.removeCallbacks(tick); prefs.edit().putBoolean("running", false).apply()
                         if (wakeLock.isHeld) wakeLock.release()
-                        BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(world = actor!!.state, running = false, loading = false)
+                        BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(world = actor!!.state, running = false, loading = false, wakeLockHeld = false)
                         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId)
                     }
                     ACTION_SPEED -> {
@@ -174,6 +175,7 @@ class BiosphereService : Service() {
         try {
             val point=checkNotNull(replacement.load())
             replacement.audit()
+            replacement.restoreTsetlin()
             val next=WorldActor(point,WorldActor.CURRENT_RULES_VERSION)
             val actions=replacement.lastActions()
             if(!prefs.edit().putString("world_database",name).commit()) {
@@ -191,7 +193,7 @@ class BiosphereService : Service() {
     private fun fail(e: Exception) {
         running = false; rsi.cancel(); research.cancel()
         if (wakeLock.isHeld) wakeLock.release()
-        BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(running = false, loading = false, error = e.message ?: "Falha ao abrir a biosfera")
+        BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(running = false, loading = false, wakeLockHeld = false, error = e.message ?: "Falha ao abrir a biosfera")
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
     private fun notification(): Notification {

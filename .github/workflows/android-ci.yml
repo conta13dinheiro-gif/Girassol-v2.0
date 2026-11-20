@@ -71,6 +71,12 @@ jobs:
       - name: Run native C++ tests with ASan and UBSan
         run: scripts/test-native.sh
 
+      - name: Verify SQLite migration and failure atomicity
+        run: python3 scripts/test-gea-sqlite.py
+
+      - name: Verify all JNI declarations
+        run: python3 scripts/test-jni-contract.py
+
       - name: Run production JNI integration tests
         run: scripts/test-mind-jni.sh
 
@@ -78,6 +84,9 @@ jobs:
         id: validation
         continue-on-error: true
         run: ./gradlew test testDebugUnitTest lintDebug --no-daemon
+
+      - name: Compile Android instrumentation tests
+        run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon
 
       - name: Build ARM64 debug and release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon

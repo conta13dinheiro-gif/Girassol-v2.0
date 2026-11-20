@@ -3,7 +3,9 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
-extern "C" JNIEXPORT jint JNICALL Java_com_enhikyy_girassol_cognition_NativeSemanticMemory_rank(JNIEnv* env,jobject,jobject input,jint dimensions,jint count,jint limit,jobject output) {
+#include <new>
+#include <exception>
+extern "C" JNIEXPORT jint JNICALL Java_com_enhikyy_girassol_cognition_NativeSemanticMemory_rank(JNIEnv* env,jobject,jobject input,jint dimensions,jint count,jint limit,jobject output) try {
     if(!input || !output || dimensions<1 || dimensions>32768 || count<0 || count>2048 || limit<0 || limit>count) return -1;
     const jlong values=(static_cast<jlong>(count)+1)*dimensions;
     if(env->GetDirectBufferCapacity(input)!=values*4 || env->GetDirectBufferCapacity(output)!=static_cast<jlong>(limit)*8) return -1;
@@ -14,4 +16,15 @@ extern "C" JNIEXPORT jint JNICALL Java_com_enhikyy_girassol_cognition_NativeSema
     if(found<0) return -1;
     for(int i=0;i<found;++i) { std::memcpy(target+i*8,&hits[i].index,4);std::memcpy(target+i*8+4,&hits[i].similarity,4); }
     return found;
+}
+ catch (const std::bad_alloc&) {
+    if (!env->ExceptionCheck()) {
+        if (auto type = env->FindClass("java/lang/OutOfMemoryError")) env->ThrowNew(type, "Native memory index allocation failed");
+    }
+    return -1;
+} catch (const std::exception&) {
+    if (!env->ExceptionCheck()) {
+        if (auto type = env->FindClass("java/lang/IllegalStateException")) env->ThrowNew(type, "Native memory index failed");
+    }
+    return -1;
 }

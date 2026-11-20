@@ -20,7 +20,15 @@ import com.enhikyy.girassol.core.SpatialPose
 import com.google.android.filament.*
 import com.google.android.filament.android.UiHelper
 import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.*
+
+internal object FilamentBackendStatus {
+    private val mutable = MutableStateFlow("Aguardando inicialização")
+    val state = mutable.asStateFlow()
+    fun publish(value: String) { mutable.value = value }
+}
 
 /** Read-only viewport. Native geometry and sky convolution run on a worker; GPU ownership stays here. */
 @SuppressLint("ViewConstructor")
@@ -129,7 +137,25 @@ internal class FilamentWorldView(
     }
     private fun initialize() {
         Filament.init()
-        val e=Engine.create(Engine.Backend.OPENGL).also { engine=it }
+        var fallbackReason: String? = null
+        val createdEngine = try {
+            Engine.create(Engine.Backend.VULKAN)
+        } catch (_: RuntimeException) {
+            fallbackReason = "Vulkan indisponível"
+            Engine.create(Engine.Backend.OPENGL)
+        } catch (_: LinkageError) {
+            fallbackReason = "Biblioteca Vulkan indisponível"
+            Engine.create(Engine.Backend.OPENGL)
+        }
+        val e = createdEngine.also { engine=it }
+        val activeBackend = when (e.backend) {
+            Engine.Backend.VULKAN -> "VULKAN"
+            Engine.Backend.OPENGL -> "OPENGL_ES3"
+            else -> e.backend.name
+        }
+        FilamentBackendStatus.publish(
+            if (fallbackReason == null) activeBackend else activeBackend + " · fallback: " + fallbackReason
+        )
         renderer=e.createRenderer().apply { clearOptions=Renderer.ClearOptions().apply { clear=true; clearColor=floatArrayOf(.02f,.03f,.045f,1f) } }
         scene=e.createScene()
         camera=e.createCamera(entity()).apply { setExposure(16f,1f/125f,100f) }
@@ -407,10 +433,10 @@ internal class FilamentWorldView(
         gestures.onTouchEvent(event); return true
     }
     override fun performClick(): Boolean { super.performClick(); return true }
-    private fun fail(message: String) { if(closed) return; close(); main.post { onError(message) } }
+    private fun fail(message: String) { if(closed) return; close(); FilamentBackendStatus.publish("Falha: " + message); main.post { onError(message) } }
     fun close() {
         if(closed) return
-        closed=true; unschedule(); lifecycle.removeObserver(this); worker.shutdownNow()
+        closed=true; FilamentBackendStatus.publish("Renderer encerrado"); unschedule(); lifecycle.removeObserver(this); worker.shutdownNow()
         helper.detach()
         val e=engine?:return
         meshes.toList().forEach(::destroyMesh); actors.clear(); city.clear(); roomEntities.clear()

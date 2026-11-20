@@ -129,10 +129,11 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         label_offset_ = size_links_level0_ + data_size_;
         offsetLevel0_ = 0;
 
-        data_level0_memory_ = (char *) malloc(max_elements_ * size_data_per_element_);
-        if (data_level0_memory_ == nullptr) {
-            HNSWLIB_THROW_RUNTIME_ERROR("Not enough memory to allocate for level 0");
-        }
+        // Own raw allocations locally until construction has completed.
+        std::unique_ptr<char, decltype(&free)> base(
+            static_cast<char*>(malloc(max_elements_ * size_data_per_element_)), &free);
+        if (!base) throw std::bad_alloc();
+        data_level0_memory_ = base.get();
 
         cur_element_count = 0;
 
@@ -142,15 +143,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         enterpoint_node_ = -1;
         maxlevel_ = -1;
 
-        linkLists_ = (char **) malloc(sizeof(void *) * max_elements_);
-        if (linkLists_ == nullptr) {
-            HNSWLIB_THROW_RUNTIME_ERROR(
-                "Not enough memory: HierarchicalNSW failed to allocate linklists");
-        }
+        std::unique_ptr<char*, decltype(&free)> links(
+            static_cast<char**>(calloc(max_elements_, sizeof(char*))), &free);
+        if (!links) throw std::bad_alloc();
+        linkLists_ = links.get();
 
         size_links_per_element_ = maxM_ * sizeof(tableint) + sizeof(linklistsizeint);
         mult_ = 1 / log(1.0 * M_);
         revSize_ = 1.0 / mult_;
+        base.release();
+        links.release();
     }
 
 
@@ -1343,7 +1345,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         if (curlevel) {
             linkLists_[cur_c] = (char *) malloc(size_links_per_element_ * curlevel + 1);
             if (linkLists_[cur_c] == nullptr) {
-                return Status("Not enough memory: addPoint failed to allocate linklist");
+                throw std::bad_alloc();
             }
             memset(linkLists_[cur_c], 0, size_links_per_element_ * curlevel + 1);
         }

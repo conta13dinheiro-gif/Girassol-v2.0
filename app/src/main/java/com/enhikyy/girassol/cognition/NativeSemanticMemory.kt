@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 internal object NativeSemanticMemory {
-    init { System.loadLibrary("girassol_projection") }
+    init { com.enhikyy.girassol.cognition.GeaNativeBridge.requireAvailable() }
     private external fun rank(input: ByteBuffer,dimensions: Int,count: Int,limit: Int,output: ByteBuffer): Int
     fun search(query: List<Float>,rows: List<Pair<String,List<Float>>>,limit: Int=8): List<Pair<String,Float>> {
         if(rows.isEmpty()) return emptyList()

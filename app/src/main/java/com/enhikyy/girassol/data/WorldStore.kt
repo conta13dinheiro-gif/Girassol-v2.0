@@ -2,25 +2,31 @@ package com.enhikyy.girassol.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.DatabaseErrorHandler
+import android.database.sqlite.SQLiteDatabaseCorruptException
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
-class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 4) {
+class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 5, DatabaseErrorHandler {
+    throw SQLiteDatabaseCorruptException("Banco corrompido; arquivo preservado para recuperação")
+}) {
     private val app=context.applicationContext
     init { require(name.matches(Regex("girassol(?:-branch-[a-f0-9-]{36})?\\.db"))); setWriteAheadLoggingEnabled(true) }
-    override fun onConfigure(db: SQLiteDatabase) { super.onConfigure(db); db.execSQL("PRAGMA synchronous=FULL") }
+    override fun onConfigure(db: SQLiteDatabase) { super.onConfigure(db); db.setForeignKeyConstraintsEnabled(true); db.execSQL("PRAGMA synchronous=FULL") }
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE checkpoint (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, digest TEXT NOT NULL, event_id INTEGER NOT NULL, event_hash TEXT NOT NULL)")
         db.execSQL("CREATE TABLE events (id INTEGER PRIMARY KEY, tick INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL)")
         createHistory(db)
         ResearchTables.create(db)
+        GeaSchema.create(app, db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..3 && newVersion==4)
+        check(oldVersion in 1..4 && newVersion==5)
         if(oldVersion<2) createHistory(db)
-        if(oldVersion<3) ResearchTables.create(db) else ResearchTables.createVectors(db)
+        if(oldVersion<3) ResearchTables.create(db) else if(oldVersion<4) ResearchTables.createVectors(db)
+        GeaSchema.create(app, db)
     }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, tick INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, cause TEXT NOT NULL, agents TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, event_hash TEXT NOT NULL)")
@@ -72,8 +78,9 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     check(e.valid() && e.hash==revision.sourceEventHash && e.stateHash==revision.sourceStateHash) { "Proveniência evolutiva inválida" }
                 }
             }
-            event.cognition?.lesson?.let { ResearchTables(db).assimilate(it) }
             db.insertOrThrow("events", null, ContentValues().apply { put("id", event.eventId); put("tick", event.tick); put("payload", Canonical.event(event)) })
+            event.cognition?.lesson?.let { ResearchTables(db).assimilate(it,event.eventId) }
+            GeaSchema.record(db, transition, previous)
             db.insertWithOnConflict("checkpoint", null, ContentValues().apply {
                 put("id", 1); put("payload", payload); put("digest", Canonical.hash(payload)); put("event_id", event.eventId); put("event_hash", event.hash)
             }, SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
@@ -123,6 +130,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     db.execSQL("INSERT INTO events SELECT * FROM origin.events WHERE id<=?",arrayOf(point.eventId))
                     db.execSQL("INSERT INTO milestones SELECT * FROM origin.milestones WHERE tick<=?",arrayOf(point.state.tick))
                     ResearchTables.fork(db,point)
+                    GeaSchema.fork(db,point.eventId)
                     val payload=Canonical.state(point.state)
                     db.insertOrThrow("checkpoint",null,ContentValues().apply { put("id",1);put("payload",payload);put("digest",Canonical.hash(payload));put("event_id",point.eventId);put("event_hash",point.eventHash) })
                     db.setTransactionSuccessful()
@@ -135,6 +143,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         finally { destination.close() }
     }
     fun research() = ResearchTables(writableDatabase)
+    fun restoreTsetlin() = GeaSchema.restoreTsetlin(readableDatabase)
     fun lastActions(): List<ActionRecord> = readableDatabase.rawQuery("SELECT payload FROM events ORDER BY id DESC LIMIT 1",null).use { if(it.moveToFirst()) Canonical.event(it.getString(0)).actions else emptyList() }
     companion object {
         fun activeName(context: Context): String = context.getSharedPreferences("runtime",Context.MODE_PRIVATE).getString("world_database","girassol.db") ?: "girassol.db"
@@ -145,6 +154,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         val db=readableDatabase
         db.beginTransactionNonExclusive()
         try {
+            GeaSchema.audit(db)
             val checkpoint=load()
             val audit=JournalAudit()
             db.rawQuery("SELECT id,tick,payload FROM events ORDER BY id",null).use { rows ->

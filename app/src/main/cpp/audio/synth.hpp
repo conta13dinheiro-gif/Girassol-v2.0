@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <array>
+#include "binaural_hrtf_spatializer.hpp"
 
 namespace girassol::audio {
 struct Parameters {
@@ -19,8 +20,10 @@ private:
     float gain_=0, left_=0, right_=0, mastery_=0, social_=0, noise_=0;
     std::array<double,3> undertones_{};
     std::array<float,2048> string_{};
+    BinauralHrtfSpatializer stepSpatializer_;
     std::uint32_t write_=0;
     float weather_=0, tension_=0, bow_=0, celebration_=0, last_milestone_=0;
+    float musicDuck_=1.0f;
     float random() noexcept;
 };
 }

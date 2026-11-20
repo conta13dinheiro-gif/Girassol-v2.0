@@ -3,7 +3,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 internal object NativeCmaes {
-    init { System.loadLibrary("girassol_projection") }
+    init { com.enhikyy.girassol.cognition.GeaNativeBridge.requireAvailable() }
     private external fun next(state: ByteBuffer,scores: ByteBuffer?,seed: Long,reset: Boolean): Boolean
     class Search(mean: List<Double>,private val seed: Long) {
         private val state=ByteBuffer.allocateDirect(170*8).order(ByteOrder.nativeOrder())

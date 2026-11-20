@@ -21,8 +21,50 @@ data class DeviceHardwareReport(
     val totalRamGb: Float,
     val logicalCpuCount: Int,
     val openClLibraryFileFound: Boolean,
-    val vulkanLibraryFileFound: Boolean
+    val vulkanLibraryFileFound: Boolean,
+    val nativeProbeAvailable: Boolean,
+    val hasNeon: Boolean,
+    val hasDotProd: Boolean,
+    val hasI8mm: Boolean,
+    val hasSve2: Boolean,
+    val hasAvx2: Boolean,
+    val bigCoreIds: List<Int>,
+    val littleCoreIds: List<Int>,
+    val ggmlVariantOrder: String
 )
+
+internal data class NativeHardwareSnapshot(
+    val abi: String, val neon: Boolean, val dotprod: Boolean, val i8mm: Boolean,
+    val sve2: Boolean, val avx2: Boolean, val openClLoader: Boolean, val vulkanLoader: Boolean,
+    val logicalCpus: Int, val bigCores: List<Int>, val littleCores: List<Int>, val ggmlVariants: String
+) {
+    companion object {
+        fun parse(raw: String): NativeHardwareSnapshot {
+            val values = raw.lineSequence().filter { it.isNotBlank() }.associate { line ->
+                val separator = line.indexOf('=')
+                require(separator > 0) { "Malformed native hardware field" }
+                line.substring(0, separator) to line.substring(separator + 1)
+            }
+            fun flag(key: String) = when(values[key]) {
+                "true" -> true
+                "false" -> false
+                else -> error("Missing or invalid native hardware boolean: $key")
+            }
+            fun cores(key: String) = values[key].orEmpty().split(',').filter { it.isNotBlank() }
+                .map { it.toInt().also { cpu -> require(cpu in 0 until 4096) } }.distinct()
+            val logical = values["logical_cpus"]?.toIntOrNull() ?: error("Missing CPU count")
+            require(logical > 0)
+            val big = cores("big_cores"); val little = cores("little_cores")
+            require((big + little).distinct().size == big.size + little.size) { "Duplicate CPU cluster assignment" }
+            return NativeHardwareSnapshot(
+                values["abi"]?.takeIf { it.isNotBlank() } ?: error("Missing ABI"),
+                flag("neon"), flag("dotprod"), flag("i8mm"), flag("sve2"), flag("avx2"),
+                flag("opencl_loader"), flag("vulkan_loader"), logical, big, little,
+                values["ggml_variants"]?.takeIf { it.isNotBlank() } ?: error("Missing variant order")
+            )
+        }
+    }
+}
 
 object HardwareAutoTuner {
     fun probe(context: Context): DeviceHardwareReport {
@@ -37,6 +79,11 @@ object HardwareAutoTuner {
         ).joinToString(" ").lowercase()
         val renderer = queryGpuRenderer()
         val fingerprint = "$identity $renderer".lowercase()
+        val native = if (com.enhikyy.girassol.cognition.GeaNativeBridge.available) {
+            runCatching {
+                NativeHardwareSnapshot.parse(com.enhikyy.girassol.cognition.GeaNativeBridge.nativeHardwareProbe())
+            }.getOrNull()
+        } else null
         val vendor = when {
             architecture.contains("x86", ignoreCase = true) || abis.any { it.contains("x86") } -> "x86_64 / Intel-AMD"
             fingerprint.contains("qualcomm") || fingerprint.contains("qcom") || fingerprint.contains("adreno") -> "Qualcomm Snapdragon"
@@ -56,20 +103,29 @@ object HardwareAutoTuner {
             supportedAbis = abis,
             gpuRenderer = renderer,
             totalRamGb = memory.totalMem / (1024f * 1024f * 1024f),
-            logicalCpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
-            openClLibraryFileFound = anyFile(
+            logicalCpuCount = native?.logicalCpus ?: Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+            openClLibraryFileFound = native?.openClLoader ?: anyFile(
                 "/vendor/lib64/libOpenCL.so",
                 "/system/vendor/lib64/libOpenCL.so",
                 "/system/lib64/libOpenCL.so",
                 "/vendor/lib/libOpenCL.so",
                 "/system/lib/libOpenCL.so"
             ),
-            vulkanLibraryFileFound = anyFile(
+            vulkanLibraryFileFound = native?.vulkanLoader ?: anyFile(
                 "/system/lib64/libvulkan.so",
                 "/vendor/lib64/libvulkan.so",
                 "/system/lib/libvulkan.so",
                 "/vendor/lib/libvulkan.so"
-            )
+            ),
+            nativeProbeAvailable = native != null,
+            hasNeon = native?.neon ?: false,
+            hasDotProd = native?.dotprod ?: false,
+            hasI8mm = native?.i8mm ?: false,
+            hasSve2 = native?.sve2 ?: false,
+            hasAvx2 = native?.avx2 ?: false,
+            bigCoreIds = native?.bigCores.orEmpty(),
+            littleCoreIds = native?.littleCores.orEmpty(),
+            ggmlVariantOrder = native?.ggmlVariants ?: "portable / fallback"
         )
     }
 

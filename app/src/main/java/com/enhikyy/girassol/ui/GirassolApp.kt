@@ -32,7 +32,9 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,7 @@ import com.enhikyy.girassol.core.*
 import com.enhikyy.girassol.runtime.BiosphereUi
 import com.enhikyy.girassol.render.NativeProjection
 import com.enhikyy.girassol.render.FilamentWorldView
+import com.enhikyy.girassol.render.FilamentBackendStatus
 import com.enhikyy.girassol.audio.AudioStatus
 import com.enhikyy.girassol.audio.NeuralSpeechEngine
 import com.enhikyy.girassol.cognition.CognitionStatus
@@ -164,9 +167,22 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
                             val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.Inbox,Icons.Outlined.CloudDownload,Icons.Outlined.Tune)
                             listOf("Biosfera","Gênesis","Pedidos","HF & Plugins","Marcos/Sistema").forEachIndexed { i,label->
-                                Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
-                                    Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
+                                Column(
+                                    Modifier
+                                        .weight(1f)
+                                        .heightIn(min=48.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent)
+                                        .clickable(role=Role.Tab) { tab=i }
+                                        .semantics {
+                                            this.selected = tab==i
+                                            contentDescription = "$label, ${if(tab==i) "selecionado" else "aba"}"
+                                        }
+                                        .padding(vertical=6.dp),
+                                    horizontalAlignment=Alignment.CenterHorizontally
+                                ) {
+                                    Icon(icons[i],null,Modifier.size(22.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
+                                    Text(label,fontSize=11.sp,color=if(tab==i) Solar.Amber else Solar.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 }
                             }
                         }
@@ -395,6 +411,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
     var hardwareReport by remember { mutableStateOf<com.enhikyy.girassol.hardware.DeviceHardwareReport?>(null) }
+    val filamentBackend by FilamentBackendStatus.state.collectAsStateWithLifecycle()
     LaunchedEffect(context) { hardwareReport = withContext(Dispatchers.IO) { com.enhikyy.girassol.hardware.HardwareAutoTuner.probe(context) } }
     var auditing by remember { mutableStateOf(false) }
     var auditResult by rememberSaveable { mutableStateOf<String?>(null) }
@@ -475,14 +492,34 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 KeyValue("Arquitetura / ABI", "${report.architecture} · ${report.primaryAbi}")
                 KeyValue("ABIs suportadas", report.supportedAbis.joinToString())
                 KeyValue("GPU / renderer", report.gpuRenderer)
+                KeyValue("Backend Filament ativo", filamentBackend)
                 KeyValue("RAM física / CPUs visíveis", String.format(Locale.ROOT, "%.1f GB · %d", report.totalRamGb, report.logicalCpuCount))
-                KeyValue("Biblioteca OpenCL", if (report.openClLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrada nos caminhos padrão")
-                KeyValue("Loader Vulkan", if (report.vulkanLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrado nos caminhos padrão")
+                KeyValue("Sonda nativa", if(report.nativeProbeAvailable) "Ativa" else "Indisponível · fallback Kotlin")
+                KeyValue("CPU SIMD", listOfNotNull(
+                    "NEON".takeIf { report.hasNeon },
+                    "DOTPROD".takeIf { report.hasDotProd },
+                    "I8MM".takeIf { report.hasI8mm },
+                    "SVE2".takeIf { report.hasSve2 },
+                    "AVX2".takeIf { report.hasAvx2 }
+                ).ifEmpty { listOf("Sem recursos adicionais confirmados") }.joinToString(" · "))
+                KeyValue("Núcleos Big/Prime", report.bigCoreIds.joinToString().ifBlank { "Não identificados" })
+                KeyValue("Núcleos LITTLE", report.littleCoreIds.joinToString().ifBlank { "Não identificados" })
+                KeyValue("Variantes CPU GGML", report.ggmlVariantOrder)
+                KeyValue("Loader OpenCL", when {
+                    report.nativeProbeAvailable && report.openClLibraryFileFound -> "Loader e símbolo disponíveis"
+                    report.openClLibraryFileFound -> "Arquivo presente; símbolo não verificado"
+                    else -> "Não disponível"
+                })
+                KeyValue("Loader Vulkan", when {
+                    report.nativeProbeAvailable && report.vulkanLibraryFileFound -> "Loader e símbolo disponíveis"
+                    report.vulkanLibraryFileFound -> "Arquivo presente; símbolo não verificado"
+                    else -> "Não disponível"
+                })
                 KeyValue("Backend GGUF neste build", "CPU · llama.cpp")
-                Text("Diagnóstico informativo. Encontrar uma biblioteca não comprova driver funcional; este build ainda não ativa seleção dinâmica OpenCL/Vulkan nem KleidiAI.", color=Muted, fontSize=10.sp)
+                Text("A sonda identifica instruções e símbolos de loaders sem inicializar dispositivos nem executar código do driver. Isso não comprova um ICD funcional nem aceleração ativa. O backend deste build permanece CPU; a seleção GPU exige integração e validação próprias.", color=Muted, fontSize=10.sp)
             }
         }
-        item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
+        item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); KeyValue("WakeLock parcial", if(ui.wakeLockHeld && ui.running) "Ativo" else "Liberado"); Text("O estado do WakeLock é lido de PowerManager. Isso não garante execução ininterrupta: Android e fabricantes continuam controlando processos, bateria e temperatura. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
         item { SectionTitle("Voz neural offline"); Spacer(Modifier.height(10.dp)); NeuralSpeechPanel() }
         item { SectionTitle("Shizuku · telemetria de sistema"); Spacer(Modifier.height(10.dp)); ShizukuPanel() }
         item {
