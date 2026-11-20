@@ -81,10 +81,11 @@ internal class PersistenceAndPriorityGuardian(context: Context, private val sche
      */
     @Synchronized
     fun acquireLanWifiLease(timeoutMs: Long = 60_000L): Boolean {
-        if (closed || wifiLock == null) return false
+        if (closed) return false
+        val lock = wifiLock ?: return false
         return runCatching {
             scheduler.removeCallbacks(wifiRelease)
-            if (!wifiLock.isHeld) wifiLock.acquire()
+            if (!lock.isHeld) lock.acquire()
             scheduler.postDelayed(wifiRelease, timeoutMs.coerceIn(1_000L, MAX_WIFI_LEASE_MS))
             true
         }.getOrDefault(false)
