@@ -91,7 +91,7 @@ class CognitionController(context: Context, private val lifecycle: Lifecycle) : 
         val snapshot = BiosphereHub.state.value
         val world = snapshot.world ?: return
         if (!snapshot.running) { mutable.value = mutable.value.copy(message = "Retome a biosfera para enviar propostas."); return }
-        val candidates = world.agents.filter { it.acceptsNeuralActivity() }
+        val candidates = world.agents.filter { it.acceptsNeuralActivity() && world.minds[it.id]?.decision?.allowLlm!=false }
         if (candidates.isEmpty()) {
             mutable.value = mutable.value.copy(message = "Habitantes priorizando necessidades urgentes. Aguardando recuperação.")
             return

@@ -81,48 +81,60 @@ internal object NativeMind {
                 gateBytes=GeaNativeBridge.tsetlinTrain(gateBytes,previousGate.features,if(outcome=="OK") 1 else 0,
                     Canonical.stream(world.seed,citizen.id,world.tick,"tsetlin-feedback-v1").nextLong())
             }
-            val scores=values(272,8).toMutableList()
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
             val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
-            Activity.entries.forEachIndexed { i,activity->
-                // Learned value, homeostasis, distance and intrinsic novelty all affect the next decision.
-                val room=world.rooms.first { it.id==activity.room }
-                val experience=recalled.filter { it.episode.action==activity }
-                val expected=if(experience.isEmpty()) bank.reflections.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
-                    else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
-                val technique=bank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
-                // Seeded Gumbel exploration scales with curiosity and lack of novelty; outputs are journaled.
-                val thermalCost = AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier, 1.0, n.energy)
-                val policyScale = 1.0 / (1.0 + thermalCost)
-                val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
-                val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
-                scores[i]+=-ln(-ln(u))*temperature
-                scores[i]+=GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,activity),true)*.05
-                val psyche=old.psyche
-                val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
-                val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
-                scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
-                    bank.learningFor(activity).practiceBonus(world.tick)+bank.workingMemoryBonus(activity,world.tick)+
-                    needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-
-                    hypot(room.x-citizen.x,room.z-citizen.z)*.025
-                scores[i]+=when(activity) {
-                    Activity.STUDY -> psyche.dopamine*.12+ignition*.45
-                    Activity.TALK -> psyche.oxytocin*.12+maxOf(0.0,psyche.pleasure)*.04
-                    Activity.SLEEP -> psyche.cortisol*.06
-                    Activity.BUILD -> -psyche.cortisol*.05
-                    else -> 0.0
-                }
-                if(activity==Activity.SLEEP && n.energy>.8) scores[i]-=1
-                if(activity==Activity.BUILD && ((world.balances["market/timber"] ?: 0)<4)) scores[i]-=3
-                if(activity==Activity.WRITE && (world.balances["market/paper"] ?: 0)==0) scores[i]-=3
-                if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0) scores[i]-=3
+            val thermalCost=AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier,1.0,n.energy)
+            val policyScale=1.0/(1.0+thermalCost)
+            val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
+            val noise=List(8) { -ln(-ln(exploration.nextDouble().coerceIn(1e-12,1-1e-12)))*temperature }
+            val decisionBank=bank
+            val nativeScores=values(272,8) // Workers never retain the reusable JNI buffer.
+            val scores=PianoWorkspace.aggregate(
+                { Activity.entries.map { activity ->
+                    val i=activity.ordinal
+                    needs[i]*1.7+SemanticCollapseGuard.noveltyEpistemicBonus(activity.name,world.actionCounts)
+                } },
+                { Activity.entries.map { activity ->
+                    val experience=recalled.filter { it.episode.action==activity }
+                    val expected=if(experience.isEmpty()) decisionBank.reflections.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
+                        else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
+                    expected*.4+(decisionBank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0)*.15+
+                        decisionBank.learningFor(activity).practiceBonus(world.tick)+decisionBank.workingMemoryBonus(activity,world.tick)
+                } },
+                { Activity.entries.map { activity ->
+                    val psyche=old.psyche
+                    when(activity) {
+                        Activity.STUDY -> psyche.dopamine*.12+(psyche.ignitionIndex-.65).coerceAtLeast(0.0)*.45
+                        Activity.TALK -> psyche.oxytocin*.12+maxOf(0.0,psyche.pleasure)*.04
+                        Activity.SLEEP -> psyche.cortisol*.06
+                        Activity.BUILD -> -psyche.cortisol*.05
+                        else -> 0.0
+                    }
+                } },
+                { Activity.entries.map { activity ->
+                    val room=world.rooms.first { it.id==activity.room }
+                    var value=policy[activity.ordinal]*policyScale-hypot(room.x-citizen.x,room.z-citizen.z)*.025
+                    if(activity==Activity.SLEEP && n.energy>.8) value-=1
+                    if(activity==Activity.BUILD && (world.balances["market/timber"] ?: 0)<4) value-=3
+                    if(activity==Activity.WRITE && (world.balances["market/paper"] ?: 0)==0) value-=3
+                    if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0) value-=3
+                    value+GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,activity),true).coerceIn(-4,4)*.05
+                } },
+                { List(8) { i -> nativeScores[i]+noise[i]+.4/sqrt(exposure[i]+1.0) } }
+            )
+            val likelihoods=Activity.entries.map {
+                (GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,it),false)+9.0)/18.0
             }
-            val decision=Activity.entries[scores.indices.maxBy { scores[it] }]
+            val selection=ActiveInferencePianoEngine.select(citizen,scores,likelihoods)
+            val decision=selection.action
             decisions[citizen.id]=decision
             val expectedSensors=NativeAutonomy.predictNext(
                 world,citizen,decision,autonomy.actualSensory.getValue(citizen.id)
             )
             minds[citizen.id]=minds.getValue(citizen.id).copy(
+                decision=DecisionTrace(selection.topThree,selection.evidence.map { it.freeEnergy },
+                    selection.evidence.map { it.expectedFreeEnergy },selection.evidence.map { it.success },
+                    thermalTier==ThermalTier.NONE_OR_LIGHT && GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,decision),true)<4),
                 tsetlin=TsetlinState(TsetlinState.encode(gateBytes),TsetlinState.features(citizen,decision),decision.ordinal,world.tick),
                 psyche=minds.getValue(citizen.id).psyche.copy(expectedSensory=expectedSensors,initialized=true)
             )

@@ -96,12 +96,13 @@ import kotlin.math.*
     val learnedTick: Long = -1,val novelty: Double = 0.0,val behaviors: List<List<Double>> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val memory: MemoryBank = MemoryBank(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val tsetlin: TsetlinState = TsetlinState()) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val tsetlin: TsetlinState = TsetlinState(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val decision: DecisionTrace = DecisionTrace()) {
     fun valid(tick: Long): Boolean = parameters.size==248 && parameters.all { it.isFinite() && abs(it)<=8 } &&
         parameters.subList(168,176).all { it in .2..8.0 } && hidden.size==8 && hidden.all { it.isFinite() && abs(it)<=1.00001 } &&
         personality.size==5 && personality.all { it.isFinite() && it in 0.0..1.0 } && exposure.size==8 && exposure.all { it>=0 } &&
         learnedTick in -1..tick && novelty.isFinite() && novelty in 0.0..1.0 &&
-        memory.valid(tick) && tsetlin.valid(tick) && psyche.valid() && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
+        memory.valid(tick) && tsetlin.valid(tick) && decision.valid() && psyche.valid() && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
 
         fun inherit(world: WorldState,citizen: Citizen,firstId: String,secondId: String,first: MindState,second: MindState): MindState {
@@ -166,6 +167,7 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val innerSpeech: Map<String,String> = emptyMap()) {
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
+        decision=m.decision.copy(topThree=m.decision.topThree.toList(),freeEnergy=m.decision.freeEnergy.toList(),expectedFreeEnergy=m.decision.expectedFreeEnergy.toList(),successProbability=m.decision.successProbability.toList()),
         exposure=m.exposure.toList(),behaviors=m.behaviors.map { it.toList() },memory=m.memory.snapshot(),
         psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList())) },
         decisions=decisions.toMap(),evolution=evolution?.snapshot(),innerSpeech=innerSpeech.toMap())

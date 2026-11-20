@@ -1,3 +1,7 @@
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:c39ac1ddf8130ad85c855629ba020db304b4e2364cb03841d14247eeeb3757b5 -->
+
 # Continuação do Girassol — estado verificável
 
 <!-- coderabbit-ai-generated:v1 -->
@@ -17,7 +21,13 @@ Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretri
 - scripts/test-mind-jni.sh passou: classificador JNI, estado restaurado, entradas inválidas, biblioteca ausente/presente, 500 transições canônicas, live/shadow, busca/isolamento/cancelamento, idade Double. Nenhuma política foi promovida na busca de regressão.
 - :core:test :host-validation:check testDebugUnitTest lintDebug passou. Sete testes SQLite passaram, incluindo disco cheio, corrupção e rollback após constraint violation envolvendo evento e blob. Os testes instrumentados Android continuam sem execução em aparelho.
 - O workflow Android CI executa em cada push e manualmente. Passa a exigir quatro APKs Debug e quatro Release, publicar Girassol-debug, Girassol-release e Girassol-checksums por 30 dias e explicar o download no resumo. O YAML foi validado localmente. Aprovação remota e novos APKs não são presumidos a partir dessa validação.
-- Build local Debug/Release desta entrega ainda em execução ao registrar esta seção. As assinaturas da Fase 1 não validam estes novos APKs. Não foi medida a latência alvo nem o consumo total no Moto G62 de 4 GB; 150 estados binários ativos da Tsetlin somam 77.400 bytes, excluindo cópias Kotlin/eventos e demais motores.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:5f9c02a8cd1da160109e6a20ae9f0bb0ea81ae10b5d46fe4c6ba2d8aafda86c0 -->
+
+- Build local Debug/Release da Frente 3 passou; os oito APKs passaram em apksigner verify e as 18 exportações JNI foram verificadas nas três ABIs. CI remoto do commit dafbcb3aa64be702380d0826c0d1b7174939edad terminou com sucesso: https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44646717512 . Não foi medida a latência alvo nem o consumo total no Moto G62 de 4 GB; 150 estados binários ativos da Tsetlin somam 77.400 bytes, excluindo cópias Kotlin/eventos e demais motores.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 O texto abaixo preserva o histórico das etapas anteriores.
 
@@ -93,6 +103,22 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 <!-- /coderabbit-ai-generated:v1 -->
 - Sem `/dev/kvm` neste sandbox; nenhuma medição 24/7, de RAM no Moto G62 ou validação de dispositivo foi realizada.
 - Fases 2–4 permanecem pendentes conforme a lista inicial. Nenhuma classe/tabela criada nesta etapa comprova a conclusão dessas frentes.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+## Entrega atual — Frente 5 (2026-11-20)
+
+**Cobertura funcional local: 18,2% (2/11 frentes: 3 e 5).** Mantém o critério de peso igual explicado acima; não representa esforço nem aceite de RAM/24 horas em aparelho. As nove outras frentes continuam pendentes. A seção anterior descreve o checkpoint da Frente 3.
+
+- Inferência ativa enumera um modelo generativo de dois estados de prontidão e duas observações de sucesso. Calcula posterior Bayesiano, F = KL(q||p) − E_q ln p(o|s) e G = risco + ambiguidade = custo pragmático − informação esperada. É planejamento de um passo para as oito atividades existentes; não é um modelo de linguagem ou horizonte arbitrário.
+- PIANO executa cinco módulos reais de percepção, memória, social, planejamento e motor, com workspace compartilhado por chamada, barreira e soma em ordem fixa. Dois workers e fila de dez tarefas limitam concorrência; sobrecarga executa no chamador. Trabalhadores recebem cópia dos oito escores nativos, sem reter o buffer JNI reutilizável.
+- CoreSelfAnchor/PSelf protege hidratação, glicose e energia críticas; Top-3 e histerese entram na seleção cognitiva. Escores completos Tsetlin informam verossimilhanças; early-exit prioriza políticas e evita chamadas LLM rotineiras confiantes. O bloqueio térmico existente permanece. WorldActor conserva sua arbitragem GOAP e revalida as pré-condições físicas antes da execução.
+- F/G, probabilidades, Top-3 e decisão de solicitar LLM são persistidos no mesmo evento canônico da mente; defaults omitidos mantêm a codificação histórica. Nenhuma mudança no teto v8, alelos, IDs, idade Double ou CURRENT_RULES_VERSION.
+- Testes locais: 94 do core e 13 do app; sete testes SQLite; 18 assinaturas JNI. host-validation e lintDebug passaram. scripts/test-native.sh passou com dez suítes ASan/UBSan e injeção HNSW. scripts/test-mind-jni.sh passou novamente após a correção de concorrência: 500 transições, live/shadow de 256 ticks, 21 avaliações, isolamento/cancelamento e idade/entradas inválidas. Nenhuma promoção RSI foi fabricada.
+- Comando completo testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon passou em 6m17s (121 tarefas). Os oito APKs passaram em apksigner verify; as 18 exportações foram conferidas nas três ABIs do universal Release. Release segue usando chave debug. CI deste novo commit será disparado pelo push; sucesso remoto não é presumido.
+- Limites ainda sem medição: latência, RAM total e carga 24/7 no Moto G62; testes instrumentados Android não executados por ausência de dispositivo.
+
 
 
 <!-- /coderabbit-ai-generated:v1 -->
