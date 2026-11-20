@@ -39,6 +39,24 @@ int main() {
         if (i%2==0) { difference+=std::abs(a[i]-a[i+1]); if (i>=2) jump=std::max(jump,std::abs(a[i]-a[i-2])); }
     }
     assert(energy>1 && difference>1); assert(jump<.05f);
+
+    // The binaural approximation responds to spatial direction and preserves deterministic output.
+    Synth fromLeft(123), fromRight(123);
+    Parameters leftParams=p, rightParams=p;
+    leftParams.left_steps=1.0f; leftParams.right_steps=0.0f;
+    rightParams.left_steps=0.0f; rightParams.right_steps=1.0f;
+    assert(fromLeft.render(b.data(),frames,sr,leftParams));
+    assert(fromRight.render(c.data(),frames,sr,rightParams));
+    assert(b!=c);
+
+    // Conversation activity ducks the subharmonic bed without muting the whole ambience.
+    Synth noConversation(321), conversation(321);
+    Parameters quiet=p, speaking=p;
+    quiet.social=0.0f; speaking.social=1.0f;
+    assert(noConversation.render(b.data(),frames,sr,quiet));
+    assert(conversation.render(c.data(),frames,sr,speaking));
+    assert(b!=c);
+
     // Muting smoothly settles to silence rather than keeping the noise bed active.
     assert(one.render(a.data(),frames,sr,{}));
     for (int i=frames*2-sr;i<frames*2;++i) assert(std::abs(a[i])<1e-10f);

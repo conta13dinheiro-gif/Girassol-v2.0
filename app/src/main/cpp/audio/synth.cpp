@@ -56,6 +56,8 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
             for (int partial=1;partial<=4;++partial)
                 undertone+=static_cast<float>(std::sin(undertones_[k]*partial)/partial)*(.002f+.003f*tension_);
         }
+        // Talking inhabitants duck the Trautonium-inspired subharmonic bed without stopping ambience.
+        undertone *= (1.0f - .65f*social_);
         // Nonlinear bow friction drives a fractional-delay digital waveguide.
         const double delay=std::clamp(sr/(110.0+20*mastery_),2.0,2046.0);
         double read=static_cast<double>(write_)-delay;
@@ -70,8 +72,39 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         write_=(write_+1)%string_.size();
         const float milestone=static_cast<float>(std::sin(note_*2)+std::sin(sub_*3))*.015f*celebration_;
         const float common=hum+music+air+community+undertone+wave*.045f+milestone;
-        out[i*2]=std::clamp((common+steps*left_)*gain_,-.35f,.35f);
-        out[i*2+1]=std::clamp((common+steps*right_)*gain_,-.35f,.35f);
+        const float dryLeft=(common+steps*left_)*gain_;
+        const float dryRight=(common+steps*right_)*gain_;
+
+        // Derive a stable azimuth from the isometric left/right activity channels.
+        // The 0.62 ms maximum delay approximates head shadowing/ITD; no heap work occurs in callback.
+        const float pan=std::clamp((right_-left_)/(right_+left_+.001f),-1.0f,1.0f);
+        const float farDelay=std::abs(pan)*.00062f*static_cast<float>(sr);
+        const std::size_t wholeDelay=static_cast<std::size_t>(farDelay);
+        const float fraction=farDelay-static_cast<float>(wholeDelay);
+        hrtfLeftDelay_[hrtfWrite_]=dryLeft;
+        hrtfRightDelay_[hrtfWrite_]=dryRight;
+        const auto delayed=[&](const std::array<float,128>& ring) noexcept {
+            const std::size_t first=(hrtfWrite_+128-wholeDelay)%128;
+            const std::size_t second=(first+127)%128;
+            return ring[first]*(1.0f-fraction)+ring[second]*fraction;
+        };
+        const float farFilter=static_cast<float>(1.0-std::exp(-tau*4200.0*dt));
+        float leftOut=dryLeft, rightOut=dryRight;
+        if(pan>0.001f) {
+            const float far=delayed(hrtfLeftDelay_);
+            hrtfLeftLowpass_+=farFilter*(far-hrtfLeftLowpass_);
+            leftOut=hrtfLeftLowpass_*(1.0f-.18f*pan);
+        } else if(pan<-.001f) {
+            const float far=delayed(hrtfRightDelay_);
+            hrtfRightLowpass_+=farFilter*(far-hrtfRightLowpass_);
+            rightOut=hrtfRightLowpass_*(1.0f-.18f*(-pan));
+        } else {
+            hrtfLeftLowpass_=dryLeft;
+            hrtfRightLowpass_=dryRight;
+        }
+        out[i*2]=std::clamp(leftOut,-.35f,.35f);
+        out[i*2+1]=std::clamp(rightOut,-.35f,.35f);
+        hrtfWrite_=(hrtfWrite_+1)%128;
     }
     return true;
 }

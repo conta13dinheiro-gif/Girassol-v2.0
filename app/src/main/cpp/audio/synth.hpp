@@ -20,6 +20,11 @@ private:
     std::array<double,3> undertones_{};
     std::array<float,2048> string_{};
     std::uint32_t write_=0;
+    // Bounded parametric HRTF approximation: interaural time/level differences and far-ear filtering.
+    // No measured HRIR dataset is bundled; these cues are intentionally conservative.
+    std::array<float,128> hrtfLeftDelay_{}, hrtfRightDelay_{};
+    std::size_t hrtfWrite_=0;
+    float hrtfLeftLowpass_=0, hrtfRightLowpass_=0;
     float weather_=0, tension_=0, bow_=0, celebration_=0, last_milestone_=0;
     float random() noexcept;
 };
