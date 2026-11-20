@@ -43,6 +43,36 @@ internal object GeaSchema {
                 })
             }
         }
+        val reflexKey = com.enhikyy.girassol.cognition.TsetlinReflexEngine.persistenceKey
+        val previousDigest = db.rawQuery(
+            "SELECT digest FROM tsetlin_automata_blobs WHERE agent_id=? ORDER BY event_id DESC LIMIT 1",
+            arrayOf(reflexKey)
+        ).use { if (it.moveToFirst()) it.getString(0) else null }
+        if (previousDigest == null || event.tick % 30L == 0L) {
+            val blob = com.enhikyy.girassol.cognition.TsetlinReflexEngine.snapshot()
+            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(blob)
+                .joinToString("") { "%02x".format(it) }
+            if (digest != previousDigest) {
+                db.insertOrThrow("tsetlin_automata_blobs", null, ContentValues().apply {
+                    put("event_id", event.eventId); put("agent_id", reflexKey); put("format_version", 1)
+                    put("automata", blob); put("digest", digest)
+                })
+            }
+        }
+    }
+
+    fun restoreTsetlin(db: SQLiteDatabase) {
+        db.rawQuery(
+            "SELECT automata,digest FROM tsetlin_automata_blobs WHERE agent_id=? ORDER BY event_id DESC LIMIT 1",
+            arrayOf(com.enhikyy.girassol.cognition.TsetlinReflexEngine.persistenceKey)
+        ).use { rows ->
+            if (!rows.moveToFirst()) return
+            val blob = rows.getBlob(0)
+            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(blob)
+                .joinToString("") { "%02x".format(it) }
+            check(digest == rows.getString(1)) { "Tsetlin snapshot digest mismatch" }
+            com.enhikyy.girassol.cognition.TsetlinReflexEngine.restore(blob)
+        }
     }
 
     fun fork(db: SQLiteDatabase, eventId: Long) {
