@@ -43,6 +43,7 @@ class EpistemicImmunityTest {
             listOf(
                 witness('b', "agent-a", first),
                 witness('b', "agent-echo", second),
+                witness('b', "agent-a", first),
                 witness('c', "agent-c", second)
             )
         )!!
