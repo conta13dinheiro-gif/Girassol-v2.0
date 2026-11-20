@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var cognition: CognitionController
     private val modelPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { cognition.install(it) } }
     private val adapterPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { cognition.installAdapter(it) } }
+    private val reviewerModelPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { cognition.installReviewer(it) } }
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,7 +38,8 @@ class MainActivity : ComponentActivity() {
             GirassolApp(ui, onToggle = { BiosphereService.command(this, if (ui.running) BiosphereService.ACTION_PAUSE else "START") }, onSpeed = { BiosphereService.command(this, BiosphereService.ACTION_SPEED) },
                 sound = sound, onSound = audio::setEnabled, onVolume = audio::setVolume, cognition = neural,
                 onImportModel = { modelPicker.launch(arrayOf("*/*")) }, onRemoveModel = cognition::remove,
-                onInfer = cognition::evaluate, onCancelInference = cognition::cancel, onAutomaticInference = cognition::setAutomatic, onImportAdapter={ adapterPicker.launch(arrayOf("*/*")) },onRemoveAdapter=cognition::removeAdapter)
+                onInfer = cognition::evaluate, onCancelInference = cognition::cancel, onAutomaticInference = cognition::setAutomatic, onImportAdapter={ adapterPicker.launch(arrayOf("*/*")) },onRemoveAdapter=cognition::removeAdapter,
+                onImportReviewerModel={ reviewerModelPicker.launch(arrayOf("*/*")) },onRemoveReviewerModel=cognition::removeReviewer)
         }
     }
     override fun onStart() {

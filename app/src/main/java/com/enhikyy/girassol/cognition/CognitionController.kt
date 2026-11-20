@@ -23,7 +23,7 @@ internal object CognitionWork {
     val requests = AtomicLong()
 }
 data class CognitionStatus(val model: String? = null, val busy: Boolean = false, val automatic: Boolean = false,
-    val message: String = "Importe um modelo GGUF de instruções para habilitar a cognição local.",val adapter: String?=null)
+    val message: String = "Importe um modelo GGUF de instruções para habilitar a cognição local.",val adapter: String?=null,val reviewerModel: String?=null)
 
 /** Foreground-only inference; the service remains the sole world writer. */
 class CognitionController(context: Context, private val lifecycle: Lifecycle) : DefaultLifecycleObserver {
@@ -31,6 +31,8 @@ class CognitionController(context: Context, private val lifecycle: Lifecycle) : 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val files = ModelFiles(app)
     private val adapters=ModelFiles(app,"adapters")
+    private val reviewerFiles=ModelFiles(app,"review-models")
+    private var reviewerModel: LocalModel?=null
     private var adapter: LocalModel?=null
     private val mutable = MutableStateFlow(CognitionStatus(busy = true))
     val status = mutable.asStateFlow()
@@ -44,7 +46,11 @@ class CognitionController(context: Context, private val lifecycle: Lifecycle) : 
         lifecycle.addObserver(this)
         job = scope.launch {
             try {
-                model = withContext(Dispatchers.IO) { CognitionWork.lock.withLock { adapter=adapters.current(); files.current() } }
+                model = withContext(Dispatchers.IO) { CognitionWork.lock.withLock {
+                    adapter=adapters.current()
+                    reviewerModel=reviewerFiles.current()
+                    files.current()
+                } }
                 mutable.value = mutable.value.copy(model = describe(), message = if (model == null) mutable.value.message else "Modelo disponível. Execute uma proposta ou ative o modo automático.")
             } catch (error: Exception) { if (error is CancellationException) throw error; report(error) }
             finally { finishOperation() }
@@ -53,14 +59,22 @@ class CognitionController(context: Context, private val lifecycle: Lifecycle) : 
     // Reconcile even if cancellation happens after the atomic install but before IO returns.
     private suspend fun finishOperation() = withContext(NonCancellable) {
         try {
-            model = withContext(Dispatchers.IO) { CognitionWork.lock.withLock { adapter=adapters.current(); files.current() } }
-            mutable.value = mutable.value.copy(model = describe(), busy = false,adapter=adapter?.let { "LoRA · ${it.bytes/1048576} MB · ${it.hash.take(12)}" })
+            model = withContext(Dispatchers.IO) { CognitionWork.lock.withLock {
+                adapter=adapters.current()
+                reviewerModel=reviewerFiles.current()
+                files.current()
+            } }
+            mutable.value = mutable.value.copy(model=describe(),busy=false,
+                adapter=adapter?.let { "LoRA · ${it.bytes/1048576} MB · ${it.hash.take(12)}" },
+                reviewerModel=describeReviewer())
         } catch (error: Exception) {
             model = null
-            mutable.value = mutable.value.copy(model = null, busy = false, message = error.message ?: "Falha ao ler modelo instalado")
+            reviewerModel = null
+            mutable.value = mutable.value.copy(model = null, reviewerModel=null, busy = false, message = error.message ?: "Falha ao ler modelo instalado")
         }
     }
     private fun describe() = model?.let { "GGUF · ${it.bytes / 1048576} MB · ${it.hash.take(12)}" }
+    private fun describeReviewer() = reviewerModel?.let { "GGUF revisor · ${it.bytes/1048576} MB · ${it.hash.take(12)}" }
     private fun report(error: Exception) { mutable.value = mutable.value.copy(message = error.message ?: "Falha na cognição local") }
     fun install(uri: Uri) {
         if (mutable.value.busy) return
@@ -72,6 +86,37 @@ class CognitionController(context: Context, private val lifecycle: Lifecycle) : 
                 mutable.value = mutable.value.copy(model = describe(), message = "Modelo importado. A compatibilidade será conferida ao executar.")
             } catch (error: Exception) { if (error is CancellationException) throw error; report(error) }
             finally { finishOperation() }
+        }
+    }
+    fun installReviewer(uri: Uri) {
+        if(mutable.value.busy) return
+        setAutomatic(false)
+        mutable.value=mutable.value.copy(busy=true,message="Importando GGUF do verificador…")
+        job=scope.launch {
+            try {
+                reviewerModel=withContext(Dispatchers.IO) {
+                    CognitionWork.lock.withLock { reviewerFiles.install(uri) }
+                }
+                mutable.value=mutable.value.copy(reviewerModel=describeReviewer(),
+                    message="GGUF secundário instalado; revisões alternam os modelos sequencialmente.")
+            } catch(error: Exception) {
+                if(error is CancellationException) throw error
+                report(error)
+            } finally { finishOperation() }
+        }
+    }
+    fun removeReviewer() {
+        if(mutable.value.busy) return
+        setAutomatic(false)
+        mutable.value=mutable.value.copy(busy=true)
+        job=scope.launch {
+            try {
+                withContext(Dispatchers.IO) { CognitionWork.lock.withLock { reviewerFiles.remove() } }
+                reviewerModel=null
+            } catch(error: Exception) {
+                if(error is CancellationException) throw error
+                report(error)
+            } finally { finishOperation() }
         }
     }
     fun remove() {

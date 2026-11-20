@@ -66,7 +66,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 @Composable fun GirassolApp(ui: BiosphereUi, onToggle: () -> Unit, onSpeed: () -> Unit,
     sound: AudioStatus, onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
-    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit) {
+    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit,
+    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -227,7 +228,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                                     when(historySection) {
                                         0 -> Timeline(ui.world ?: world, Modifier.weight(1f)) { historical = it; selectedId = null; tab = 0 }
                                         1 -> Culture(world, Modifier.weight(1f))
-                                        else -> SystemPage(ui, Modifier.weight(1f), sound, onSound, onVolume, cognition, onImportModel, onRemoveModel, onInfer, onCancelInference, onAutomaticInference, onImportAdapter, onRemoveAdapter)
+                                        else -> SystemPage(ui, Modifier.weight(1f), sound, onSound, onVolume, cognition, onImportModel, onRemoveModel, onInfer, onCancelInference, onAutomaticInference, onImportAdapter, onRemoveAdapter, onImportReviewerModel, onRemoveReviewerModel)
                                     }
                                 }
                             }
@@ -490,7 +491,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 @Composable private fun SystemPage(ui: BiosphereUi, modifier: Modifier, sound: AudioStatus,
     onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
-    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit) {
+    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit,
+    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit) {
     val w=ui.world!!; val t=w.telemetry()
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
@@ -504,6 +506,16 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             SectionTitle("Cognição local · GGUF")
             Text(cognition.model ?: "Nenhum modelo instalado", color=Gold, fontSize=12.sp)
             Text(cognition.message, color=Muted, fontSize=11.sp)
+            Text(cognition.reviewerModel ?: "Verificador: usando o GGUF principal sequencialmente",
+                color=Solar.Cognitive, fontSize=11.sp)
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(enabled=!cognition.busy && cognition.model!=null, onClick=onImportReviewerModel) {
+                    Text("Importar GGUF revisor", fontSize=11.sp)
+                }
+                if(cognition.reviewerModel!=null) TextButton(enabled=!cognition.busy, onClick=onRemoveReviewerModel) {
+                    Text("Remover revisor", fontSize=11.sp)
+                }
+            }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled=!cognition.busy, onClick=onImportModel) { Text("Importar GGUF", fontSize=11.sp) }
                 if (cognition.model != null) TextButton(enabled=!cognition.busy, onClick=onRemoveModel) { Text("Remover", fontSize=11.sp) }
