@@ -7,6 +7,28 @@
 #include <stdexcept>
 
 namespace girassol::physics {
+
+Point resolveCircleAABB(Point center,double bodyRadius,const Aabb& box) noexcept {
+    if(!std::isfinite(center.x)||!std::isfinite(center.z)||!std::isfinite(bodyRadius)||
+       !std::isfinite(box.minX)||!std::isfinite(box.minZ)||!std::isfinite(box.maxX)||
+       !std::isfinite(box.maxZ)||bodyRadius<=0.0||box.minX>box.maxX||box.minZ>box.maxZ) return center;
+    const double cx=std::clamp(center.x,box.minX,box.maxX),cz=std::clamp(center.z,box.minZ,box.maxZ);
+    const double dx=center.x-cx,dz=center.z-cz,distance=std::hypot(dx,dz);
+    if(distance>=bodyRadius-1e-6) return center;
+    if(distance>1e-6) {
+        center.x+=dx/distance*(bodyRadius+1e-6-distance);
+        center.z+=dz/distance*(bodyRadius+1e-6-distance);
+    } else {
+        const std::array<double,4> side{center.x-box.minX,box.maxX-center.x,center.z-box.minZ,box.maxZ-center.z};
+        const auto nearest=std::min_element(side.begin(),side.end())-side.begin();
+        if(nearest==0) center.x=box.minX-bodyRadius-1e-6;
+        else if(nearest==1) center.x=box.maxX+bodyRadius+1e-6;
+        else if(nearest==2) center.z=box.minZ-bodyRadius-1e-6;
+        else center.z=box.maxZ+bodyRadius+1e-6;
+    }
+    return center;
+}
+
 namespace {
 constexpr double baseCell=.10,eps=1e-6;
 struct Box { double x,z,X,Z; };
@@ -17,6 +39,71 @@ bool overlap(double x,double z,const Box& b,double r=radius) {
 }
 bool inside(const Point& p,const RoomSpec& r) {
     return std::abs(p.x-r.x)<=r.width*.5-radius && std::abs(p.z-r.z)<=r.depth*.5-radius;
+}
+struct V2 { double x=0,z=0; };
+double dot(V2 a,V2 b) noexcept { return a.x*b.x+a.z*b.z; }
+double det(V2 a,V2 b) noexcept { return a.x*b.z-a.z*b.x; }
+double sq(V2 a) noexcept { return dot(a,a); }
+V2 add(V2 a,V2 b) noexcept { return {a.x+b.x,a.z+b.z}; }
+V2 sub(V2 a,V2 b) noexcept { return {a.x-b.x,a.z-b.z}; }
+V2 mul(V2 a,double k) noexcept { return {a.x*k,a.z*k}; }
+V2 normalize(V2 a) noexcept { const double n=std::hypot(a.x,a.z);return n>eps?mul(a,1.0/n):V2{}; }
+struct OrcaLine { V2 point; V2 direction; };
+
+bool linearProgram1(const std::vector<OrcaLine>& lines,std::size_t index,double maxSpeed,
+                    V2 optimum,bool directionOpt,V2& result) noexcept {
+    const auto& line=lines[index];
+    const double projection=dot(line.point,line.direction);
+    const double discriminant=projection*projection+maxSpeed*maxSpeed-sq(line.point);
+    if(discriminant < -eps) return false;
+    const double root=std::sqrt(std::max(0.0,discriminant));
+    double left=-projection-root,right=-projection+root;
+    for(std::size_t j=0;j<index;++j) {
+        const double denominator=det(line.direction,lines[j].direction);
+        const double numerator=det(lines[j].direction,sub(line.point,lines[j].point));
+        if(std::abs(denominator)<=eps) { if(numerator<0.0) return false; else continue; }
+        const double t=numerator/denominator;
+        if(denominator>=0.0) right=std::min(right,t); else left=std::max(left,t);
+        if(left>right) return false;
+    }
+    const double t=directionOpt
+        ? (dot(optimum,line.direction)>0.0?right:left)
+        : std::clamp(dot(line.direction,sub(optimum,line.point)),left,right);
+    result=add(line.point,mul(line.direction,t));
+    return true;
+}
+std::size_t linearProgram2(const std::vector<OrcaLine>& lines,double maxSpeed,V2 optimum,
+                           bool directionOpt,V2& result) noexcept {
+    result=directionOpt?mul(normalize(optimum),maxSpeed)
+        :(sq(optimum)>maxSpeed*maxSpeed?mul(normalize(optimum),maxSpeed):optimum);
+    for(std::size_t i=0;i<lines.size();++i) if(det(lines[i].direction,sub(lines[i].point,result))>eps) {
+        const V2 previous=result;
+        if(!linearProgram1(lines,i,maxSpeed,optimum,directionOpt,result)) { result=previous;return i; }
+    }
+    return lines.size();
+}
+void linearProgram3(const std::vector<OrcaLine>& lines,std::size_t begin,double maxSpeed,V2& result) {
+    double distance=0.0;
+    for(std::size_t i=begin;i<lines.size();++i) {
+        const double violation=det(lines[i].direction,sub(lines[i].point,result));
+        if(violation<=distance) continue;
+        std::vector<OrcaLine> projected;projected.reserve(i);
+        for(std::size_t j=0;j<i;++j) {
+            OrcaLine line;
+            const double denominator=det(lines[i].direction,lines[j].direction);
+            if(std::abs(denominator)<=eps) {
+                if(dot(lines[i].direction,lines[j].direction)>0.0) continue;
+                line.point=mul(add(lines[i].point,lines[j].point),.5);
+            } else line.point=add(lines[i].point,mul(lines[i].direction,
+                det(lines[j].direction,sub(lines[i].point,lines[j].point))/denominator));
+            line.direction=normalize(sub(lines[j].direction,lines[i].direction));
+            projected.push_back(line);
+        }
+        const V2 previous=result;
+        const V2 optimum{-lines[i].direction.z,lines[i].direction.x};
+        if(linearProgram2(projected,maxSpeed,optimum,true,result)<projected.size()) result=previous;
+        distance=det(lines[i].direction,sub(lines[i].point,result));
+    }
 }
 std::uint64_t mix(std::uint64_t x) { x^=x>>30;x*=0xbf58476d1ce4e5b9ULL;x^=x>>27;x*=0x94d049bb133111ebULL;return x^(x>>31); }
 }
@@ -56,22 +143,17 @@ struct Scene::Data {
         return q;
     }
     Point push(Point p) const {
-        // Circle-vs-AABB minimum translation, repeated because corners can share obstacles.
+        // Repeated circle-vs-AABB projection resolves corners shared by several boxes.
         for(int iteration=0;iteration<12;++iteration) {
             const int i=at(p.x,p.z);if(i<0) return repair(p);
             bool changed=false;
             for(int k:obstacles[static_cast<std::size_t>(i)]) {
-                const auto& b=walls[static_cast<std::size_t>(k)];if(!overlap(p.x,p.z,b)) continue;
-                double dx=p.x-std::clamp(p.x,b.x,b.X),dz=p.z-std::clamp(p.z,b.z,b.Z);
-                const double d=std::hypot(dx,dz);
-                if(d>eps) { p.x+=dx/d*(radius+eps-d);p.z+=dz/d*(radius+eps-d); }
-                else {
-                    const std::array<double,4> distances{p.x-b.x,b.X-p.x,p.z-b.z,b.Z-p.z};
-                    const auto side=std::min_element(distances.begin(),distances.end())-distances.begin();
-                    if(side==0) p.x=b.x-radius-eps;else if(side==1) p.x=b.X+radius+eps;
-                    else if(side==2) p.z=b.z-radius-eps;else p.z=b.Z+radius+eps;
+                const auto& b=walls[static_cast<std::size_t>(k)];
+                if(!overlap(p.x,p.z,b)) continue;
+                const Point resolved=resolveCircleAABB(p,radius,{b.x,b.z,b.X,b.Z});
+                if(std::hypot(resolved.x-p.x,resolved.z-p.z)>eps) {
+                    p.x=resolved.x;p.z=resolved.z;changed=true;
                 }
-                changed=true;
             }
             if(!changed) return p;
         }
@@ -109,6 +191,65 @@ struct Scene::Data {
         std::reverse(result.begin(),result.end());return result;
     }
 };
+std::vector<Velocity> stepRvo2OrcaVelocities(const std::vector<OrcaAgent>& agents,double dt,double timeHorizon) {
+    if(!std::isfinite(dt)||!std::isfinite(timeHorizon)||dt<=0.0||timeHorizon<=0.0)
+        throw std::invalid_argument("Invalid ORCA time parameters");
+    if(agents.size()>4096) throw std::invalid_argument("ORCA agent count exceeds limit");
+    std::vector<Velocity> output(agents.size());
+    for(std::size_t i=0;i<agents.size();++i) {
+        const auto& self=agents[i];
+        if(!std::isfinite(self.position.x)||!std::isfinite(self.position.z)||
+           !std::isfinite(self.velocity.x)||!std::isfinite(self.velocity.z)||
+           !std::isfinite(self.preferredVelocity.x)||!std::isfinite(self.preferredVelocity.z)||
+           !std::isfinite(self.radius)||self.radius<=0.0)
+            throw std::invalid_argument("Non-finite ORCA agent");
+        const V2 pos{self.position.x,self.position.z},velocity{self.velocity.x,self.velocity.z};
+        const V2 preferred{self.preferredVelocity.x,self.preferredVelocity.z};
+        std::vector<OrcaLine> lines;lines.reserve(agents.size()?agents.size()-1:0);
+        for(std::size_t j=0;j<agents.size();++j) if(j!=i) {
+            const auto& other=agents[j];
+            const V2 relativePosition{other.position.x-self.position.x,other.position.z-self.position.z};
+            const V2 relativeVelocity{velocity.x-other.velocity.x,velocity.z-other.velocity.z};
+            const double distanceSq=sq(relativePosition),combinedRadius=self.radius+other.radius;
+            const double combinedRadiusSq=combinedRadius*combinedRadius;
+            V2 direction{},u{};
+            if(distanceSq>combinedRadiusSq) {
+                const V2 w=sub(relativeVelocity,mul(relativePosition,1.0/timeHorizon));
+                const double wSq=sq(w),projection=dot(w,relativePosition);
+                if(projection<0.0&&projection*projection>combinedRadiusSq*wSq) {
+                    const double length=std::sqrt(std::max(wSq,eps));
+                    const V2 unitW=mul(w,1.0/length);
+                    direction={unitW.z,-unitW.x};
+                    u=mul(unitW,combinedRadius/timeHorizon-length);
+                } else {
+                    const double leg=std::sqrt(std::max(0.0,distanceSq-combinedRadiusSq));
+                    if(det(relativePosition,w)>0.0)
+                        direction={(relativePosition.x*leg-relativePosition.z*combinedRadius)/distanceSq,
+                                   (relativePosition.x*combinedRadius+relativePosition.z*leg)/distanceSq};
+                    else
+                        direction={-(relativePosition.x*leg+relativePosition.z*combinedRadius)/distanceSq,
+                                   -(-relativePosition.x*combinedRadius+relativePosition.z*leg)/distanceSq};
+                    u=sub(mul(direction,dot(relativeVelocity,direction)),relativeVelocity);
+                }
+            } else {
+                const V2 w=sub(relativeVelocity,mul(relativePosition,1.0/dt));
+                const double length=std::sqrt(std::max(sq(w),eps));
+                const V2 unitW=mul(w,1.0/length);
+                direction={unitW.z,-unitW.x};
+                u=mul(unitW,combinedRadius/dt-length);
+            }
+            lines.push_back({add(velocity,mul(u,.5)),direction});
+        }
+        V2 result{};
+        const std::size_t failed=linearProgram2(lines,speed,preferred,false,result);
+        if(failed<lines.size()) linearProgram3(lines,failed,speed,result);
+        const double magnitude=std::hypot(result.x,result.z);
+        if(magnitude>speed) result=mul(result,speed/magnitude);
+        output[i]={result.x,result.z};
+    }
+    return output;
+}
+
 Scene::Scene(const std::vector<RoomSpec>& rooms,std::uint64_t seed) {
     auto d=std::make_shared<Data>();d->rooms=rooms;
     Mesh mesh;if(!city_mesh(rooms.data(),rooms.size()*sizeof(RoomSpec),rooms.size(),seed,mesh)) throw std::invalid_argument("Invalid scene");
@@ -187,27 +328,34 @@ std::vector<Motion> Scene::step(const std::vector<Body>& bodies,std::uint64_t se
         paths.push_back(d.path(m.body.p,goal,mix(seed^mix(tick/120)^mix(i))));out.push_back(std::move(m));
     }
     std::vector<std::size_t> cursor(bodies.size(),0);
+    std::vector<Point> previous(out.size());
+    for(std::size_t i=0;i<out.size();++i) previous[i]=out[i].body.p;
     for(int frame=0;frame<substeps;++frame) {
-        for(std::size_t offset=0;offset<out.size();++offset) {
-            const std::size_t i=(offset+static_cast<std::size_t>(tick%out.size()))%out.size();auto& m=out[i];auto& p=m.body.p;
-            while(cursor[i]<paths[i].size() && std::hypot(paths[i][cursor[i]].x-p.x,paths[i][cursor[i]].z-p.z)<.025) ++cursor[i];
-            const auto before=p;auto next=p;
+        std::vector<OrcaAgent> agents;agents.reserve(out.size());
+        for(std::size_t i=0;i<out.size();++i) {
+            const auto& p=out[i].body.p;
+            while(cursor[i]<paths[i].size()&&std::hypot(paths[i][cursor[i]].x-p.x,paths[i][cursor[i]].z-p.z)<.025) ++cursor[i];
+            Velocity preferred{};
             if(cursor[i]<paths[i].size()) {
-                const auto goal=paths[i][cursor[i]];double dx=goal.x-p.x,dz=goal.z-p.z;
-                const double distance=std::hypot(dx,dz);if(distance>eps) { const double step=std::min(speed*fixed_dt,distance);next.x+=dx/distance*step;next.z+=dz/distance*step; }
-                // Deterministic reciprocal separation steering. Every candidate is swept against solids below.
-                for(std::size_t j=0;j<out.size();++j) if(j!=i) {
-                    dx=p.x-out[j].body.p.x;dz=p.z-out[j].body.p.z;const double dist=std::hypot(dx,dz);
-                    if(dist>eps && dist<radius*2.5) { const double strength=(radius*2.5-dist)*.08;next.x+=dx/dist*strength;next.z+=dz/dist*strength; }
-                }
-                const double delta=std::hypot(next.x-p.x,next.z-p.z);
-                if(delta>speed*fixed_dt) { next.x=p.x+(next.x-p.x)*speed*fixed_dt/delta;next.z=p.z+(next.z-p.z)*speed*fixed_dt/delta; }
-                if(!d.segment(p,next)) { next=p; } // Never tunnel through a thin wall.
-                next=d.push(next);
-                bool occupied=false;
-                for(std::size_t j=0;j<out.size();++j) if(j!=i && std::hypot(next.x-out[j].body.p.x,next.z-out[j].body.p.z)<radius*2-eps) { occupied=true;break; }
-                if(!occupied) { p.x=next.x;p.z=next.z; }
+                const auto& goal=paths[i][cursor[i]];
+                const double dx=goal.x-p.x,dz=goal.z-p.z,distance=std::hypot(dx,dz);
+                if(distance>eps) preferred={dx/distance*speed,dz/distance*speed};
             }
+            const Velocity current{(p.x-previous[i].x)/fixed_dt,(p.z-previous[i].z)/fixed_dt};
+            agents.push_back({p,current,preferred,radius});
+        }
+        // Every reciprocal constraint is computed from one immutable substep snapshot.
+        const auto velocities=stepRvo2OrcaVelocities(agents,fixed_dt,2.0);
+        for(std::size_t offset=0;offset<out.size();++offset) {
+            const std::size_t i=(offset+static_cast<std::size_t>(tick%out.size()))%out.size();
+            auto& m=out[i];auto& p=m.body.p;const auto before=p;auto next=p;previous[i]=before;
+            next.x+=velocities[i].x*fixed_dt;next.z+=velocities[i].z*fixed_dt;
+            if(!d.segment(p,next)) next=p;
+            next=d.push(next);
+            bool occupied=false;
+            for(std::size_t j=0;j<out.size();++j) if(j!=i&&
+                std::hypot(next.x-out[j].body.p.x,next.z-out[j].body.p.z)<radius*2-eps) { occupied=true;break; }
+            if(!occupied) { p.x=next.x;p.z=next.z; }
             m.ground=surface(p.x,p.z);m.body.vy-=9.81*fixed_dt;p.y+=m.body.vy*fixed_dt;
             if(p.y<=m.ground) { p.y=m.ground;m.body.vy=0; }
             const double traveled=std::hypot(p.x-before.x,p.z-before.z);m.distance+=traveled;
