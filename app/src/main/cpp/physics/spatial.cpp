@@ -189,7 +189,7 @@ std::vector<Motion> Scene::step(const std::vector<Body>& bodies,std::uint64_t se
         paths.push_back(d.path(m.body.p,goal,mix(seed^mix(tick/120)^mix(i))));out.push_back(std::move(m));
     }
     std::vector<std::size_t> cursor(bodies.size(),0);
-    std::vector<orca::Vec2> velocities(out.size(),{});
+    std::vector<orca::Vec2> velocities(out.size(),orca::Vec2{});
     constexpr std::size_t maxOrcaNeighbors=16;
     constexpr double orcaNeighborRange=speed*2.0+radius*4.0;
     for(int frame=0;frame<substeps;++frame) {
