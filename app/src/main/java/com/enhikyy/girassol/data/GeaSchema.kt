@@ -175,7 +175,8 @@ internal object GeaSchema {
                 harmony = harmony,
                 energyEfficiency = citizen.needs.energy,
                 brierScore = brier,
-                semanticEntropy = semanticEntropy
+                semanticEntropy = semanticEntropy,
+                evidenceVersion = 1
             )
             val genome = listOf(
                 citizen.genome.curiosity.maternal,
