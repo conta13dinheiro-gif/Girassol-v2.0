@@ -8,7 +8,7 @@ import android.opengl.GLES30
 import android.os.Build
 import java.io.File
 
-/** Read-only hardware inventory; library presence is not a driver capability test. */
+/** Read-only hardware inventory; accelerator flags require successful physical-device enumeration. */
 data class DeviceHardwareReport(
     val manufacturer: String,
     val model: String,
@@ -23,8 +23,8 @@ data class DeviceHardwareReport(
     val openClLibraryFileFound: Boolean,
     val vulkanLibraryFileFound: Boolean,
     val nativeCpuFeatures: List<String> = emptyList(),
-    val openClLoaderAvailable: Boolean = false,
-    val vulkanLoaderAvailable: Boolean = false
+    val openClDeviceAvailable: Boolean = false,
+    val vulkanPhysicalDeviceAvailable: Boolean = false
 )
 
 object HardwareAutoTuner {
@@ -88,8 +88,8 @@ object HardwareAutoTuner {
                 "/vendor/lib/libvulkan.so"
             ),
             nativeCpuFeatures = nativeFeatures,
-            openClLoaderAvailable = (featureBits and (1L shl 4)) != 0L,
-            vulkanLoaderAvailable = (featureBits and (1L shl 5)) != 0L
+            openClDeviceAvailable = (featureBits and (1L shl 4)) != 0L,
+            vulkanPhysicalDeviceAvailable = (featureBits and (1L shl 5)) != 0L
         )
     }
 
