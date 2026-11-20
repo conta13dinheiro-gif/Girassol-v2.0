@@ -95,6 +95,11 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 }
             }
             val cognition=event.cognition
+            if(cognition?.biologyEnabled==true) {
+                val source=previous ?: load()?.state
+                if(source!=null) check(cognition.applicable(source)) { "Biology acquisition lacks canonical source evidence" }
+                else check(event.tick==1L && cognition.minds.values.all { it.symbioticModules.isEmpty() })
+            }
             cognition?.lesson?.let { lesson ->
                 val opinion=cognition.minds[lesson.researcher]?.memory?.opinions?.singleOrNull { it.claim==lesson.rowHash && it.root==lesson.acquisitionHash }
                 if(cognition.immunityEnabled) check(opinion!=null) { "Missing immunity admission" }
@@ -177,6 +182,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             GeaSchema.audit(db)
             val checkpoint=load()
             val audit=JournalAudit()
+            val symbiosis=SymbioticLedgerAudit()
             var opinions=emptyMap<String,List<ProvenancedOpinion>>()
             var learning=emptyMap<String,List<SkillLearningTrace>>()
             var skills=emptyMap<String,List<VoyagerSkill>>()
@@ -184,6 +190,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 while (rows.moveToNext()) {
                     val event=Canonical.event(rows.getString(2))
                     audit.accept(rows.getLong(0),rows.getLong(1),event)
+                    symbiosis.accept(event)
                     GeaSchema.auditEconomyEvent(db,event)
                     GeaSchema.auditInstitutionsEvent(db,event)
                     GeaSchema.auditBeliefsEvent(db,event,opinions)

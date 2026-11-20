@@ -27,6 +27,13 @@ import com.enhikyy.girassol.ui.theme.Solar
         Text("Nichos comportamentais: ${view.occupied}/512 · ${"%.2f".format(java.util.Locale.ROOT,view.coverage*100)}%",color=Solar.Biosphere,fontSize=12.sp)
         Text("${view.samples} resultados físicos · qualidade média ${"%.3f".format(java.util.Locale.ROOT,view.meanFitness())}",color=Solar.Muted,fontSize=11.sp)
     }
+    world.biology?.let { biology ->
+        val semantics=biology.semantics
+        Spacer(Modifier.height(10.dp))
+        Text("Diversidade de conceitos: ${"%.3f".format(java.util.Locale.ROOT,semantics.entropy)} · entre habitantes ${"%.3f".format(java.util.Locale.ROOT,semantics.betweenAgents)}",color=Solar.Biosphere,fontSize=12.sp)
+        Text("${semantics.observed} habitantes observados · ${biology.selections.count { it.admitted }}/${biology.selections.size} admissões reprodutivas neste ciclo",color=Solar.Muted,fontSize=11.sp)
+        Text("${world.minds.values.sumOf { it.symbioticModules.size }} módulos aprendidos compartilhados entre linhagens",color=Solar.Muted,fontSize=11.sp)
+    }
     world.evolution?.let { policy->
         Spacer(Modifier.height(12.dp)); Text("Última política promovida",color=Solar.Biosphere,fontSize=12.sp)
         Text("${policy.evaluations} avaliações · duas janelas de ${policy.horizon} ciclos · origem ${policy.sourceTick}",color=Solar.Muted,fontSize=11.sp)

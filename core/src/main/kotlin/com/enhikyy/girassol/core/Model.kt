@@ -96,7 +96,8 @@ class DeterministicRng(private var state: Long) {
     @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val economy: EconomyState? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val society: SocietyState? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val qualityDiversity: QualityDiversityArchive? = null)
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val qualityDiversity: QualityDiversityArchive? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val biology: BiologicalState? = null)
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CanonicalEvent(val version: Int = 1, val eventId: Long, val tick: Long,
     val actions: List<ActionRecord>, val stateHash: String, val previousHash: String, val hash: String = "",

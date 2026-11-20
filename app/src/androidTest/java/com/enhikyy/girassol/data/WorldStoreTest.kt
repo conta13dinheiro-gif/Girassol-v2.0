@@ -69,18 +69,30 @@ class WorldStoreTest {
             var actions=emptyList<ActionRecord>()
             WorldStore(context,name).use { store ->
                 repeat(24) {
+                    val before=actor.state
                     val frame=com.enhikyy.girassol.cognition.NativeMind.evaluate(actor.state,actions,List(8) { 0.0 },ThermalTier.NONE_OR_LIGHT)
                     val physics=com.enhikyy.girassol.physics.NativeSpatial.advance(actor.state,actor.intentions(cognition=frame))
                     val transition=actor.step(cognition=frame,spatial=physics)
-                    store.commit(transition); actions=transition.event.actions
+                    if(before.tick==0L) {
+                        assertNotNull(transition.state.biology)
+                        store.writableDatabase.execSQL("CREATE TRIGGER fail_biology BEFORE INSERT ON checkpoint BEGIN SELECT RAISE(ABORT,'injected'); END")
+                        try { store.commit(transition,before);fail("Biology checkpoint failure must roll back event") } catch(_: android.database.sqlite.SQLiteException) { }
+                        assertNull(store.load())
+                        store.readableDatabase.rawQuery("SELECT count(*) FROM events",null).use { rows -> assertTrue(rows.moveToFirst());assertEquals(0,rows.getInt(0)) }
+                        store.writableDatabase.execSQL("DROP TRIGGER fail_biology")
+                    }
+                    store.commit(transition,before); actions=transition.event.actions
                 }
                 assertEquals(24L,store.audit())
+                assertNotNull(actor.state.biology)
+                assertEquals(actor.state.biology,store.load()!!.state.biology)
                 store.readableDatabase.rawQuery("SELECT count(*) FROM double_entry_ledger",null).use { rows ->
                     assertTrue(rows.moveToFirst());assertTrue(rows.getInt(0)>0)
                 }
             }
             WorldStore(context,name).use { store ->
                 assertEquals(actor.checkpoint(),store.load());assertEquals(24L,store.audit())
+                assertEquals(actor.state.biology,store.load()!!.state.biology)
                 store.writableDatabase.execSQL("DELETE FROM double_entry_ledger WHERE rowid=(SELECT rowid FROM double_entry_ledger LIMIT 1)")
                 try { store.audit();fail("Missing projection must be detected") } catch (_: IllegalStateException) { }
                 assertEquals(actor.checkpoint(),store.load())

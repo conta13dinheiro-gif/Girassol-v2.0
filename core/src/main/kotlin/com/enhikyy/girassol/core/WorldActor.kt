@@ -52,6 +52,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val economyEnabled=rulesVersion>=8 && cognitiveInput?.economyEnabled==true
         val societyEnabled=rulesVersion>=8 && cognitiveInput?.societyEnabled==true
         require(state.society==null || societyEnabled) { "Active society requires its canonical input" }
+        val biology=if(rulesVersion>=8 && cognitiveInput?.biologyEnabled==true) PedagogyAndDiploidEvolutionEngine(state,cognitiveInput.minds) else null
+        require(state.biology==null || biology!=null) { "Active biology requires canonical cognitive input" }
         val society=if(societyEnabled) SocietyAdicoCliodynamicsEngine(state) else null
         val socialNeighbors=if(societyEnabled) state.ties.groupBy { it.from } else emptyMap()
         val contacts=mutableListOf<SocialContact>()
@@ -150,7 +152,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                             dialogues += Dialogue(tick, a.name, partner.name, "${w.native} ${topicWord.native}.", gloss)
                             val ti = ties.indexOfFirst { it.from == a.id && it.to == partner.id }
                             if (ti >= 0) ties[ti] = ties[ti].copy(affinity = (ties[ti].affinity + .015).coerceAtMost(1.0))
-                            if (rulesVersion >= 6) createDescendant(state.seed,tick,a,partner,agents,balances,ties,words,genealogy)
+                            if (rulesVersion >= 6) createDescendant(state.seed,tick,a,partner,agents,balances,ties,words,genealogy,biology)
                         }
                     }
                     Activity.STUDY -> { needs = needs.copy(curiosity = (needs.curiosity + .15).coerceAtMost(1.0)); a = a.copy(skill = a.skill.practice(tick)) }
@@ -187,7 +189,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                     val reward = (needs.energy - before.energy) + (needs.hydration - before.hydration) + (needs.glucose - before.glucose) + (needs.social - before.social) + (needs.curiosity - before.curiosity)
                     val memory = Memory(tick, eventId + 1, action, reward, action == Activity.SLEEP)
                     a = a.copy(needs = needs, memories = (a.memories + memory).takeLast(32), acting = true)
-                    counts[action.name] = (counts[action.name] ?: 0) + 1
+                    counts[action.name] = if(biology!=null) ((counts[action.name] ?: 0).toLong()+1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt() else (counts[action.name] ?: 0)+1
                 }
                 economy?.finish(a,action,success)
                 records += ActionRecord(a.id, action, if (success) "OK" else "PRECONDITION_FAILED")
@@ -248,6 +250,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
         var next = base.copy(qualityDiversity=cognitiveInput?.qualityDiversity ?: base.qualityDiversity,economy=economy?.snapshot() ?: base.economy,socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        if(biology!=null) next=next.copy(biology=biology.snapshot(next))
         if(society!=null) {
             val settlement=society.settle(base,next,records,contacts,cognitiveInput?.lesson)
             next=next.copy(society=settlement.state,ties=settlement.ties)
@@ -290,7 +293,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         balances: MutableMap<String, Int>,
         ties: MutableList<SocialTie>,
         words: MutableList<Word>,
-        genealogy: MutableList<GenealogyRecord>
+        genealogy: MutableList<GenealogyRecord>,
+        biology: PedagogyAndDiploidEvolutionEngine?
     ) {
         if (rulesVersion >= 8 && agents.size >= MAX_LIVE_POPULATION) return
         if (current.id >= partner.id) return
@@ -303,6 +307,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val childId = if (rulesVersion >= 8) "child_" + Canonical.hash("$seed:$tick:${current.id}:${partner.id}")
             else "child_${tick}_${current.id}_${partner.id}"
         if (agents.any { it.id == childId }) return
+        if(biology!=null && !biology.admit(current,partner,tick)) return
         val rng = Canonical.stream(seed, childId, tick, "inheritance")
 
         fun inherit(one: Locus, two: Locus): Locus {
@@ -433,6 +438,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
+            if(s.biology?.valid(s)==false) add("Biologia inválida")
             if(s.qualityDiversity?.valid(s.tick)==false) add("Arquivo QD inválido")
             if(s.society?.valid(s)==false) add("Sociedade inválida")
             if(s.economy?.valid(s)==false) add("Economia inválida")

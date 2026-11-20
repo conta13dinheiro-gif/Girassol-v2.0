@@ -86,11 +86,13 @@ internal object NativeMind {
         val autonomy=NativeAutonomy.evaluate(world,lastActions,prepared)
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
         val qdView=world.qualityDiversity?.view()
+        val populationSemantics=PopulationSemantics.measure(world)
         val qdCandidates=ArrayList<NativeQualityDiversity.Candidate>(world.agents.size)
         world.agents.forEach { citizen->
-            val old=prepared.getValue(citizen.id).copy(psyche=autonomy.psyches.getValue(citizen.id))
-            val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
+            val prior=prepared.getValue(citizen.id)
             val outcome=lastActions.firstOrNull { it.agentId==citizen.id }?.outcome
+            val old=PedagogyAndDiploidEvolutionEngine.symbiogenesis(world,citizen,prior,outcome,sourceHash).copy(psyche=autonomy.psyches.getValue(citizen.id))
+            val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
             val learn=world.tick>old.learnedTick && (memory!=null || outcome=="PRECONDITION_FAILED" || outcome=="RESERVED")
             val reward=memory?.reward ?: if(outcome=="PRECONDITION_FAILED") -.15 else -.03
             val behavior=listOf(citizen.activity.ordinal/7.0,(citizen.x/100).coerceIn(0.0,1.0),(citizen.z/100).coerceIn(0.0,1.0),citizen.needs.social,citizen.skill.mastery,if(outcome=="PRECONDITION_FAILED") 0.0 else if(outcome=="RESERVED") .5 else 1.0)
@@ -149,7 +151,7 @@ internal object NativeMind {
             val scores=PianoWorkspace.aggregate(
                 { Activity.entries.map { activity ->
                     val i=activity.ordinal
-                    needs[i]*1.7+SemanticCollapseGuard.noveltyEpistemicBonus(activity.name,world.actionCounts)
+                    needs[i]*1.7+SemanticCollapseGuard.noveltyEpistemicBonus(activity.name,world.actionCounts)+PopulationSemantics.noveltyBonus(activity,populationSemantics)
                 } },
                 { Activity.entries.map { activity ->
                     val experience=recalled.filter { it.episode.action==activity }
@@ -218,7 +220,7 @@ internal object NativeMind {
         val qd=NativeQualityDiversity.update(world,qdCandidates)
         return CognitiveFrame(
             world.tick,sourceHash,minds,decisions,
-            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true,pedagogyEnabled=true,qualityDiversity=qd
+            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true,pedagogyEnabled=true,qualityDiversity=qd,biologyEnabled=true
         )
     }
 }

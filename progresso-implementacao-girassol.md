@@ -14,7 +14,13 @@ Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretri
 
 <!-- coderabbit-ai-generated-section:v1:75f853dccb3d0759d2ba9f8d68970b637c037e35433ba1f5f1c63424f62e9ebe -->
 
-**Estado mais recente: 54,5% de cobertura funcional local (6/11 frentes: 3, 5, 1, 8, 2 e 6).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 6”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:ac599269eac8d42ccdf619864e13411310a73c7dfe71eb561db86625b95a916d -->
+
+**Estado mais recente: 81,8% de cobertura funcional local (9/11 frentes: 3, 5, 1, 8, 2, 6, 4, 7 e 9).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 9”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -285,7 +291,11 @@ A medição de RAM/latência no Moto G62, carga 24/7 e execução dos testes ins
 
 Frentes 7/9/10/11, execução instrumentada no Android, medição de RAM/latência no Moto G62, carga 24/7 e identidade persistente de assinatura. Não se atribui aceite dessas verificações à compilação ou aos limites estruturais. Detalhes do modelo pedagógico estão em `docs/pedagogia-fsrs45-voyager.md`.
 
-## Entrega atual — Frente 7 / MAP-Elites e AURORA (2026-11-20)
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:5bdcc62e363e0e2b30f47f66743e9f6e3a0f377ca8e96a7eaaf1954803c0e766 -->
+
+## Histórico — Frente 7 / MAP-Elites e AURORA (2026-11-20)
 
 **72,7% de cobertura funcional local (8/11 frentes: 3, 5, 1, 8, 2, 6, 4 e 7).** Conta frentes integradas e verificadas com peso igual. Não é esforço, cobertura de linhas, aceite no Moto G62 ou prontidão de distribuição. Permanecem 9, 10 e 11.
 
@@ -311,6 +321,33 @@ Frentes 7/9/10/11, execução instrumentada no Android, medição de RAM/latênc
 ### Pendências
 
 Frentes 9/10/11, execução dos testes instrumentados, RAM/latência e carga 24/7 no alvo. Release usa chave debug; identidade persistente de distribuição segue pendente. Limites estáticos e build não comprovam RAM total em 4 GB. Ver `docs/diversidade-map-elites-aurora.md` para formato, fórmulas e limites.
+
+## Entrega atual — Frente 9 / Baldwin e simbiogênese funcional (2026-11-20)
+
+**Cobertura funcional local: 81,8% (9/11 frentes).** Frentes 3/5/1/8/2/6/4/7/9 integradas e verificadas localmente. Peso igual por frente; não é estimativa de esforço, completude dos anexos v2.1, uso total de RAM ou aceite em aparelho. Frentes 10/11 continuam pendentes.
+
+### Implementado e conectado
+
+- Seleção reprodutiva Baldwiniana usa competência adquirida comprovada: domínio BKT >=0,75 e pelo menos três execuções próprias por ação, com abrangência e experiência limitadas. Probabilidade `0,25+0,75*(L1+L2)/2`, PRNG separado e registro canônico de cada tentativa (pais, aptidões, probabilidade, sorteio e resultado). O blueprint propõe mutar alelos parentais; isso contraria a preservação explícita de v8. A implementação conserva valores/dominâncias e a segregação 50/50, IDs por hash, teto 150, idade Double e CURRENT_RULES_VERSION=8. A herança neural preexistente foi preservada; não se alega validação biológica empírica.
+- Simbiose horizontal entre linhagens transfere um bloco funcional de oito pesos do readout LTC durante contato TALK concluído. Exige habilidade/prática real do doador, ganho de domínio, confiança recíproca por domínio e admissão pela imunidade >=0,70. A mistura limitada entra antes do forward C++ real. O receptor não recebe execuções nem domínio inventados. Limites: um módulo por avaliação, oito retidos por agente, intervalo de 120 ciclos por ação; nenhum novo buffer nativo/JNI.
+- Proveniência guarda doador, hash do genoma/bloco, hashes antes/depois, mundo de origem, confiança e evidência de domínio. Aplicabilidade recalcula a aquisição sobre a origem; WorldStore confere a origem dentro da transação. Auditoria de eventos SQLite confere evidência do doador e digest da fusão mesmo contra evento adulterado e re-hasheado. Estado e módulos persistem no evento/checkpoint existentes, sem tabela paralela.
+- Métricas semânticas operacionais usam os oito conceitos de ação e até 32 memórias reais por agente: Shannon agregado/ln(8) e Jensen-Shannon generalizada entre agentes/ln(8). Desconhecimento não é preenchido com distribuição uniforme; duplicar toda a população conserva a divergência. Bônus por frequência negativa, limitado a 0,10, participa do PIANO. Soma global usa Long e contadores saturam no fluxo ativado. A interface exibe métricas, admissões observadas e módulos compartilhados. Defaults omitidos conservam eventos antigos.
+
+### Evidência executada
+
+- **143 testes core, 13 testes JVM da aplicação e 15 testes SQLite reais** passaram, zero falhas/erros/ignorados. Seis novos testes core cobrem valores independentes JS/Shannon, invariância por replicação, desconhecimento, frequência negativa, contadores Int.MAX_VALUE, seleção em 4.096 sementes, domínio sem prática inventada, dominância e defaults históricos.
+- Fixture real NativeMind→C++/JNI→NativeSpatial→WorldActor v8: **32 ciclos, uma aquisição funcional, cinco tentativas reprodutivas e um nascimento**, replay canônico exato e genomas parentais intactos. Oito pesos após o forward coincidem com a mistura independente; filho conserva alelo e dominância correspondentes de cada progenitor. Falta de contato/confiança/resultado e quatro adulterações de hashes foram recusadas. Auditoria recusou fusão forjada com hash do evento recalculado.
+- `scripts/test-native.sh`: **onze suítes ASan/UBSan** e recuperação HNSW em **36/34 posições de falha de alocação** passaram. `scripts/test-mind-jni.sh` terminou com sucesso: contrato ausente/presente, 500 transições reais/replay, biologia, QD, pedagogia, sociedade, memória/SWR/imunidade, economia, três rollouts equivalentes de 256 ticks, busca RSI, isolamento, cancelamento, falha de escrita, idade Double e entradas inválidas. Busca registrou 21 avaliações/vinte propostas e seus terminais; nenhum candidato passou todos os gates de treino. Promoção vencedora/janela independente continuam não exercitadas.
+- Build completo `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon`: **sucesso em 4m18s**, 137 tarefas (45 executadas, 92 atualizadas). Lint: zero erros e 27 avisos existentes. Instrumentação de rollback de checkpoint biológico, persistência e reabertura **compilou, mas não executou**, por ausência de alvo Android.
+- **Oito APKs** passaram em `apksigner verify`; 19 declarações JNI e 19 exportações em cada uma das três ABIs conferidas. SHA-256 ARM64 Debug: `78085e5e6780b44d9dcf0a5733b22df74bf2d9c56455a58f9c7944be91645e1e`. Insumos finais permaneceram inalterados durante os gates; manifesto local SHA-256 `134c703c173030c7c5d743751b3e57e424992c879a59177e0e7c4f7243b9b903` identifica fonte/testes/configurações.
+- Base publicada: `296377b657d47ebd59b7a28437b1b19a6cc4ee7b`. Sua [Action 44667682928](https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44667682928) terminou com sucesso e disponibiliza APKs. O workflow gera os oito APKs e checksums por push e manualmente; o resultado remoto desta entrega será conferido após o push. Moto G62: `Girassol-debug` → `app-arm64-v8a-debug.apk`.
+
+### Pendências
+
+Frentes 10/11, execução instrumentada, RAM/latência e carga 24/7 no Moto G62. Release usa chave debug; identidade persistente de distribuição segue pendente. Não se atribui medição de 4 GB a limites estáticos ou testes host. Fórmulas, diferença do protótipo e limites estão em `docs/biologia-baldwin-simbiogenese.md`.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 <!-- /coderabbit-ai-generated:v1 -->

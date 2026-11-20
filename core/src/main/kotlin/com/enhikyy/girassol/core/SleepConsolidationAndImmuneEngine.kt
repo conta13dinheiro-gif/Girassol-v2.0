@@ -316,7 +316,7 @@ object AllostaticThermalCoupling {
 object SemanticCollapseGuard {
     fun normalizedPopulationEntropy(actionCounts: Map<String, Int>): Double {
         val counts = Activity.entries.map { (actionCounts[it.name] ?: 0).coerceAtLeast(0) }
-        val total = counts.sum().toDouble()
+        val total = counts.sumOf { it.toLong() }.toDouble()
         if (total <= 0.0) return 0.0
         val entropy = counts.filter { it > 0 }.sumOf { count ->
             val probability = count / total
@@ -334,8 +334,8 @@ object SemanticCollapseGuard {
         val action = Activity.entries.firstOrNull { it.name == actionType } ?: return 0.0
         val entropy = normalizedPopulationEntropy(actionCounts)
         if (entropy >= collapseThreshold) return 0.0
-        val total = Activity.entries.sumOf { (actionCounts[it.name] ?: 0).coerceAtLeast(0) }
-        if (total == 0) return 0.0
+        val total = Activity.entries.sumOf { (actionCounts[it.name] ?: 0).coerceAtLeast(0).toLong() }
+        if (total == 0L) return 0.0
         val frequency = ((actionCounts[action.name] ?: 0).coerceAtLeast(0)).toDouble() / total
         val urgency = ((collapseThreshold - entropy) / collapseThreshold).coerceIn(0.0, 1.0)
         return 0.30 * urgency * (1.0 - frequency).coerceIn(0.0, 1.0)
