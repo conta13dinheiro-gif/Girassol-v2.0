@@ -91,14 +91,36 @@ class ResearchTables(private val db: SQLiteDatabase) {
     }
     private fun readCandidate(id: String): KnowledgeCandidate = db.rawQuery("SELECT payload FROM staging_knowledge WHERE id=?",arrayOf(id)).use { check(it.moveToFirst());ResearchCodec.decode(it.getString(0)) }
     /** Part of the world transaction: no live weights without matching verified evidence. */
-    fun assimilate(lesson: KnowledgeLesson) {
+    fun assimilate(lesson: KnowledgeLesson, eventId: Long) {
         verifyPointHash(lesson.originTick,lesson.originEventHash)
         if(lesson.originTick>0) db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(lesson.originTick.toString())).use { source->check(source.moveToFirst());check(Canonical.event(source.getString(0)).stateHash==lesson.originStateHash) }
+        db.rawQuery("SELECT tick FROM events WHERE id=?",arrayOf(eventId.toString())).use { current ->
+            check(current.moveToFirst() && current.getLong(0)==lesson.tick+1) { "Evento de assimilação ausente ou fora de sequência" }
+        }
         val c=readCandidate(lesson.id)
         verifyRow(c)
         check(c.acquisitionHash==lesson.acquisitionHash && c.row.digest==lesson.rowHash && c.intent.domain.name==lesson.domain && c.intent.discoverer==lesson.researcher)
         val first=checkNotNull(c.researcher); val second=checkNotNull(c.verifier)
         check(EpistemicQuarantine.approved(c.row,first,second) && first.agent==lesson.researcher && second.agent==lesson.verifier && minOf(first.confidence,second.confidence)==lesson.confidence)
+        val witnesses=listOf(first,second).map { review ->
+            EpistemicWitness(
+                claimHash=c.row.digest,
+                sourceEventHash=c.acquisitionHash,
+                sourceAgentId=review.agent,
+                opinion=SubjectiveOpinion.fromBeta(
+                    alpha=1.0+review.confidence,
+                    beta=1.0+(100-review.confidence),
+                    baseRate=0.5
+                )
+            )
+        }
+        val fused=checkNotNull(EpistemicImmunityEngine.fuseCorrelated(witnesses))
+        db.insertOrThrow("subjective_beliefs",null,ContentValues().apply {
+            put("event_id",eventId); put("agent_id",lesson.researcher); put("claim_id",c.row.digest)
+            put("source_id",c.acquisitionHash); put("belief",fused.opinion.belief)
+            put("disbelief",fused.opinion.disbelief); put("uncertainty",fused.opinion.uncertainty)
+            put("base_rate",fused.opinion.baseRate)
+        })
         db.update("staging_knowledge",ContentValues().apply { put("status","LEARNED");put("applied_tick",lesson.tick+1) },"id=? AND status='VALIDATED' AND review_tick<=?",arrayOf(c.id,lesson.tick.toString())).also { check(it==1) }
         if(c.embedding.isNotEmpty()) {
             val vector=java.nio.ByteBuffer.allocate(c.embedding.size*4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
