@@ -79,6 +79,19 @@ internal object NativeMind {
             val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
             check(next.valid(world.tick))
             minds[citizen.id]=next
+            val thermalCost = AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier, 1.0, n.energy)
+            val policyScale = 1.0 / (1.0 + thermalCost)
+            val activeInference = ActiveInferencePianoEngine.evaluate(
+                needs = ActiveInferenceNeeds(n.hydration, n.energy, n.glucose, n.social, n.curiosity),
+                novelty = novelty,
+                predictionError = old.psyche.lastPredictionError,
+                openness = old.personality[0],
+                dopamine = old.psyche.dopamine,
+                previousReward = reward,
+                thermalScale = policyScale,
+                currentActivity = citizen.activity,
+                learnedValues = bank.reflections.associate { it.action to it.expectedReward }
+            )
             val scores=values(272,8).toMutableList()
             scores[citizen.activity.ordinal]+=reflexVote*0.015
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
@@ -91,15 +104,14 @@ internal object NativeMind {
                     else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
                 val technique=bank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
                 // Seeded Gumbel exploration scales with curiosity and lack of novelty; outputs are journaled.
-                val thermalCost = AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier, 1.0, n.energy)
-                val policyScale = 1.0 / (1.0 + thermalCost)
                 val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale
                 val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
                 scores[i]+=-ln(-ln(u))*temperature
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
                 val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
-                scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
+                scores[i]+=(activeInference.utilityByActivity[activity] ?: 0.0)*0.25+
+                    policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
                     bank.learningFor(activity).practiceBonus(world.tick)+bank.workingMemoryBonus(activity,world.tick)+
                     needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-
                     hypot(room.x-citizen.x,room.z-citizen.z)*.025
