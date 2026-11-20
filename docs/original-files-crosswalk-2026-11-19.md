@@ -94,7 +94,7 @@ Fonte recuperada nesta execução: Girassol_consolidado (1).txt, corpus consolid
 | Processo do plano | Evidência no HEAD | Estado diferencial |
 |---|---|---|
 | 01 — Auditoria/crosswalk | WorldActor, RsiCoordinator, MemoryBank, NativeAutonomy, HardwareAutoTuner, MemoryPressureGuardian, ResearchCoordinator, WorldStore, CI e testes existentes | Auditoria atualizada; não equivale a concluir os demais processos. |
-| 02 — Multi-ABI/backends/assinatura | Gradle declara arm64-v8a, armeabi-v7a, x86_64 e splits; CMake compila girassol_projection e girassol_llama; Release usa assinatura Android debug | Parcial: filtros Multi-ABI presentes, mas workflow/artefatos anteriores focaram ARM64; flags GGML dinâmicas Vulkan/OpenCL/KleidiAI não estão configuradas; releaseAuto não existe; assinatura não é chave de distribuição. |
+| 02 — Multi-ABI/backends/assinatura | Gradle declara arm64-v8a, armeabi-v7a, x86_64, APK universal e assinatura Release por variáveis de ambiente; CI separado compila/publica Debug e Release antes do emulador | Parcial: build Multi-ABI e assinatura por ambiente configurados; CMake ainda não ativa GGML_BACKEND_DL, GGML_CPU_ALL_VARIANTS, GGML_CPU_KLEIDIAI, GGML_VULKAN ou GGML_OPENCL. CI gera keystore efêmero se GIRASSOL_KEYSTORE_BASE64 não existir (assinatura válida para teste, sem continuidade de atualização); build/assinatura ainda aguardam CI verde. |
 | 03 — Probe nativo Multi-SoC | HardwareAutoTuner.kt faz inventário Kotlin e verifica presença de arquivos de driver | Parcial: não existe soc_hardware_probe.hpp; presença de .so não comprova driver utilizável; sem afinidade Big/Prime integrada. |
 | 04 — Serviço 24/7 | BiosphereService.kt, manifesto, MemoryPressureGuardian e telemetria Shizuku | Parcial: serviço/guardião existem, mas não equivalem a WifiLock low-latency, ADPF e garantia de sobrevivência OEM 24/7. Manter execução limitada e respeitar Doze/controle do sistema. |
 | 05 — Cognição Anokhin/GNW | cognitive/anokhin_gnw_core.hpp, girassol_autonomy_jni.cpp, DualModelOrchestrator.kt | Parcial: núcleo heurístico e ponte existem; separação formal de monólogo/fala e GBNF integral precisam de testes de integração. |
@@ -114,7 +114,13 @@ Fonte recuperada nesta execução: Girassol_consolidado (1).txt, corpus consolid
 | 19 — Ingestão/rede LAN | SAF TXT/MD/CSV/JSON/EPUB, pesquisa HF, swap arena e SQLite WAL | Parcial; PDF/áudio/Parquet, MeshSync LAN/CRDT e NonRootSwapArena completa não foram encontrados como módulos integrados. |
 | 20 — Testes determinísticos | Suites Kotlin/JUnit, C++ ASan/UBSan e testes instrumentados existentes | Parcial: não há GeaDeterministicEnginesTest.kt nem cobertura específica para os módulos ausentes acima. |
 | 21 — Push/PR/README | Branch oficial contém commits anteriores e README modificado; PR #1 permanece Draft | Parcial; não marcar Ready for Review enquanto os gates não terminarem e o checklist de escopo não estiver realmente concluído. |
-| 22 — CI/artefatos | Run 44735455996 passou testes nativos, unitários/lint e build ARM64; teste instrumentado no emulador 4 GiB estava em andamento | Parcial; sem resultado verde final nem artefatos dessa execução no momento da auditoria. |
+| 22 — CI/artefatos | Workflow atualizado em `cc779ab5` com jobs `build-and-publish` e `instrumentation`; artefatos nomeados publicados no primeiro job | Pendente de validação: o novo workflow ainda precisa concluir ASan/UBSan, JUnit, Lint, builds Multi-ABI, assinatura e emulador 4 GiB; não presumir artifacts até o run publicar. |
+
+### Incrementos de CI e assinatura após a auditoria inicial
+
+- `61f2afb8` configura `signingConfigs.release` com as quatro variáveis de ambiente requeridas. Sem nenhuma delas, o build local usa a assinatura Debug; configuração parcial falha para evitar Release mal configurado.
+- `cc779ab5` separa `build-and-publish` de `instrumentation`. O primeiro publica `Girassol-debug.apk` e `Girassol-release.apk` antes de o emulador iniciar; o segundo tem timeout de 25 minutos e desativa animações.
+- A chave CI é persistente somente quando os Secrets de keystore e credenciais são fornecidos. Sem `GIRASSOL_KEYSTORE_BASE64`, a chave é efêmera: serve para validar assinatura/instalação, mas não para assinar atualizações futuras. A execução do workflow ainda é a evidência necessária.
 
 ### Decisões de integração e limites
 
