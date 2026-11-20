@@ -83,11 +83,12 @@ class CognitiveFrameTest {
         val base=frame(writer.state)
         val enriched=base.copy(minds=base.minds.mapValues { (_,mind) ->
             mind.copy(nativeEngineTrace=List(8) { index -> (index+1)/10.0 })
-        })
+        },rsiPromotionGate=true)
         assertTrue(enriched.applicable(writer.state))
         val transition=writer.step(cognition=enriched)
         val payload=Canonical.event(transition.event)
         assertTrue(payload.contains("nativeEngineTrace"))
+        assertTrue(payload.contains("rsiPromotionGate"))
         reader.replay(Canonical.event(payload))
         assertEquals(writer.checkpoint(),reader.checkpoint())
         assertFalse(enriched.minds.values.first().copy(nativeEngineTrace=List(8) { 1.5 }).valid(writer.state.tick))
