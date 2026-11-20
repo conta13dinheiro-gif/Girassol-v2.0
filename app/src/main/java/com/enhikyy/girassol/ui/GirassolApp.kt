@@ -315,7 +315,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                                     NeuralSpeechEngine.speak(
                                         thought.text,
                                         voiceId=speechStatus.voiceId,
-                                        pan=((a.x-a.z)/30.0).toFloat().coerceIn(-1f,1f)
+                                        world=world,source=a.id
                                     )
                                 }.onFailure {
                                     android.widget.Toast.makeText(context,it.message ?: "Falha na síntese de voz",android.widget.Toast.LENGTH_LONG).show()

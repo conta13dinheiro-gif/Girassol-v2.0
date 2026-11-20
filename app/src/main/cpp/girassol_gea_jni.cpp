@@ -3,7 +3,7 @@
 // This call cannot allocate or throw across the JNI boundary.
 extern "C" JNIEXPORT jint JNICALL
 Java_com_enhikyy_girassol_cognition_GeaNativeBridge_contractVersion(JNIEnv*, jobject) {
-    return 3;
+    return 4;
 }
 
 #include "cognitive/tsetlin_machine.hpp"
@@ -75,4 +75,54 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_qdUpdate(JNIEnv* env,jobject
     }
     if(!state.update(candidates.data(),static_cast<std::size_t>(count),static_cast<std::uint64_t>(tick))) { invalid_qd(env);return JNI_FALSE; }
     return save(state,{bytes,wire_bytes}) ? JNI_TRUE : JNI_FALSE;
+}
+
+#include "audio/binaural_hrtf_spatializer.hpp"
+#include <cstring>
+namespace {
+bool writable(JNIEnv* env,jobject buffer) {
+    const auto klass=env->GetObjectClass(buffer);if(!klass) return false;
+    const auto method=env->GetMethodID(klass,"isReadOnly","()Z");
+    const bool ok=method && env->CallBooleanMethod(buffer,method)==JNI_FALSE;env->DeleteLocalRef(klass);
+    return ok && !env->ExceptionCheck();
+}
+void invalid_audio(JNIEnv* env) {
+    if(!env->ExceptionCheck()) if(auto type=env->FindClass("java/lang/IllegalArgumentException")) env->ThrowNew(type,"Invalid bounded acoustic input");
+}
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_enhikyy_girassol_cognition_GeaNativeBridge_hrtfProcess(JNIEnv* env,jobject,jobject state,jobject mono,jobject stereo,jint frames,jint rate,jdouble azimuth,jdouble distance,jdouble occlusion,jboolean reset) {
+    using namespace girassol::audio;
+    if(!state || !mono || !stereo || frames<1 || frames>2048 || rate<8000 || rate>96000 || env->GetDirectBufferCapacity(state)!=544 || env->GetDirectBufferCapacity(mono)!=8192 || env->GetDirectBufferCapacity(stereo)!=16384 || !writable(env,state) || !writable(env,stereo)) { invalid_audio(env);return JNI_FALSE; }
+    auto* source=env->GetDirectBufferAddress(mono);auto* target=env->GetDirectBufferAddress(stereo);auto* bytes=env->GetDirectBufferAddress(state);
+    auto overlaps=[](void* a,std::size_t n,void* b,std::size_t m) { const auto x=reinterpret_cast<std::uintptr_t>(a),y=reinterpret_cast<std::uintptr_t>(b);return x<y+m && y<x+n; };
+    if(!source || !target || !bytes || overlaps(bytes,544,source,8192) || overlaps(bytes,544,target,16384) || overlaps(source,8192,target,16384)) { invalid_audio(env);return JNI_FALSE; }
+    HrtfState value{};
+    if(reset==JNI_TRUE) value.rate=static_cast<std::uint32_t>(rate);
+    else { std::memcpy(&value,bytes,sizeof(value));for(int i=536;i<544;++i) if(static_cast<unsigned char*>(bytes)[i]!=0) { invalid_audio(env);return JNI_FALSE; } }
+    std::array<float,2048> input{};std::array<float,4096> output{};std::memcpy(input.data(),source,static_cast<std::size_t>(frames)*sizeof(float));
+    if(!spatialize(value,input.data(),output.data(),frames,rate,azimuth,distance,occlusion)) { invalid_audio(env);return JNI_FALSE; }
+    std::memcpy(target,output.data(),static_cast<std::size_t>(frames)*8);std::memcpy(bytes,&value,sizeof(value));std::memset(static_cast<unsigned char*>(bytes)+536,0,8);return JNI_TRUE;
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_enhikyy_girassol_cognition_GeaNativeBridge_acousticTrace(JNIEnv* env,jobject,jobject rooms,jint count,jlong seed,jobject endpoints,jobject result) {
+    if(!rooms || !endpoints || !result || count<1 || count>192 || env->GetDirectBufferCapacity(rooms)!=static_cast<jlong>(count)*24 || env->GetDirectBufferCapacity(endpoints)!=56 || env->GetDirectBufferCapacity(result)!=24 || !writable(env,result)) { invalid_audio(env);return JNI_FALSE; }
+    const auto* r=env->GetDirectBufferAddress(rooms);const auto* e=env->GetDirectBufferAddress(endpoints);auto* out=env->GetDirectBufferAddress(result);
+    if(!r || !e || !out) { invalid_audio(env);return JNI_FALSE; }
+    std::array<double,7> p{};std::memcpy(p.data(),e,56);
+    if(std::any_of(p.begin(),p.end(),[](double v){return !std::isfinite(v) || std::abs(v)>2000;})) { invalid_audio(env);return JNI_FALSE; }
+    try {
+        girassol::Mesh mesh;if(!girassol::city_mesh(r,static_cast<std::size_t>(count)*24,static_cast<std::size_t>(count),static_cast<std::uint64_t>(seed),mesh)) { invalid_audio(env);return JNI_FALSE; }
+        const double dx=p[0]-p[3],dy=p[1]-p[4],dz=p[2]-p[5];
+        const double distance=std::sqrt(dx*dx+dy*dy+dz*dz);if(distance>2000) { invalid_audio(env);return JNI_FALSE; }
+        const double azimuth=std::atan2(dx*std::cos(p[6])-dz*std::sin(p[6]),-dx*std::sin(p[6])-dz*std::cos(p[6]));
+        const double output[3]{azimuth,distance,girassol::audio::acoustic_occlusion(mesh,{p[0],p[1],p[2]},{p[3],p[4],p[5]})};
+        std::memcpy(out,output,sizeof(output));return JNI_TRUE;
+    } catch(const std::bad_alloc&) {
+        if(auto type=env->FindClass("java/lang/OutOfMemoryError")) env->ThrowNew(type,"Acoustic geometry memory budget exhausted");
+        return JNI_FALSE;
+    } catch(const std::exception& error) {
+        if(auto type=env->FindClass("java/lang/IllegalStateException")) env->ThrowNew(type,error.what());
+        return JNI_FALSE;
+    }
 }

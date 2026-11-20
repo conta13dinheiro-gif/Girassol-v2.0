@@ -21,11 +21,14 @@ import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
-import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.Future
 import java.util.zip.ZipInputStream
 import kotlin.math.max
-import kotlin.math.sqrt
+import kotlin.math.asin
+import com.enhikyy.girassol.core.WorldState
 
 data class NeuralSpeechState(
     val installed: Boolean = false,
@@ -38,7 +41,7 @@ data class NeuralSpeechState(
 /**
  * Optional Kokoro-82M Brazilian Portuguese speech. The ONNX model is imported
  * into private app storage; it is never bundled with the APK. Synthesis is
- * serialized on a background worker and output uses a bounded stereo pan.
+ * serialized on a bounded worker; native HRTF processes reusable 2048-frame chunks.
  */
 object NeuralSpeechEngine {
     private const val MODEL_LIMIT = 380L * 1024L * 1024L
@@ -47,9 +50,9 @@ object NeuralSpeechEngine {
     private const val ENTRY_LIMIT = 4096
     private const val MAX_TEXT_CHARS = 240
     private const val MAX_AUDIO_SECONDS = 90
-    private val worker = Executors.newSingleThreadExecutor { runnable ->
+    private val worker = ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,ArrayBlockingQueue(1),{ runnable ->
         Thread({ Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND); runnable.run() }, "Girassol-Kokoro-TTS")
-    }
+    },ThreadPoolExecutor.DiscardOldestPolicy())
     private val stateMutable = MutableStateFlow(NeuralSpeechState())
     val state = stateMutable.asStateFlow()
 
@@ -200,7 +203,7 @@ object NeuralSpeechEngine {
     }
 
 
-    fun speak(text: String, voiceId: Int = requestedVoice, pan: Float = 0f, speed: Float = 1f) {
+    fun speak(text: String, voiceId: Int = requestedVoice, pan: Float = 0f, speed: Float = 1f,world: WorldState?=null,source: String?=null) {
         initialize(checkNotNull(application))
         require(text.isNotBlank() && text.length <= MAX_TEXT_CHARS && text.none { it.isISOControl() }) {
             "O texto falado deve conter até 240 caracteres imprimíveis"
@@ -224,7 +227,17 @@ object NeuralSpeechEngine {
                 }
                 val audio = synchronized(engineLock) {
                     val engine = synthesis ?: createEngine().also { synthesis = it }
-                    engine.generate(text, sid = voiceId, speed = speed)
+                    val nativeRate=engine.sampleRate()
+                    require(nativeRate in 8000..96000)
+                    val sampleLimit=nativeRate.toLong()*MAX_AUDIO_SECONDS
+                    var emitted=0L
+                    val generated=engine.generateWithCallback(text,sid=voiceId,speed=speed) { samples ->
+                        emitted+=samples.size
+                        if(Thread.currentThread().isInterrupted || emitted>sampleLimit) 0 else 1
+                    }
+                    check(emitted<=sampleLimit) { "A fala gerada excede o limite de 90 segundos" }
+                    generated
+
                 }
                 check(!Thread.currentThread().isInterrupted)
                 val sampleRate = audio.sampleRate
@@ -232,8 +245,9 @@ object NeuralSpeechEngine {
                 require(audio.samples.size.toLong() <= sampleRate.toLong() * MAX_AUDIO_SECONDS) {
                     "A fala gerada excede o limite de 90 segundos"
                 }
-                val leftGain = sqrt(((1f - pan) / 2f).toDouble()).toFloat()
-                val rightGain = sqrt(((1f + pan) / 2f).toDouble()).toFloat()
+                val parameters=if(world!=null && source!=null) NativeSpatialAudio.trace(world,source)
+                    else AcousticParameters(asin(pan.toDouble()),0.0,0.0)
+                val spatializer=NativeSpatialAudio()
                 val minBuffer = AudioTrack.getMinBufferSize(
                     sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT
                 )
@@ -253,21 +267,22 @@ object NeuralSpeechEngine {
                     .build()
                 currentTrack = track
                 check(track.state == AudioTrack.STATE_INITIALIZED) { "AudioTrack não pôde ser inicializada" }
+                if(NativeAudio.available) NativeAudio.duck(true)
                 track.play()
                 stateMutable.value = stateMutable.value.copy(busy = false, playing = true, message = "Fala Kokoro PT-BR em reprodução")
                 val chunkFrames = 2048
-                val stereo = FloatArray(chunkFrames * 2)
+
                 var offset = 0
                 while (offset < audio.samples.size && !Thread.currentThread().isInterrupted) {
                     val frames = minOf(chunkFrames, audio.samples.size - offset)
-                    for (i in 0 until frames) {
-                        val mono = audio.samples[offset + i].coerceIn(-1f, 1f)
-                        stereo[i * 2] = mono * leftGain
-                        stereo[i * 2 + 1] = mono * rightGain
+                    val stereo=spatializer.process(audio.samples,offset,frames,sampleRate,parameters)
+                    var writtenSamples=0
+                    while(writtenSamples<frames*2 && !Thread.currentThread().isInterrupted) {
+                        val written=track.write(stereo,writtenSamples,frames*2-writtenSamples,AudioTrack.WRITE_BLOCKING)
+                        check(written>0 && written%2==0) { "A reprodução de fala foi interrompida" }
+                        writtenSamples+=written
                     }
-                    val written = track.write(stereo, 0, frames * 2, AudioTrack.WRITE_BLOCKING)
-                    check(written > 0 && written % 2 == 0) { "A reprodução de fala foi interrompida" }
-                    offset += written / 2
+                    offset+=frames
                 }
                 if (!Thread.currentThread().isInterrupted) {
                     val deadline = android.os.SystemClock.elapsedRealtime() + MAX_AUDIO_SECONDS * 1000L + 5000L
@@ -293,11 +308,18 @@ object NeuralSpeechEngine {
                     busy = false, playing = false,
                     message = error.message ?: "Falha na síntese Kokoro"
                 )
+            } catch(error: OutOfMemoryError) {
+                runCatching { currentTrack?.pause();currentTrack?.flush();currentTrack?.release() }
+                currentTrack=null
+                stateMutable.value=stateMutable.value.copy(busy=false,playing=false,message="Memória insuficiente para esta fala")
+            } finally {
+                if(NativeAudio.available) NativeAudio.duck(false)
             }
         }
     }
 
     fun stop() {
+        if(NativeAudio.available) NativeAudio.duck(false)
         currentTask?.cancel(true)
         currentTask = null
         runCatching { currentTrack?.pause(); currentTrack?.flush(); currentTrack?.release() }

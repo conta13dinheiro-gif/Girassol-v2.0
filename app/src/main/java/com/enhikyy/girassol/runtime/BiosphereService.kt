@@ -63,7 +63,7 @@ class BiosphereService : Service() {
                 if (transition.state.tick % 30 == 0L) getSystemService(NotificationManager::class.java).notify(10, notification())
                 val delay = if (thermal >= PowerManager.THERMAL_STATUS_SEVERE || memory.lowMemory) 2000L else 500L / speed
                 handler.postDelayed(this, delay)
-            } catch (e: Exception) { fail(e) }
+            } catch (e: Exception) { fail(e) } catch(e: OutOfMemoryError) { fail(e) }
         }
     }
     override fun onCreate() {
@@ -163,7 +163,7 @@ class BiosphereService : Service() {
                     }
                     else -> startLoop()
                 }
-            } catch (e: Exception) { fail(e) }
+            } catch (e: Exception) { fail(e) } catch(e: OutOfMemoryError) { fail(e) }
         }
         return START_STICKY
     }
@@ -189,10 +189,12 @@ class BiosphereService : Service() {
         running = true; prefs.edit().putBoolean("running", true).apply()
         handler.removeCallbacks(tick); handler.post(tick)
     }
-    private fun fail(e: Exception) {
+    private fun fail(e: Throwable) {
         running = false; rsi.cancel(); research.cancel()
         if (wakeLock.isHeld) wakeLock.release()
-        BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(running = false, loading = false, error = e.message ?: "Falha ao abrir a biosfera")
+        if(e is OutOfMemoryError) prefs.edit().putBoolean("running",false).apply()
+        val message=if(e is OutOfMemoryError) "Memória insuficiente. Simulação pausada; o último ciclo confirmado foi preservado." else e.message ?: "Falha ao abrir a biosfera"
+        BiosphereHub.mutable.value = BiosphereHub.mutable.value.copy(running = false, loading = false, error = message)
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
     }
     private fun notification(): Notification {

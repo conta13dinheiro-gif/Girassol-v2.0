@@ -17,6 +17,7 @@ internal object NativeCityMesh {
     }
 
     fun roomBuffer(rooms: List<Room>): ByteBuffer {
+        require(rooms.size<=256) { "Geometria excede o orçamento de 256 salas" }
         val input = direct(Math.multiplyExact(rooms.size, 24))
         rooms.forEach { r ->
             input.putFloat(r.x.toFloat()).putFloat(r.z.toFloat()).putFloat(r.width.toFloat()).putFloat(r.depth.toFloat())

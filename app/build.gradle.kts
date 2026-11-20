@@ -62,7 +62,7 @@ dependencies {
 val compileFilamentMaterials by tasks.registering(Exec::class) {
     val tools = providers.environmentVariable("FILAMENT_TOOLS_DIR")
     onlyIf { tools.isPresent }
-    inputs.files(fileTree("src/main/materials") { include("*.mat") })
+    inputs.files(fileTree("src/main/materials") { include("*.mat") }, rootProject.file("scripts/compile-materials.sh"))
     outputs.dir("src/main/assets/materials")
     outputs.file("src/main/materials/city.sha256")
     commandLine("bash", rootProject.file("scripts/compile-materials.sh").absolutePath)

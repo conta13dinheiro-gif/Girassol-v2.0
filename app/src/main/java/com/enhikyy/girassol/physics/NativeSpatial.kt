@@ -12,19 +12,22 @@ internal object NativeSpatial {
     private const val STRIDE=(8+(SUBSTEPS+1)*3)*8
     private external fun nativeStep(rooms: ByteBuffer,count: Int,bodies: ByteBuffer,people: Int,seed: Long,tick: Long,result: ByteBuffer): Boolean
     private class Buffers(val count: Int) {
-        val input=direct(Math.multiplyExact(count,40))
+        val input=direct(Math.multiplyExact(count,56))
         val output=direct(Math.multiplyExact(count,STRIDE))
     }
     private val buffers=ThreadLocal<Buffers>()
     fun advance(world: WorldState,intentions: Map<String,Activity>): SpatialFrame {
         check(NativeProjection.available)
         val people=world.agents
+        require(people.size in 1..150 && world.rooms.size in 1..192)
         val b=buffers.get()?.takeIf { it.count==people.size } ?: Buffers(people.size).also(buffers::set)
         b.input.clear();b.output.clear()
         people.forEach { a->
             val prior=world.spatial[a.id]
             b.input.putDouble(a.x).putDouble(prior?.position?.y ?: 0.0).putDouble(a.z)
                 .putDouble(prior?.verticalVelocity ?: 0.0).putDouble(world.rooms.indexOfFirst { it.id==SmartTerrain.target(world,a,intentions.getValue(a.id)).id }.toDouble())
+                .putDouble(kotlin.math.sin(prior?.heading ?: 0.0)*minOf(.9,(prior?.distance ?: 0.0)/.5))
+                .putDouble(kotlin.math.cos(prior?.heading ?: 0.0)*minOf(.9,(prior?.distance ?: 0.0)/.5))
         }
         check(nativeStep(NativeCityMesh.roomBuffer(world.rooms),world.rooms.size,b.input,people.size,world.seed,world.tick+1,b.output)) { "Falha no solver espacial" }
         val poses=people.mapIndexed { i,a->

@@ -19,7 +19,9 @@ import com.enhikyy.girassol.core.SpatialPoint
 import com.enhikyy.girassol.core.SpatialPose
 import com.google.android.filament.*
 import com.google.android.filament.android.UiHelper
-import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.TimeUnit
 import kotlin.math.*
 
 /** Read-only viewport. Native geometry and sky convolution run on a worker; GPU ownership stays here. */
@@ -32,9 +34,14 @@ internal class FilamentWorldView(
 ) : FrameLayout(context), DefaultLifecycleObserver, Choreographer.FrameCallback {
     private val texture=TextureView(context)
     private val rig=OrbitCamera()
-    private val worker=Executors.newSingleThreadExecutor { Thread(it,"Girassol-scene").apply { priority=Thread.MIN_PRIORITY } }
+    private val worker=ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,ArrayBlockingQueue(256),
+        { Thread(it,"Girassol-scene").apply { priority=Thread.MIN_PRIORITY } },ThreadPoolExecutor.CallerRunsPolicy())
     private val main=Handler(Looper.getMainLooper())
     private var engine: Engine?=null
+    private var fallbackUsed=false
+    private var recovering=false
+    private var graphicsGeneration=0
+    private var latestWorld: WorldState?=null
     private var renderer: Renderer?=null
     private var scene: Scene?=null
     private var view: com.google.android.filament.View?=null
@@ -83,6 +90,7 @@ internal class FilamentWorldView(
     internal var renderedFrames=0L; private set
     internal val liveMeshCount get()=meshes.size
     internal val isClosed get()=closed
+    internal val graphicsBackend get()=engine?.backend
     private data class GpuMesh(val entity: Int,val vertices: VertexBuffer,val indices: IndexBuffer,val instance: MaterialInstance,val glass: MaterialInstance?)
     private data class ActorVisual(val color: Long,var role: Int,var x: Double,var z: Double,
         var fromX: Double=x,var fromZ: Double=z,var targetX: Double=x,var targetZ: Double=z,
@@ -124,12 +132,17 @@ internal class FilamentWorldView(
         addView(texture,LayoutParams(LayoutParams.MATCH_PARENT,LayoutParams.MATCH_PARENT))
         resumed=lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         lifecycle.addObserver(this)
-        try { initialize() } catch(e: Exception) { fail(e.message?:"Não foi possível abrir o mundo 3D") }
+        val preferred=if(context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_VULKAN_HARDWARE_LEVEL)) Engine.Backend.VULKAN else Engine.Backend.OPENGL
+        try { initialize(preferred) } catch(e: Exception) { fail(e.message?:"Não foi possível abrir o mundo 3D") }
         catch(_: LinkageError) { fail("Renderização 3D indisponível neste dispositivo") }
     }
-    private fun initialize() {
+    private fun initialize(backend: Engine.Backend) {
         Filament.init()
-        val e=Engine.create(Engine.Backend.OPENGL).also { engine=it }
+        val config=Engine.Config().apply {
+            commandBufferSizeMB=12;minCommandBufferSizeMB=4;perRenderPassArenaSizeMB=8;driverHandleArenaSizeMB=8
+        }
+        val e=Engine.Builder().backend(backend).config(config).build().also { engine=it }
+        val generation=graphicsGeneration
         renderer=e.createRenderer().apply { clearOptions=Renderer.ClearOptions().apply { clear=true; clearColor=floatArrayOf(.02f,.03f,.045f,1f) } }
         scene=e.createScene()
         camera=e.createCamera(entity()).apply { setExposure(16f,1f/125f,100f) }
@@ -162,9 +175,18 @@ internal class FilamentWorldView(
         LightManager.Builder(LightManager.Type.POINT).color(.12f,.7f,1f).intensity(0f).falloff(5f).castShadows(false).build(e,researchLight)
         scene!!.addEntity(researchLight)
         helper.renderCallback=object: UiHelper.RendererCallback {
-            override fun onNativeWindowChanged(surface: Surface) { swapChain?.let { e.destroySwapChain(it) }; swapChain=e.createSwapChain(surface) }
-            override fun onDetachedFromSurface() { swapChain?.let { e.destroySwapChain(it); e.flushAndWait() }; swapChain=null }
-            override fun onResized(width: Int,height: Int) { view?.viewport=Viewport(0,0,width,height); updateCamera(width,height); view?.let { film?.resize(it,width,height) }; e.flushAndWait() }
+            override fun onNativeWindowChanged(surface: Surface) {
+                if(closed || generation!=graphicsGeneration) return
+                surfaceAction(generation) { swapChain?.let { e.destroySwapChain(it) }; swapChain=e.createSwapChain(surface) }
+            }
+            override fun onDetachedFromSurface() {
+                if(generation!=graphicsGeneration) return
+                swapChain?.let { e.destroySwapChain(it); e.flushAndWait() };swapChain=null
+            }
+            override fun onResized(width: Int,height: Int) {
+                if(closed || generation!=graphicsGeneration) return
+                surfaceAction(generation) { view?.viewport=Viewport(0,0,width,height);updateCamera(width,height);view?.let { film?.resize(it,width,height) };e.flushAndWait() }
+            }
         }
         helper.attachTo(texture)
     }
@@ -181,6 +203,7 @@ internal class FilamentWorldView(
     }
     fun update(world: WorldState,running: Boolean,thermalStatus: Int,zoom: Float,researchBusy: Boolean=false) {
         if(closed) return
+        latestWorld=world
         moving=running
         researching=researchBusy
         if(thermal!=thermalStatus) {
@@ -231,7 +254,7 @@ internal class FilamentWorldView(
                             val replacement=upload(data); a.mesh?.let(::destroyMesh); a.mesh=replacement
                             replacement.instance.setParameter("phase",(c.id.hashCode()%100)*.13f)
                         } }
-                    } catch(e: Exception) { main.post { if(!closed) fail(e.message?:"Falha no habitante") } }
+                    } catch(e: Exception) { main.post { if(!closed && actors[c.id]===a && a.revision==revision) fail(e.message?:"Falha no habitante") } }
                 }
             }
             if(world.tick!=lastTick) setTarget(a,c,world.spatial[c.id],now)
@@ -245,12 +268,13 @@ internal class FilamentWorldView(
         val bucket=tick/12
         if(environmentPending || environmentBucket==bucket) return
         environmentPending=true
+        val generation=graphicsGeneration
         worker.execute {
             try {
                 val data=Atmosphere.generate(tick,worldSeed)
-                main.post { if(!closed) guarded { applyEnvironment(data); environmentBucket=bucket; environmentPending=false } }
+                main.post { if(!closed && generation==graphicsGeneration) guarded { applyEnvironment(data); environmentBucket=bucket; environmentPending=false } }
             } catch(_: InterruptedException) { Thread.currentThread().interrupt() }
-            catch(e: Exception) { main.post { if(!closed) fail(e.message?:"Falha na atmosfera") } }
+            catch(e: Exception) { main.post { if(!closed && generation==graphicsGeneration) fail(e.message?:"Falha na atmosfera") } }
         }
     }
     private fun applyEnvironment(data: Atmosphere.Environment) {
@@ -327,6 +351,7 @@ internal class FilamentWorldView(
         val aspect=width.toDouble()/height
         camera?.setProjection(rig.fov,aspect,.1,3000.0,Camera.Fov.VERTICAL)
         val eye=rig.eye(aspect)
+        com.enhikyy.girassol.audio.SpatialListener.pose=com.enhikyy.girassol.audio.ListenerPose(eye[0],eye[1],eye[2],rig.yaw)
         camera?.lookAt(eye[0],eye[1],eye[2],rig.centerX,rig.centerY,rig.centerZ,0.0,1.0,0.0)
     }
     override fun doFrame(frameTimeNanos: Long) {
@@ -386,6 +411,11 @@ internal class FilamentWorldView(
             if(r.beginFrame(chain,frameTimeNanos)) { film?.update(visualTime,thermal<3); r.render(checkNotNull(view)); film?.let { r.render(it.view) }; r.endFrame(); renderedFrames++ }
         }
     }
+    private inline fun surfaceAction(generation: Int,block: ()->Unit) {
+        try { block() } catch(error: Exception) {
+            main.post { if(!closed && generation==graphicsGeneration) fail(error.message ?: "Falha ao criar a superfície gráfica") }
+        }
+    }
     private inline fun guarded(block: ()->Unit) { try { block() } catch(e: Exception) { fail(e.message?:"A cena 3D foi interrompida") } }
     private fun schedule() { if(!scheduled && attached && resumed && !closed) { scheduled=true; Choreographer.getInstance().postFrameCallback(this) } }
     private fun unschedule() { Choreographer.getInstance().removeFrameCallback(this); scheduled=false; lastFrame=0 }
@@ -407,23 +437,58 @@ internal class FilamentWorldView(
         gestures.onTouchEvent(event); return true
     }
     override fun performClick(): Boolean { super.performClick(); return true }
-    private fun fail(message: String) { if(closed) return; close(); main.post { onError(message) } }
+    private fun fail(message: String) {
+        if(closed || recovering) return
+        if(!fallbackUsed && (engine==null || engine?.backend==Engine.Backend.VULKAN)) {
+            fallbackUsed=true;recovering=true
+            val savedThermal=thermal
+            try {
+                releaseGraphics()
+                initialize(Engine.Backend.OPENGL)
+                thermal=-1
+                latestWorld?.let { update(it,moving,savedThermal,zoomSetting,researching) }
+                recovering=false;schedule();return
+            } catch(error: Exception) {
+                recovering=false
+                close();main.post { onError(error.message ?: message) };return
+            } catch(error: LinkageError) {
+                recovering=false
+                close();main.post { onError(error.message ?: message) };return
+            }
+        }
+        close();main.post { onError(message) }
+    }
     fun close() {
         if(closed) return
-        closed=true; unschedule(); lifecycle.removeObserver(this); worker.shutdownNow()
-        helper.detach()
-        val e=engine?:return
-        meshes.toList().forEach(::destroyMesh); actors.clear(); city.clear(); roomEntities.clear()
-        entities.forEach { e.destroyCameraComponent(it); e.destroyEntity(it); EntityManager.get().destroy(it) }; entities.clear()
-        view?.renderTarget=null
-        contacts?.close();contacts=null
-        film?.close(); film=null
-        view?.let { e.destroyView(it) }
-        scene?.indirectLight=null; scene?.skybox=null
-        indirect?.let { e.destroyIndirectLight(it) }; skybox?.let { e.destroySkybox(it) }
-        listOfNotNull(skyTexture,diffuseTexture,reflectionTexture).forEach { e.destroyTexture(it) }
-        glassMaterial?.let { e.destroyMaterial(it) }; material?.let { e.destroyMaterial(it) }; grading?.let { e.destroyColorGrading(it) }
-        scene?.let { e.destroyScene(it) }; renderer?.let { e.destroyRenderer(it) }
-        e.destroy(); engine=null
+        closed=true;latestWorld=null; unschedule(); lifecycle.removeObserver(this); worker.shutdownNow()
+        releaseGraphics()
+    }
+    private fun releaseGraphics() {
+        unschedule()
+        val e=engine
+        try {
+            try { helper.detach() } finally { graphicsGeneration++;cityGeneration++ }
+            if(e!=null) {
+                meshes.toList().forEach(::destroyMesh)
+                entities.forEach { e.destroyCameraComponent(it); e.destroyEntity(it); EntityManager.get().destroy(it) };entities.clear()
+                view?.renderTarget=null
+                contacts?.close();film?.close()
+                view?.let { e.destroyView(it) }
+                scene?.indirectLight=null;scene?.skybox=null
+                indirect?.let { e.destroyIndirectLight(it) };skybox?.let { e.destroySkybox(it) }
+                listOfNotNull(skyTexture,diffuseTexture,reflectionTexture).forEach { e.destroyTexture(it) }
+                glassMaterial?.let { e.destroyMaterial(it) };material?.let { e.destroyMaterial(it) };grading?.let { e.destroyColorGrading(it) }
+                scene?.let { e.destroyScene(it) };renderer?.let { e.destroyRenderer(it) }
+            }
+        } finally {
+            // Engine.destroy also frees resources left by a partially failed initialization.
+            try { e?.destroy() } finally {
+                entities.forEach { EntityManager.get().destroy(it) }
+                entities.clear();meshes.clear();actors.clear();city.clear();roomEntities.clear()
+                engine=null;renderer=null;scene=null;view=null;camera=null;material=null;glassMaterial=null
+                film=null;contacts=null;indirect=null;skybox=null;skyTexture=null;diffuseTexture=null;reflectionTexture=null;grading=null;swapChain=null
+                rooms=null;lastTick=Long.MIN_VALUE;publishedAt=0;environmentPending=false;environmentBucket=Long.MIN_VALUE
+            }
+        }
     }
 }

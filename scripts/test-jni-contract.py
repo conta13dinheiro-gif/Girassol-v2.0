@@ -10,7 +10,7 @@ import tempfile
 import zipfile
 
 root = pathlib.Path(__file__).resolve().parents[1]
-types = dict(Unit='void', Int='jint', Long='jlong', Float='jfloat', Boolean='jboolean',
+types = dict(Unit='void', Int='jint', Long='jlong', Float='jfloat', Double='jdouble', Boolean='jboolean',
              String='jstring', ByteArray='jbyteArray', LongArray='jlongArray',
              FloatArray='jfloatArray', ByteBuffer='jobject')
 expected = {}

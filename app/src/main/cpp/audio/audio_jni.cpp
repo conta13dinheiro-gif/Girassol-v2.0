@@ -18,6 +18,7 @@ public:
     Synth synth;
     std::atomic<float> volume{0},left{0},right{0},mastery{0},social{0},weather{0},tension{0},milestone{0},pitch{1},synchrony{0};
     std::array<std::atomic<float>,8> ratios{{1.0f,1.067f,1.125f,1.2f,1.333f,1.5f,1.6f,1.8f}};
+    std::atomic<bool> speech{false};
     std::atomic<int> error{0};
     int sample_rate=48000;
     void stop() {
@@ -26,7 +27,7 @@ public:
     ~Audio() { stop(); }
     static aaudio_data_callback_result_t data(AAudioStream*,void* user,void* output,int32_t frames) {
         auto& a=*static_cast<Audio*>(user);
-        Parameters p;
+        Parameters p;p.speech=a.speech.load(std::memory_order_relaxed);
         p.volume=a.volume.load(std::memory_order_relaxed); p.left_steps=a.left.load(std::memory_order_relaxed);
         p.right_steps=a.right.load(std::memory_order_relaxed); p.mastery=a.mastery.load(std::memory_order_relaxed);
         p.social=a.social.load(std::memory_order_relaxed); p.weather=a.weather.load(std::memory_order_relaxed);
@@ -87,4 +88,9 @@ Java_com_enhikyy_girassol_audio_NativeAudio_nativeUpdate(JNIEnv* env,jobject,jfl
     for(std::size_t i=0;i<8;++i) audio.ratios[i].store(std::isfinite(values[i])?std::clamp(values[i],.25f,4.0f):1.0f,std::memory_order_relaxed);
     const int error=audio.error.load(std::memory_order_relaxed);
     return error!=AAUDIO_OK ? error : (audio.stream ? AAUDIO_OK : AAUDIO_ERROR_INVALID_STATE);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_enhikyy_girassol_audio_NativeAudio_duck(JNIEnv*,jobject,jboolean speech) {
+    audio.speech.store(speech==JNI_TRUE,std::memory_order_relaxed);
 }

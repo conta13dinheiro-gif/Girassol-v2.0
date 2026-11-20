@@ -56,6 +56,20 @@ class CityRendererTest {
                 assertNull(error.get()); assertEquals("Scene replacements must release old geometry",expected,count)
             }
             mount(); awaitFrame(0); awaitMeshes()
+            // Real engines/resources are rebuilt. A device without Vulkan exercises ES startup;
+            // Vulkan devices additionally exercise recovery from a surface/frame failure.
+            var vulkan=false
+            scenario.onActivity { vulkan=render.graphicsBackend==com.google.android.filament.Engine.Backend.VULKAN }
+            if(vulkan) {
+                val before=frames()
+                scenario.onActivity {
+                    val failure=FilamentWorldView::class.java.getDeclaredMethod("fail",String::class.java)
+                    failure.isAccessible=true;failure.invoke(render,"Injected surface failure")
+                    assertEquals(com.google.android.filament.Engine.Backend.OPENGL,render.graphicsBackend)
+                    assertFalse(render.isClosed)
+                }
+                awaitFrame(before);awaitMeshes()
+            }
             repeat(3) { i ->
                 world=world.copy(rooms=world.rooms+Room("test_$i","Anexo",2.0+i*2,9.0,1.7,1.5,2))
                 val before=frames()

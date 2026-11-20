@@ -8,8 +8,8 @@ kotlin.sourceSets.main {
     kotlin.srcDir("../app/src/main/java")
     kotlin.srcDir("../app/src/test/host")
     kotlin.include(
-        "BiologyIntegration.kt", "QualityDiversityIntegration.kt", "PedagogyIntegration.kt", "SocietyIntegration.kt", "MemoryIntegration.kt", "PhysicalEconomyIntegration.kt", "**/cognition/GeaNativeBridge.kt", "**/cognition/NativeMind.kt", "**/cognition/NativeAutonomy.kt",
-        "**/cognition/NativeQualityDiversity.kt", "**/cognition/NativeMemory.kt", "**/cognition/NativeCmaes.kt",
+        "SpaceAllocationIntegration.kt", "SpaceAudioIntegration.kt", "BiologyIntegration.kt", "QualityDiversityIntegration.kt", "PedagogyIntegration.kt", "SocietyIntegration.kt", "MemoryIntegration.kt", "PhysicalEconomyIntegration.kt", "**/cognition/GeaNativeBridge.kt", "**/cognition/NativeMind.kt", "**/cognition/NativeAutonomy.kt",
+        "**/audio/NativeSpatialAudio.kt", "**/cognition/NativeQualityDiversity.kt", "**/cognition/NativeMemory.kt", "**/cognition/NativeCmaes.kt",
         "**/cognition/ShadowReplay.kt", "**/physics/NativeSpatial.kt",
         "**/render/NativeCityMesh.kt", "**/render/NativeProjection.kt"
     )

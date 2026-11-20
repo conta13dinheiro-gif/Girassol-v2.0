@@ -19,3 +19,11 @@ add_library(girassol_llama SHARED cognition/inference.cpp cognition/llama_jni.cp
 target_compile_features(girassol_llama PRIVATE cxx_std_20)
 target_compile_options(girassol_llama PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(girassol_llama PRIVATE llama)
+
+file(GLOB GIRASSOL_RECAST_SOURCES CONFIGURE_DEPENDS third_party/recastnavigation/Recast/Source/*.cpp third_party/recastnavigation/Detour/Source/*.cpp)
+add_library(girassol_navigation STATIC ${GIRASSOL_RECAST_SOURCES} navigation/recast_nav.cpp navigation/orca.cpp)
+target_compile_features(girassol_navigation PRIVATE cxx_std_20)
+target_include_directories(girassol_navigation SYSTEM PRIVATE third_party/recastnavigation/Recast/Include third_party/recastnavigation/Detour/Include)
+target_compile_options(girassol_navigation PRIVATE -ffp-contract=off -fno-fast-math)
+set_target_properties(girassol_navigation PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(girassol_core PRIVATE girassol_navigation)

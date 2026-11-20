@@ -18,7 +18,13 @@ Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretri
 
 <!-- coderabbit-ai-generated-section:v1:ac599269eac8d42ccdf619864e13411310a73c7dfe71eb561db86625b95a916d -->
 
-**Estado mais recente: 81,8% de cobertura funcional local (9/11 frentes: 3, 5, 1, 8, 2, 6, 4, 7 e 9).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 9”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:59bc26c3debdc9a311c1a8d7ee3d92d3296c6467d908006fc234d1ae0a06c08a -->
+
+**Estado mais recente: 90,9% de cobertura funcional local (10/11 frentes: 3, 5, 1, 8, 2, 6, 4, 7, 9 e 10).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 10”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -322,7 +328,11 @@ Frentes 7/9/10/11, execução instrumentada no Android, medição de RAM/latênc
 
 Frentes 9/10/11, execução dos testes instrumentados, RAM/latência e carga 24/7 no alvo. Release usa chave debug; identidade persistente de distribuição segue pendente. Limites estáticos e build não comprovam RAM total em 4 GB. Ver `docs/diversidade-map-elites-aurora.md` para formato, fórmulas e limites.
 
-## Entrega atual — Frente 9 / Baldwin e simbiogênese funcional (2026-11-20)
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:81f935f15035944b32b53de7831c40e2a91bcca2b34617bf55c58652c44034aa -->
+
+## Histórico — Frente 9 / Baldwin e simbiogênese funcional (2026-11-20)
 
 **Cobertura funcional local: 81,8% (9/11 frentes).** Frentes 3/5/1/8/2/6/4/7/9 integradas e verificadas localmente. Peso igual por frente; não é estimativa de esforço, completude dos anexos v2.1, uso total de RAM ou aceite em aparelho. Frentes 10/11 continuam pendentes.
 
@@ -345,6 +355,34 @@ Frentes 9/10/11, execução dos testes instrumentados, RAM/latência e carga 24/
 ### Pendências
 
 Frentes 10/11, execução instrumentada, RAM/latência e carga 24/7 no Moto G62. Release usa chave debug; identidade persistente de distribuição segue pendente. Não se atribui medição de 4 GB a limites estáticos ou testes host. Fórmulas, diferença do protótipo e limites estão em `docs/biologia-baldwin-simbiogenese.md`.
+
+## Entrega atual — Frente 10 / Recast, ORCA, HRTF e Vulkan/ES (2026-11-20)
+
+**Cobertura funcional local: 90,9% (10/11 frentes).** Critério mantido: peso igual por frente integrada e verificada localmente. A Frente 11 permanece pendente. Esta métrica não comprova execução no Moto G62, RAM total de 4 GB, carga 24/7 ou completude dos anexos v2.1.
+
+### Implementado e conectado
+
+- RecastNavigation/Detour 1.6.0 fixado por revisão e SHA-256, com licenças preservadas. A cena deriva pisos e obstáculos da geometria física real, constrói heightfield/compactação/erosão/regiões/polígonos e usa Detour A*. A projeção do ponto de interação fica no componente alcançável, excluindo ilhas dentro de móveis; a atividade exige chegada dentro da sala real. ORCA/RVO2 2.0.2 foi adaptado com arrays fixos de 150 restrições e velocidades calculadas a partir do mesmo snapshot por subpasso. Varredura de paredes, gravidade e rotas de 31 pontos foram preservadas. Eventos antigos continuam usando o SpatialFrame persistido no replay.
+- Arena Recast/Detour de 32 MiB por thread, tile até 2 MiB, até 270000 células/8192 polígonos e nós/512 pontos; índices de colisão têm teto agregado de oito milhões de entradas. Física/acústica admitem até 192 salas e 150 habitantes antes da alocação. O produtor visual passa a ter teto explícito de 256 salas, preservando o teste histórico de 256; anteriormente era ilimitado. Visualizações com mais de 256 salas agora são recusadas, sem alterar eventos/replay. O mundo atual admite até 128 anexos além das salas iniciais.
+- A injeção de falhas encontrou dois defeitos: placement new com nullptr no Recast e destrutor Detour após inicialização parcial. Os callbacks agora lançam bad_alloc antes do acesso inválido; a alteração local identificada em DetourNavMesh inicializa os tiles antes da segunda alocação e protege o destrutor. JNI traduz falhas para Java; o serviço pausa diante de OutOfMemoryError e conserva o último ciclo confirmado. Não se alega que falhas fatais internas de drivers/ONNX sejam capturáveis.
+- A saída real Sherpa 2.0.1 passa por HRTF analítica com ITD Woodworth fracionário, ILD e filtro contralateral. Oclusão usa interseções na malha real; fonte no habitante e ouvinte na câmera, capturados por fala. Estado nativo 536 bytes/wire 544, blocos até 2048 frames, buffers reutilizados; voz tem uma tarefa ativa/uma pendente, limite de 90 s e guardas de pacote/texto/RAM. Ducking atômico do Trautonium usa ganho 0,25, ataque 25 ms e retorno 250 ms, preservando passos. Não há alegação de HRTF medida, reflexões acústicas ou audição em dispositivo.
+- Filament 1.56.0 tenta Vulkan conforme suporte declarado; erros Java de criação, inicialização, superfície/frame liberam recursos parciais e reconstroem a cena real em OpenGL ES. Gerações invalidam callbacks antigos; worker gráfico tem fila limitada. Os quatro materiais agora contêm GLSL e SPIR-V, gerados com `-a opengl -a vulkan`, conferidos por matinfo e SHA-256. O script passou a ser entrada da tarefa Gradle, para invalidar cache quando os backends mudam.
+
+### Evidência executada
+
+- `scripts/test-native.sh`: **13 suítes ASan/UBSan passaram**, incluindo corredor independente com obstáculo/folga de raio, ORCA recíproco, chegada da praça às seis salas reais, biblioteca estabilizada, **74 falhas de construção e 15 de consulta** recuperadas. HNSW recuperou 36/34 posições de falha. HRTF: atraso independente de 31 samples a 48 kHz, simetria/ILD/filtro, invariância por blocos, NaN sem mutação, raio triangular real e redução de energia do sintetizador real passaram.
+- `scripts/test-mind-jni.sh` terminou com sucesso. Wrapper de alocação exclusivo dos testes host força a falha real da arena: **Java OutOfMemoryError, mundo inalterado e nova tentativa válida**. Consumidor Kotlin/JNI verificou blocos/rates, estados corrompidos, buffers heap/readonly/aliased, atomicidade, geometria/câmera e limites físicos. ABI **4**, **22 declarações JNI** e suas exportações nas três ABIs conferidas.
+- Continuaram passando 500 transições reais/replay, 32 ciclos biológicos com uma aquisição/cinco tentativas/um nascimento, 18 recibos QD, cinco programas executados, sociedade, memória/SWR/imunidade e construção/anexos. Três rollouts equivalentes de 256 ticks e busca RSI: 21 avaliações, vinte propostas/registros terminais; todos rejeitados no treino. Isolamento, cancelamento, falha de escrita, idade Double e entradas inválidas passaram. Promoção vencedora/janela independente continuam não exercitadas.
+- Build completo `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon`: **sucesso em 5m30s**, 137 tarefas (47 executadas, 90 atualizadas). Resultado equivalente de **143 testes core reutilizado**; **13 testes JVM da aplicação e 15 testes SQLite** passaram, zero falhas/erros/ignorados. Lint: **zero erros e 28 avisos**, incluindo um aviso novo UseKtx na preferência de pausa por memória. O tratamento real da JNI foi executado no host; a pausa do serviço e a recuperação Vulkan/ES no teste Android **compilaram, mas não executaram em aparelho**.
+- **Oito APKs** passaram em `apksigner verify`; 22 símbolos JNI por ABI conferidos no APK universal release. SHA-256 ARM64 Debug: `9f55014ea99b736d3b3284003c26876b7183cc5ca0965d112c3c9face9146bc6`; universal Debug: `12637fc75934c5d22bd7045d11e53a429f9b5f8b9732e55e14024d1b13682196`; universal Release: `0b204f58da958b8bfb86afc8482bfb1ef6f01ef381150b3f94ded629c33f8404`. Insumos finais inalterados durante os gates; manifesto local SHA-256 `0ab0e1205cd1d6210f3e74cb358987864348720e5348831e3014254e8fcbb3cf`.
+- Base publicada: `2c437b6178c6334669051420624dd507aef9915d`; sua [Action 44670465325](https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44670465325) terminou com sucesso. O workflow existente gera oito APKs e checksums por push/manual e agora executa os novos testes/materiais. Moto G62: `Girassol-debug` → `app-arm64-v8a-debug.apk`. Resultado remoto desta entrega será conferido após o push.
+
+### Pendências
+
+Frente 11 (treino LoRA+), execução instrumentada/driver Vulkan→ES e audição Sherpa/AAudio, RAM/latência e carga 24/7 no alvo. ADB não tem dispositivo conectado e o sandbox não oferece KVM. Release continua com chave debug; distribuição atualizável exige identidade persistente. As arenas e os testes host não comprovam o pico total de RAM de ONNX/Filament/driver em 4 GB. Detalhes: `docs/espaco-audio-renderizacao.md` e `third_party/NAVIGATION-SOURCES.md` no diretório C++.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 <!-- /coderabbit-ai-generated:v1 -->

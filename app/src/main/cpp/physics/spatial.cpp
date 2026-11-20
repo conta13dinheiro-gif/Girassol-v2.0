@@ -1,9 +1,10 @@
 #include "spatial.hpp"
+#include "../navigation/recast_rvo2_nav.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
-#include <queue>
+#include <tuple>
 #include <stdexcept>
 
 namespace girassol::physics {
@@ -18,9 +19,11 @@ bool overlap(double x,double z,const Box& b,double r=radius) {
 bool inside(const Point& p,const RoomSpec& r) {
     return std::abs(p.x-r.x)<=r.width*.5-radius && std::abs(p.z-r.z)<=r.depth*.5-radius;
 }
-std::uint64_t mix(std::uint64_t x) { x^=x>>30;x*=0xbf58476d1ce4e5b9ULL;x^=x>>27;x*=0x94d049bb133111ebULL;return x^(x>>31); }
+
 }
 struct Scene::Data {
+    std::unique_ptr<nav::DistrictNavMesh> navigation;
+    std::size_t indexedEntries=0;
     std::vector<RoomSpec> rooms;
     std::vector<Box> walls;
     std::vector<Floor> floors;
@@ -83,33 +86,15 @@ struct Scene::Data {
             if(!clear(a.x+(b.x-a.x)*f,a.z+(b.z-a.z)*f)) return false; }
         return true;
     }
-    std::vector<Point> path(Point start,Point goal,std::uint64_t seed) const {
-        const int first=at(start.x,start.z),last=at(goal.x,goal.z);if(first<0 || last<0) return {};
-        if(segment(start,goal)) return {goal};
-        struct Node { double f;int i;bool operator<(const Node& b) const { return f==b.f ? i>b.i : f>b.f; } };
-        std::priority_queue<Node> open;std::vector<double> cost(blocked.size(),std::numeric_limits<double>::infinity());
-        std::vector<int> parent(blocked.size(),-1);cost[static_cast<std::size_t>(first)]=0;open.push({0,first});
-        constexpr std::array<int,8> dx{-1,0,1,-1,1,-1,0,1},dz{-1,-1,-1,0,0,1,1,1};
-        while(!open.empty()) {
-            const int i=open.top().i;open.pop();if(i==last) break;
-            for(int j=0;j<8;++j) {
-                const int nx=i%width+dx[j],nz=i/width+dz[j];if(nx<0 || nz<0 || nx>=width || nz>=depth) continue;
-                const int next=nz*width+nx;if(blocked[static_cast<std::size_t>(next)]) continue;
-                if(dx[j]!=0 && dz[j]!=0 && (blocked[static_cast<std::size_t>(i+dx[j])] || blocked[static_cast<std::size_t>(i+dz[j]*width)])) continue;
-                const double noise=static_cast<double>(mix(seed^static_cast<std::uint64_t>(next))&255U)/255.*.015;
-                const double value=cost[static_cast<std::size_t>(i)]+(dx[j] && dz[j]?1.4142135623730951:1)+noise;
-                if(value>=cost[static_cast<std::size_t>(next)]) continue;
-                cost[static_cast<std::size_t>(next)]=value;parent[static_cast<std::size_t>(next)]=i;
-                const auto p=point(next);open.push({value+std::hypot(p.x-goal.x,p.z-goal.z)/cell,next});
-            }
-        }
-        if(first!=last && parent[static_cast<std::size_t>(last)]<0) return {};
-        std::vector<Point> result{goal};int i=last;
-        while(i!=first) { result.push_back(point(i));i=parent[static_cast<std::size_t>(i)];if(i<0) return {}; }
-        std::reverse(result.begin(),result.end());return result;
+    std::vector<Point> path(Point start,Point goal) const {
+        const auto corridor=navigation->path({start.x,start.z},{goal.x,goal.z},true);
+        std::vector<Point> result;result.reserve(corridor.size());
+        for(const auto& point:corridor) result.push_back({point.x,0,point.z});
+        return result;
     }
 };
 Scene::Scene(const std::vector<RoomSpec>& rooms,std::uint64_t seed) {
+    if(rooms.empty() || rooms.size()>192) throw std::invalid_argument("Scene room budget");
     auto d=std::make_shared<Data>();d->rooms=rooms;
     Mesh mesh;if(!city_mesh(rooms.data(),rooms.size()*sizeof(RoomSpec),rooms.size(),seed,mesh)) throw std::invalid_argument("Invalid scene");
     double X=17,Z=16;
@@ -131,15 +116,41 @@ Scene::Scene(const std::vector<RoomSpec>& rooms,std::uint64_t seed) {
         const double nx=(b.y-a.y)*(c.z-a.z)-(b.z-a.z)*(c.y-a.y),ny=(b.z-a.z)*(c.x-a.x)-(b.x-a.x)*(c.z-a.z),nz=(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
         if(hi>.20 && lo<1.32 && std::abs(ny)<.75*std::sqrt(nx*nx+ny*ny+nz*nz)) {
             const int id=static_cast<int>(d->walls.size());d->walls.push_back(bounds);
-            d->cells({bounds.x-radius,bounds.z-radius,bounds.X+radius,bounds.Z+radius},[&](int tile) { d->obstacles[static_cast<std::size_t>(tile)].push_back(id); });
+            d->cells({bounds.x-radius,bounds.z-radius,bounds.X+radius,bounds.Z+radius},[&](int tile) { if(++d->indexedEntries>8000000) throw std::length_error("Scene index budget");d->obstacles[static_cast<std::size_t>(tile)].push_back(id); });
         }
         // All upward terrain triangles support weight; interior tops above step height are furniture.
         if((hi<=.26 || ((a.rgba>>24)==1 && std::abs(ny)>.8*std::sqrt(nx*nx+ny*ny+nz*nz))) && std::abs(ny)>1e-8) {
             const int id=static_cast<int>(d->floors.size());d->floors.push_back({{a.x,a.y,a.z},{b.x,b.y,b.z},{c.x,c.y,c.z}});
-            d->cells(bounds,[&](int tile) { d->supports[static_cast<std::size_t>(tile)].push_back(id); });
+            d->cells(bounds,[&](int tile) { if(++d->indexedEntries>8000000) throw std::length_error("Scene index budget");d->supports[static_cast<std::size_t>(tile)].push_back(id); });
         }
     }
     for(std::size_t i=0;i<count;++i) { const auto p=d->point(static_cast<int>(i));d->blocked[i]=!d->clear(p.x,p.z); }
+    // Build Recast from the physical support/obstacle contract. Visual low beds
+    // and cutaway roofs must never become walkable tops that the capsule rejects.
+    Mesh physical;
+    auto vertex=[&](Point p) { physical.vertices.push_back({static_cast<float>(p.x),static_cast<float>(p.y),static_cast<float>(p.z),0,0,0,1,0x01000000}); };
+    auto triangle=[&](Point a,Point b,Point c) {
+        if(physical.vertices.size()+3>400000) throw std::length_error("Physical navigation geometry budget");
+        const auto n=static_cast<std::uint32_t>(physical.vertices.size());vertex(a);vertex(b);vertex(c);
+        physical.indices.insert(physical.indices.end(),{n,n+1,n+2});
+    };
+    for(const auto& f:d->floors) {
+        const double normal=(f.b.z-f.a.z)*(f.c.x-f.a.x)-(f.b.x-f.a.x)*(f.c.z-f.a.z);
+        if(normal>0) triangle(f.a,f.b,f.c);else triangle(f.a,f.c,f.b);
+    }
+    auto walls=d->walls;
+    auto key=[](const Box& b) { return std::tuple(b.x,b.z,b.X,b.Z); };
+    std::sort(walls.begin(),walls.end(),[&](const Box& a,const Box& b){return key(a)<key(b);});
+    walls.erase(std::unique(walls.begin(),walls.end(),[&](const Box& a,const Box& b){return key(a)==key(b);}),walls.end());
+    for(const auto& b:walls) {
+        const double x=b.x,z=b.z,X=std::max(b.X,b.x+.001),Z=std::max(b.Z,b.z+.001);
+        const std::array<Point,4> corners{{{x,0,z},{x,0,Z},{X,0,Z},{X,0,z}}};
+        for(std::size_t i=0;i<4;++i) {
+            auto a=corners[i],b=corners[(i+1)%4],A=a,B=b;A.y=2;B.y=2;
+            triangle(a,b,B);triangle(a,B,A);
+        }
+    }
+    d->navigation=std::make_unique<nav::DistrictNavMesh>(physical);
     data=std::move(d);
 }
 double Scene::surface(double x,double z) const {
@@ -157,6 +168,7 @@ double Scene::surface(double x,double z) const {
 }
 bool Scene::clear(double x,double z) const { return data->clear(x,z); }
 std::vector<Motion> Scene::step(const std::vector<Body>& bodies,std::uint64_t seed,std::uint64_t tick) const {
+    if(bodies.empty() || bodies.size()>150) throw std::invalid_argument("Scene population budget");
     const auto& d=*data;std::vector<Motion> out;std::vector<std::vector<Point>> paths;
     for(std::size_t i=0;i<bodies.size();++i) {
         if(bodies[i].destination>=d.rooms.size()) throw std::invalid_argument("Invalid destination");
@@ -184,22 +196,29 @@ std::vector<Motion> Scene::step(const std::vector<Body>& bodies,std::uint64_t se
             if(score<best) { best=score;goal=p; }
         });
         m.body.p.y=std::max(m.body.p.y,surface(m.body.p.x,m.body.p.z));m.route.push_back(m.body.p);
-        paths.push_back(d.path(m.body.p,goal,mix(seed^mix(tick/120)^mix(i))));out.push_back(std::move(m));
+        paths.push_back(d.path(m.body.p,goal));out.push_back(std::move(m));
     }
     std::vector<std::size_t> cursor(bodies.size(),0);
+    (void)seed;
+    std::array<nav::Vec,150> positions{},velocities{},preferred{},solved{};
     for(int frame=0;frame<substeps;++frame) {
+        for(std::size_t i=0;i<out.size();++i) {
+            const auto& p=out[i].body.p;positions[i]={p.x,p.z};velocities[i]={out[i].body.vx,out[i].body.vz};
+            while(cursor[i]<paths[i].size() && std::hypot(paths[i][cursor[i]].x-p.x,paths[i][cursor[i]].z-p.z)<.025) ++cursor[i];
+            preferred[i]={};
+            if(cursor[i]<paths[i].size()) {
+                const auto target=paths[i][cursor[i]];const double dx=target.x-p.x,dz=target.z-p.z,length=std::hypot(dx,dz);
+                if(length>eps) { const double scale=std::min(speed,length/fixed_dt)/length;preferred[i]={dx*scale,dz*scale}; }
+            }
+        }
+        for(std::size_t i=0;i<out.size();++i) solved[i]=nav::orca(i,positions.data(),velocities.data(),out.size(),preferred[i],radius,speed,fixed_dt);
+
         for(std::size_t offset=0;offset<out.size();++offset) {
             const std::size_t i=(offset+static_cast<std::size_t>(tick%out.size()))%out.size();auto& m=out[i];auto& p=m.body.p;
             while(cursor[i]<paths[i].size() && std::hypot(paths[i][cursor[i]].x-p.x,paths[i][cursor[i]].z-p.z)<.025) ++cursor[i];
             const auto before=p;auto next=p;
-            if(cursor[i]<paths[i].size()) {
-                const auto goal=paths[i][cursor[i]];double dx=goal.x-p.x,dz=goal.z-p.z;
-                const double distance=std::hypot(dx,dz);if(distance>eps) { const double step=std::min(speed*fixed_dt,distance);next.x+=dx/distance*step;next.z+=dz/distance*step; }
-                // Deterministic reciprocal separation steering. Every candidate is swept against solids below.
-                for(std::size_t j=0;j<out.size();++j) if(j!=i) {
-                    dx=p.x-out[j].body.p.x;dz=p.z-out[j].body.p.z;const double dist=std::hypot(dx,dz);
-                    if(dist>eps && dist<radius*2.5) { const double strength=(radius*2.5-dist)*.08;next.x+=dx/dist*strength;next.z+=dz/dist*strength; }
-                }
+            if(cursor[i]<paths[i].size() || std::hypot(solved[i].x,solved[i].z)>eps) {
+                next.x+=solved[i].x*fixed_dt;next.z+=solved[i].z*fixed_dt;
                 const double delta=std::hypot(next.x-p.x,next.z-p.z);
                 if(delta>speed*fixed_dt) { next.x=p.x+(next.x-p.x)*speed*fixed_dt/delta;next.z=p.z+(next.z-p.z)*speed*fixed_dt/delta; }
                 if(!d.segment(p,next)) { next=p; } // Never tunnel through a thin wall.
@@ -210,6 +229,7 @@ std::vector<Motion> Scene::step(const std::vector<Body>& bodies,std::uint64_t se
             }
             m.ground=surface(p.x,p.z);m.body.vy-=9.81*fixed_dt;p.y+=m.body.vy*fixed_dt;
             if(p.y<=m.ground) { p.y=m.ground;m.body.vy=0; }
+            m.body.vx=(p.x-before.x)/fixed_dt;m.body.vz=(p.z-before.z)/fixed_dt;
             const double traveled=std::hypot(p.x-before.x,p.z-before.z);m.distance+=traveled;
             if(traveled>eps) m.heading=std::atan2(p.x-before.x,p.z-before.z);
             m.route.push_back(p);

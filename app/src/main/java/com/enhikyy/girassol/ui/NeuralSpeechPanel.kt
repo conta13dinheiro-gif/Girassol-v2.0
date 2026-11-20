@@ -129,7 +129,7 @@ internal fun NeuralSpeechPanel(modifier: Modifier = Modifier) {
             ) { Text("Remover") }
         }
         Text(
-            "Pacote esperado: model.onnx FP32, voices.bin, tokens.txt e espeak-ng-data do bundle Kokoro PT-BR. Os IDs 42/43/44 correspondem a Dora/Alex/Santa. O áudio atual usa panorama estéreo por cidadão; HRTF binaural e propagação Steam Audio ainda não estão integradas.",
+            "Pacote esperado: model.onnx FP32, voices.bin, tokens.txt e espeak-ng-data do bundle Kokoro PT-BR. Os IDs 42/43/44 correspondem a Dora/Alex/Santa. A fala usa HRTF analítica com atraso entre ouvidos, sombra da cabeça, oclusão pela geometria da cidade e redução suave da trilha durante a voz.",
             color = Solar.Muted,
             fontSize = 10.sp
         )

@@ -6,7 +6,7 @@ namespace girassol::physics {
 inline constexpr double fixed_dt=1.0/60.0, radius=.18, speed=.9;
 inline constexpr int substeps=30;
 struct Point { double x=0,y=0,z=0; };
-struct Body { Point p; double vy=0; std::size_t destination=0; };
+struct Body { Point p; double vy=0; std::size_t destination=0; double vx=0,vz=0; };
 struct Motion { Body body; double ground=0,distance=0,heading=0; bool reached=false,corrected=false; std::vector<Point> route; };
 /** Immutable navigation and support surfaces derived from the actual Filament triangle mesh. */
 class Scene {

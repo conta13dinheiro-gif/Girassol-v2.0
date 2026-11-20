@@ -69,9 +69,10 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         string_[write_]=std::clamp(bow_*.995f+friction*.22f,-.3f,.3f);
         write_=(write_+1)%string_.size();
         const float milestone=static_cast<float>(std::sin(note_*2)+std::sin(sub_*3))*.015f*celebration_;
+        duck_+=static_cast<float>((1-std::exp(-dt/(p.speech?.025:.25)))*((p.speech?.25f:1.f)-duck_));
         const float common=hum+music+air+community+undertone+wave*.045f+milestone;
-        out[i*2]=std::clamp((common+steps*left_)*gain_,-.35f,.35f);
-        out[i*2+1]=std::clamp((common+steps*right_)*gain_,-.35f,.35f);
+        out[i*2]=std::clamp((common*duck_+steps*left_)*gain_,-.35f,.35f);
+        out[i*2+1]=std::clamp((common*duck_+steps*right_)*gain_,-.35f,.35f);
     }
     return true;
 }

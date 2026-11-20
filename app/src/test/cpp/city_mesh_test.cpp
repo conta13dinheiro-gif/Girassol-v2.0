@@ -67,4 +67,8 @@ int main() {
     }
     assert(city_mesh(expanded.data(),expanded.size()*sizeof(RoomSpec),expanded.size(),42,b)); check(b);
     assert(b.vertices.size()>a.vertices.size());
+    expanded.push_back(expanded.back());
+    const auto vertices=b.vertices.size(),indices=b.indices.size();
+    assert(!city_mesh(expanded.data(),expanded.size()*sizeof(RoomSpec),expanded.size(),42,b));
+    assert(b.vertices.size()==vertices && b.indices.size()==indices);
 }
