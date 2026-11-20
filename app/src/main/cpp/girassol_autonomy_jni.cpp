@@ -1,4 +1,5 @@
 #include "cognitive/anokhin_gnw_core.hpp"
+#include "hardware/soc_hardware_probe.hpp"
 
 #include <jni.h>
 #include <algorithm>
@@ -200,4 +201,22 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
     env->SetFloatArrayRegion(packedArray, 0, static_cast<jsize>(packed.size()), packed.data());
     if (env->ExceptionCheck()) return std::numeric_limits<jfloat>::quiet_NaN();
     return orderParameter;
+}
+
+
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_com_enhikyy_girassol_hardware_HardwareAutoTuner_nativeProbe(
+    JNIEnv* env,
+    jobject
+) {
+    const auto probe = girassol::hardware::probeSoc();
+    const jlong values[] = {
+        static_cast<jlong>(probe.hwcap),
+        static_cast<jlong>(probe.hwcap2),
+        static_cast<jlong>(probe.features),
+        static_cast<jlong>(probe.onlineCpuCount)
+    };
+    jlongArray result = env->NewLongArray(4);
+    if (result != nullptr) env->SetLongArrayRegion(result, 0, 4, values);
+    return result;
 }
