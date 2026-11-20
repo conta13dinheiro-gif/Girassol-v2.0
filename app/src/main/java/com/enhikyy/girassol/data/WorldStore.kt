@@ -5,9 +5,10 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
+import java.security.MessageDigest
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
-class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 4) {
+class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 5) {
     private val app=context.applicationContext
     init { require(name.matches(Regex("girassol(?:-branch-[a-f0-9-]{36})?\\.db"))); setWriteAheadLoggingEnabled(true) }
     override fun onConfigure(db: SQLiteDatabase) {
@@ -23,12 +24,17 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         db.execSQL("CREATE TABLE checkpoint (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, digest TEXT NOT NULL, event_id INTEGER NOT NULL, event_hash TEXT NOT NULL)")
         db.execSQL("CREATE TABLE events (id INTEGER PRIMARY KEY, tick INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL)")
         createHistory(db)
+        createCognitiveGrs(db)
         ResearchTables.create(db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..3 && newVersion==4)
+        check(oldVersion in 1..4 && newVersion==5)
         if(oldVersion<2) createHistory(db)
         if(oldVersion<3) ResearchTables.create(db) else ResearchTables.createVectors(db)
+        if(oldVersion<5) createCognitiveGrs(db)
+    }
+    private fun createCognitiveGrs(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE cognitive_grs (id INTEGER PRIMARY KEY CHECK(id=1), tick INTEGER NOT NULL, payload BLOB NOT NULL, digest TEXT NOT NULL, agent_hash TEXT NOT NULL)")
     }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, tick INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, cause TEXT NOT NULL, agents TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, event_hash TEXT NOT NULL)")
@@ -46,6 +52,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             check(Canonical.hash(payload) == c.getString(1)) { "Checkpoint danificado; os dados foram preservados" }
             val state = Canonical.state(payload)
             check(WorldActor.violations(state).isEmpty()) { "Checkpoint viola os contratos do mundo" }
+            validateCognitiveGrs(db, state)
             val id = c.getLong(2); val hash = c.getString(3)
             check(id == state.tick && id > 0)
             db.rawQuery("SELECT payload FROM events WHERE id=?", arrayOf(id.toString())).use { tail ->
@@ -85,6 +92,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             db.insertWithOnConflict("checkpoint", null, ContentValues().apply {
                 put("id", 1); put("payload", payload); put("digest", Canonical.hash(payload)); put("event_id", event.eventId); put("event_hash", event.hash)
             }, SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
+            persistCognitiveGrs(db, transition.state)
             val first=db.rawQuery("SELECT 1 FROM milestones LIMIT 1",null).use { !it.moveToFirst() }
             val before=if(first) null else previous
             val causes=if(before!=null || first) Milestones.detect(before,transition) else emptyList()
@@ -133,6 +141,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     ResearchTables.fork(db,point)
                     val payload=Canonical.state(point.state)
                     db.insertOrThrow("checkpoint",null,ContentValues().apply { put("id",1);put("payload",payload);put("digest",Canonical.hash(payload));put("event_id",point.eventId);put("event_hash",point.eventHash) })
+                    persistCognitiveGrs(db, point.state)
                     db.setTransactionSuccessful()
                 } finally { db.endTransaction() }
             } finally { db.execSQL("DETACH DATABASE origin") }
@@ -142,6 +151,54 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         } catch(e: Exception) { destination.close(); app.deleteDatabase(name); throw e }
         finally { destination.close() }
     }
+    private fun persistCognitiveGrs(db: SQLiteDatabase, state: WorldState) {
+        require(state.agents.isNotEmpty() && state.agents.size <= 4096)
+        val values = state.agents.flatMap { citizen ->
+            state.minds[citizen.id]?.nativeEngineTrace ?: List(8) { 0.0 }
+        }.map { value ->
+            require(value.isFinite() && value in 0.0..1.0)
+            value.toFloat()
+        }
+        val encoded = GirassolRecordCodec.encode(
+            GrsMatrix(state.agents.size, 8, values),
+            GrsEncoding.FLOAT32
+        )
+        val idsHash = Canonical.hash(state.agents.joinToString("\u0000") { it.id })
+        db.insertWithOnConflict("cognitive_grs", null, ContentValues().apply {
+            put("id", 1)
+            put("tick", state.tick)
+            put("payload", encoded)
+            put("digest", sha256(encoded))
+            put("agent_hash", idsHash)
+        }, SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
+    }
+
+    private fun validateCognitiveGrs(db: SQLiteDatabase, state: WorldState) {
+        db.rawQuery("SELECT tick,payload,digest,agent_hash FROM cognitive_grs WHERE id=1", null).use { c ->
+            // Databases created before schema v5 are accepted; the next successful commit backfills the sidecar.
+            if (!c.moveToFirst()) return
+            val bytes = c.getBlob(1)
+            check(c.getLong(0) == state.tick) { "GRS fora de sincronia com o checkpoint WAL" }
+            check(sha256(bytes) == c.getString(2)) { "Digest do sidecar GRS inválido" }
+            check(Canonical.hash(state.agents.joinToString("\u0000") { it.id }) == c.getString(3)) {
+                "Ordem de cidadãos do sidecar GRS divergente"
+            }
+            val matrix = GirassolRecordCodec.decode(bytes)
+            check(matrix.rows == state.agents.size && matrix.columns == 8) { "Dimensões do sidecar GRS inválidas" }
+            state.agents.forEachIndexed { row, citizen ->
+                val trace = state.minds[citizen.id]?.nativeEngineTrace ?: List(8) { 0.0 }
+                repeat(8) { column ->
+                    check(kotlin.math.abs(matrix[row, column].toDouble() - trace[column].toFloat().toDouble()) <= 1e-6) {
+                        "Trace cognitivo GRS diverge do checkpoint para ${citizen.id}"
+                    }
+                }
+            }
+        }
+    }
+
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
     fun research() = ResearchTables(writableDatabase)
     fun lastActions(): List<ActionRecord> = readableDatabase.rawQuery("SELECT payload FROM events ORDER BY id DESC LIMIT 1",null).use { if(it.moveToFirst()) Canonical.event(it.getString(0)).actions else emptyList() }
     companion object {
