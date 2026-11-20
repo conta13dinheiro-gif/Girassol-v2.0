@@ -72,6 +72,20 @@ class MigrationTest(unittest.TestCase):
             self.assertEqual(db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(), [('events',)])
             migrate(db)
 
+    def test_subjective_belief_audit_requires_staged_evidence_provenance(self):
+        with baseline() as db:
+            migrate(db)
+            db.execute('CREATE TABLE staging_knowledge(id TEXT PRIMARY KEY, acquisition_hash TEXT NOT NULL)')
+            db.execute("INSERT INTO staging_knowledge VALUES('claim','source')")
+            insert(db, 'subjective_beliefs', (1, 'agent', 'claim', 'source', .4, .2, .4, .5))
+            query = (
+                'SELECT 1 FROM subjective_beliefs b LEFT JOIN staging_knowledge s '
+                'ON s.id=b.claim_id AND s.acquisition_hash=b.source_id WHERE s.id IS NULL LIMIT 1'
+            )
+            self.assertIsNone(db.execute(query).fetchone())
+            db.execute("DELETE FROM staging_knowledge WHERE id='claim'")
+            self.assertIsNotNone(db.execute(query).fetchone())
+
     def test_domains_and_blob_budget(self):
         with baseline() as db:
             migrate(db)
