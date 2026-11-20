@@ -87,7 +87,11 @@ object HardwareAutoTuner {
             val version = IntArray(2)
             if (!EGL14.eglInitialize(display, version, 0, version, 1)) return "EGL não inicializado"
             initialized = true
-            val attributes = intArrayOf(EGL14.EGL_RENDERABLE_TYPE, 0x0040, EGL14.EGL_NONE)
+            val attributes = intArrayOf(
+                EGL14.EGL_RENDERABLE_TYPE, 0x0040, // EGL_OPENGL_ES3_BIT_KHR
+                EGL14.EGL_SURFACE_TYPE, EGL14.EGL_PBUFFER_BIT,
+                EGL14.EGL_NONE
+            )
             val configs = arrayOfNulls<EGLConfig>(1)
             val count = IntArray(1)
             if (!EGL14.eglChooseConfig(display, attributes, 0, configs, 0, 1, count, 0) || count[0] == 0) {
