@@ -82,3 +82,45 @@ Essas entregas não são equivalentes à implementação integral de todos os bl
 A implementação compacta está em `MemoryBank.kt`, `NativeMemory.kt` e `NativeMind.kt`. A utilidade Q é atualizada somente depois de um resultado de ação observado e somente para os IDs recuperados antes desse resultado. A consulta nativa mantém os candidatos por similaridade; Q altera a ordem dentro desse conjunto, sem substituir o filtro de relevância. Os campos novos vazios são omitidos na serialização para preservar eventos legados.
 
 O algoritmo é inspirado em [MemRL](https://arxiv.org/abs/2601.03192), mas usa retorno imediato suavizado (`alpha=0.2)) e recompensa do domínio simulado. Não implementa o retorno Monte Carlo, sumarização de trajetória por LLM, ou benchmarks publicados pelo artigo. Ver também `docs/pesquisa-externa-2026-11-19.md`.
+
+---
+
+## Auditoria diferencial adicional — corpus consolidado Girassol_consolidado (1).txt
+
+Fonte recuperada nesta execução: Girassol_consolidado (1).txt, corpus consolidado de 17 arquivos. O próprio cabeçalho informa que duplicatas exatas foram removidas e blocos de código com similaridade >=90% foram substituídos por referências; portanto este arquivo é um blueprint consolidado, não um pacote de fontes compiláveis completas. Ele inclui prompts históricos com HEADs e repositórios diferentes; prevalecem a branch e o repositório oficiais definidos pelo mantenedor nesta tarefa e o código atual validado.
+
+### Correspondência do blueprint com o HEAD auditado (1ddda61d7c92)
+
+| Processo do plano | Evidência no HEAD | Estado diferencial |
+|---|---|---|
+| 01 — Auditoria/crosswalk | WorldActor, RsiCoordinator, MemoryBank, NativeAutonomy, HardwareAutoTuner, MemoryPressureGuardian, ResearchCoordinator, WorldStore, CI e testes existentes | Auditoria atualizada; não equivale a concluir os demais processos. |
+| 02 — Multi-ABI/backends/assinatura | Gradle declara arm64-v8a, armeabi-v7a, x86_64 e splits; CMake compila girassol_projection e girassol_llama; Release usa assinatura Android debug | Parcial: filtros Multi-ABI presentes, mas workflow/artefatos anteriores focaram ARM64; flags GGML dinâmicas Vulkan/OpenCL/KleidiAI não estão configuradas; releaseAuto não existe; assinatura não é chave de distribuição. |
+| 03 — Probe nativo Multi-SoC | HardwareAutoTuner.kt faz inventário Kotlin e verifica presença de arquivos de driver | Parcial: não existe soc_hardware_probe.hpp; presença de .so não comprova driver utilizável; sem afinidade Big/Prime integrada. |
+| 04 — Serviço 24/7 | BiosphereService.kt, manifesto, MemoryPressureGuardian e telemetria Shizuku | Parcial: serviço/guardião existem, mas não equivalem a WifiLock low-latency, ADPF e garantia de sobrevivência OEM 24/7. Manter execução limitada e respeitar Doze/controle do sistema. |
+| 05 — Cognição Anokhin/GNW | cognitive/anokhin_gnw_core.hpp, girassol_autonomy_jni.cpp, DualModelOrchestrator.kt | Parcial: núcleo heurístico e ponte existem; separação formal de monólogo/fala e GBNF integral precisam de testes de integração. |
+| 06 — Tsetlin/GRST | Nenhum tsetlin_machine.hpp, girassol_gea_jni.cpp, GeaNativeBridge.kt ou tabela tsetlin_automata_blobs encontrado no tree auditado | Ausente. |
+| 07 — Autotelic TTT | Nenhum autotelic_ttt_engine.hpp encontrado no tree auditado | Ausente. |
+| 08 — Memória em quatro camadas/Jøsang | MemoryBank.kt, NativeMemory.kt, NativeMind.kt, MemRL simplificado e consolidação parcial documentada | Parcial; não existe SleepConsolidationAndImmuneEngine.kt nem grafo completo A-MEM/Sharp-Wave/Voyager com crenças persistidas por proveniência. |
+| 09 — Active Inference/PIANO | WorldActor e decisões cognitivas tipadas; sem ActiveInferencePianoEngine.kt / PIANO / CoreSelf-PSelf | Parcial/ausente. |
+| 10 — RSI delimitado | RsiCoordinator.kt, Shadow Replay e CMA-ES | Parcial; não existe BoundedRsiEngine.kt com Brier Score e rsi_promotion_ledger conforme o blueprint. |
+| 11 — Pedagogia/genética diploide | BKT/DSR/IRT simplificados em MemoryBank; genealogia e recombinação determinística em WorldActor | Parcial; sem FSRS completo, diploidia com dominância alélica, Baldwin e Simbiogênese integrados. |
+| 12 — Sociedade ADICO/cliodinâmica | Confiança social e relações no WorldActor | Parcial; sem SocietyAdicoCliodynamicsEngine.kt com instituições ADICO e PSI de Turchin. |
+| 13 — Economia conservativa/estigmergia | Transferências de balanço e pré-condições de ações em WorldActor | Parcial; sem livro-razão de partidas dobradas completo, ReservationManager/leases e nicho ecológico persistente. |
+| 14 — MAP-Elites/AURORA | CMA-ES nativo e testes associados | Ausente como MAP-Elites/AURORA; CMA-ES não é substituto equivalente. |
+| 15 — Mundo 3D/navegação | Filament, malha urbana, A*, colisão espacial, PBR/SSAO/sombras e pós-processamento | Parcial; sem Earcut, Recast/Detour, RVO2/ORCA, IK e passes Hi-Z SSRT/SSGI/radiance cascades. |
+| 16 — Voz neural/HRTF | Sherpa-ONNX/Kokoro opcional e NeuralSpeechEngine.kt; AAudio procedural | Parcial; sem diálogo espontâneo multi-party, Piper, herança vocal 256D e espacialização HRTF/ITD/ILD. |
+| 17 — Dual-GGUF/LoRA/forja | llama.cpp CPU e orquestração de modelos; adaptação/importação não é treinamento | Ausente como treinamento LoRA real, dual-GGUF residente, MeZO/AdamW, TIES e ChildModelForge. |
+| 18 — Expansão v2.1/UI | Compose UI, genealogia e páginas do app | Parcial; gestação, pets, pool comunal, ranking de gerações, bônus 15%, eras e flashbacks do blueprint não estão completos. |
+| 19 — Ingestão/rede LAN | SAF TXT/MD/CSV/JSON/EPUB, pesquisa HF, swap arena e SQLite WAL | Parcial; PDF/áudio/Parquet, MeshSync LAN/CRDT e NonRootSwapArena completa não foram encontrados como módulos integrados. |
+| 20 — Testes determinísticos | Suites Kotlin/JUnit, C++ ASan/UBSan e testes instrumentados existentes | Parcial: não há GeaDeterministicEnginesTest.kt nem cobertura específica para os módulos ausentes acima. |
+| 21 — Push/PR/README | Branch oficial contém commits anteriores e README modificado; PR #1 permanece Draft | Parcial; não marcar Ready for Review enquanto os gates não terminarem e o checklist de escopo não estiver realmente concluído. |
+| 22 — CI/artefatos | Run 44735455996 passou testes nativos, unitários/lint e build ARM64; teste instrumentado no emulador 4 GiB estava em andamento | Parcial; sem resultado verde final nem artefatos dessa execução no momento da auditoria. |
+
+### Decisões de integração e limites
+
+- Preservar WorldActor como escritor determinístico único e versionar novos eventos/schemas antes de alterar estado persistido; não inserir chamadas JNI bloqueantes ou aleatoriedade não-semeada no tick.
+- O blueprint contém código ilustrativo e dependências externas de grande porte. Cada módulo precisa de API definida, testes matemáticos/limites, integração e prova de build antes de ser considerado concluído; a mera criação de header não satisfaz o critério.
+- Não usar sched_setaffinity para forçar continuamente threads em núcleos Prime nem manter WakeLocks/Wi-Fi locks indefinidos: Android/OEM controlam escalonamento e Doze, e essas práticas podem elevar temperatura e consumo. Preferir ADPF cooperativo, tarefas limitadas, foreground service apenas quando justificável e cancelamento sob pressão térmica/memória.
+- dlopen bem-sucedido é somente uma verificação de disponibilidade de biblioteca. Um backend só pode ser habilitado após inicialização real, validação de dispositivos/queues e teste de inferência com fallback.
+- Não gerar ou distribuir automaticamente uma chave privada com senha embutida no repositório. A chave de Release deve ser persistente e vir de GitHub Secrets; o APK assinado com debug serve apenas para testes internos.
+- A especificação consolidada reúne alternativas e gerações de arquitetura. Recast/RVO2, HRTF, LoRA real, treinamento e execução de código mutável não devem ser simulados por wrappers vazios ou rotulados como concluídos sem implementação e testes.
