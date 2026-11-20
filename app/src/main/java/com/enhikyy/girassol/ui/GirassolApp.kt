@@ -32,7 +32,9 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -164,9 +166,22 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
                             val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.Inbox,Icons.Outlined.CloudDownload,Icons.Outlined.Tune)
                             listOf("Biosfera","Gênesis","Pedidos","HF & Plugins","Marcos/Sistema").forEachIndexed { i,label->
-                                Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
-                                    Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
+                                Column(
+                                    Modifier
+                                        .weight(1f)
+                                        .heightIn(min=48.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent)
+                                        .clickable(role=Role.Tab) { tab=i }
+                                        .semantics {
+                                            selected = tab==i
+                                            contentDescription = "$label, ${if(tab==i) "selecionado" else "aba"}"
+                                        }
+                                        .padding(vertical=6.dp),
+                                    horizontalAlignment=Alignment.CenterHorizontally
+                                ) {
+                                    Icon(icons[i],null,Modifier.size(22.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
+                                    Text(label,fontSize=11.sp,color=if(tab==i) Solar.Amber else Solar.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
                                 }
                             }
                         }
