@@ -94,7 +94,12 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     check(e.valid() && e.hash==revision.sourceEventHash && e.stateHash==revision.sourceStateHash) { "Proveniência evolutiva inválida" }
                 }
             }
-            event.cognition?.lesson?.let { ResearchTables(db).assimilate(it) }
+            val cognition=event.cognition
+            cognition?.lesson?.let { lesson ->
+                val opinion=cognition.minds[lesson.researcher]?.memory?.opinions?.singleOrNull { it.claim==lesson.rowHash && it.root==lesson.acquisitionHash }
+                if(cognition.immunityEnabled) check(opinion!=null) { "Missing immunity admission" }
+                ResearchTables(db).assimilate(lesson,opinion)
+            }
             db.insertOrThrow("events", null, ContentValues().apply { put("id", event.eventId); put("tick", event.tick); put("payload", Canonical.event(event)) })
             GeaSchema.record(db, transition, previous)
             db.insertWithOnConflict("checkpoint", null, ContentValues().apply {
@@ -172,11 +177,14 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             GeaSchema.audit(db)
             val checkpoint=load()
             val audit=JournalAudit()
+            var opinions=emptyMap<String,List<ProvenancedOpinion>>()
             db.rawQuery("SELECT id,tick,payload FROM events ORDER BY id",null).use { rows ->
                 while (rows.moveToNext()) {
                     val event=Canonical.event(rows.getString(2))
                     audit.accept(rows.getLong(0),rows.getLong(1),event)
                     GeaSchema.auditEconomyEvent(db,event)
+                    GeaSchema.auditBeliefsEvent(db,event,opinions)
+                    event.cognition?.let { opinions=it.minds.mapValues { entry -> entry.value.memory.opinions } }
                 }
             }
             val count=audit.finish(checkpoint)

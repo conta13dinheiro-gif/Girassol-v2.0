@@ -143,7 +143,13 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
             val lesson=source.lesson(world)
             if(lesson!=null) {
                 val mind=frame.minds.getValue(lesson.researcher)
-                val updated=NativeMind.study(mind,source.candidate.row.text,lesson.confidence,world.tick)
+                val updated=NativeMind.assimilate(world,lesson.researcher,mind,source.candidate.cognitiveEvidence(lesson.originTick,lesson.originEventHash),source.candidate.row.text)
+                if(updated==null) {
+                    store().research().rejectImmunity(lesson.id,world.tick)
+                    evidence=null;studying=null;cooldown=world.tick+240
+                    message("Assimilação recusada pela imunidade: confiança, proveniência ou fonte repetida")
+                    return frame
+                }
                 return frame.copy(minds=frame.minds+(lesson.researcher to updated),lesson=lesson)
             }
         }

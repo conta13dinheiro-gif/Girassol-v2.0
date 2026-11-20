@@ -25,6 +25,39 @@ internal object NativeMind {
         return old.copy(parameters=List(248) { data.getDouble(it*8) },hidden=List(8) { data.getDouble((248+it)*8) },exposure=exposure,learnedTick=tick)
             .also { check(it.valid(tick)) }
     }
+    /** Both isolated knowledge experiments and live assimilation use this same admission gate. */
+    fun assimilate(world: WorldState,recipient: String,old: MindState,evidence: CognitiveEvidence,text: String): MindState? {
+        val bank=ProvenanceImmunity.admit(world,recipient,old.memory,evidence) ?: return null
+        return study(old.copy(memory=bank),text,evidence.confidence,world.tick)
+    }
+    private fun ripple(old: MindState,world: WorldState,citizen: Citizen,tier: ThermalTier): MindState {
+        if(tier!=ThermalTier.NONE_OR_LIGHT || !citizen.acting || citizen.activity!=Activity.SLEEP ||
+            world.tick-(old.memory.ripple?.tick ?: -30L)<30) return old
+        val ids=HippocampalSleepConsolidator.consolidate(old.memory,world.tick).report.selectedReplayEventIds.toSet()
+        val selected=old.memory.episodes.filter { episode ->
+            val magnitude=episode.embedding[episode.action.ordinal]
+            episode.eventId in ids && magnitude>1e-6 && (10..14).all { episode.embedding[it]>=0 && episode.embedding[it]<=magnitude+1e-6 }
+        }.sortedBy { it.eventId }.take(12)
+        if(selected.isEmpty()) return old
+        val before=Canonical.hash(old.parameters.joinToString(","))
+        var weights=old.parameters;var hidden=old.hidden
+        val data=checkNotNull(networkBuffer.get())
+        for(episode in selected) {
+            // Recover the original structured needs from the normalized one-hot observation.
+            val scale=episode.embedding[episode.action.ordinal].toDouble()
+            check(scale>0)
+            fun need(index: Int)=(episode.embedding[index]/scale).coerceIn(0.0,1.0)
+            val inputs=listOf(1-need(11),1-need(10),1-need(12),1-need(13),1-need(14))+old.personality+listOf(citizen.skill.mastery,episode.importance)
+            data.clear();weights.forEach(data::putDouble);hidden.forEach(data::putDouble);inputs.forEach(data::putDouble)
+            data.putDouble(episode.reward).putDouble(episode.importance).putDouble(episode.action.ordinal.toDouble()).putDouble(1.0)
+            repeat(8) { data.putDouble(0.0) };check(advance(data)) { "Falha no replay SWR" }
+            weights=List(248) { data.getDouble(it*8) };hidden=List(8) { data.getDouble((248+it)*8) }
+        }
+        val after=Canonical.hash(weights.joinToString(","))
+        val bank=AssociativeCognitiveMemory.consolidate(old.memory,selected,world.tick,before,after)
+        // Replay changes synaptic parameters; awake activation and external action scores keep their ownership.
+        return old.copy(parameters=weights,memory=bank)
+    }
     @JvmOverloads fun evaluate(
         world: WorldState,
         lastActions: List<ActionRecord> = emptyList(),
@@ -44,6 +77,9 @@ internal object NativeMind {
             }
             citizen.id to mind
         }
+        val replayAgents=world.agents.filter { it.acting && it.activity==Activity.SLEEP && prepared.getValue(it.id).memory.episodes.isNotEmpty() &&
+            world.tick-(prepared.getValue(it.id).memory.ripple?.tick ?: -30L)>=30 }
+            .sortedWith(compareBy<Citizen> { prepared.getValue(it.id).memory.ripple?.tick ?: -30L }.thenBy { it.id }).take(2).map { it.id }.toSet()
         val autonomy=NativeAutonomy.evaluate(world,lastActions,prepared)
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
         world.agents.forEach { citizen->
@@ -63,17 +99,24 @@ internal object NativeMind {
             repeat(8) { data.putDouble(0.0) }
             check(advance(data)) { "Falha na atualização LTC" }
             fun values(start: Int,count: Int)=List(count) { data.getDouble((start+it)*8) }
+            val nativeScores=values(272,8)
             val exposure=old.exposure.toMutableList()
             if(learn && exposure[citizen.activity.ordinal]<Int.MAX_VALUE) exposure[citizen.activity.ordinal]++
             val archive=if(learn && (distances.firstOrNull() ?: 1.0)>.06) old.behaviors+listOf(behavior) else old.behaviors
             var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id },genome.memRlLearningRate,genome.actRDecayExponent)
             if(citizen.acting && citizen.activity==Activity.TALK && outcome=="OK") {
                 val teacher=world.agents.filter { it.id!=citizen.id && hypot(it.x-citizen.x,it.z-citizen.z)<=2.5 }.minByOrNull { it.id }
-                if(teacher!=null) world.minds[teacher.id]?.let { bank=bank.learnFrom(teacher.id,it.memory,world.tick) }
+                if(teacher!=null) world.minds[teacher.id]?.let {
+                    bank=bank.learnFrom(teacher.id,it.memory,world.tick)
+                    bank=ProvenanceImmunity.learnFrom(world,citizen.id,bank,it.memory)
+                }
             }
+            bank=AssociativeCognitiveMemory.connect(bank)
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
             bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
-            val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
+            var next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
+            if(citizen.id in replayAgents) next=ripple(next,world,citizen,thermalTier)
+            bank=next.memory
             check(next.valid(world.tick))
             minds[citizen.id]=next
             val previousGate=old.tsetlin
@@ -90,7 +133,7 @@ internal object NativeMind {
             val temperature=(.04+.20*old.personality[0]*(1-novelty))*policyScale*genome.epistemicExplorationWeight/.65
             val noise=List(8) { -ln(-ln(exploration.nextDouble().coerceIn(1e-12,1-1e-12)))*temperature }
             val decisionBank=bank
-            val nativeScores=values(272,8) // Workers never retain the reusable JNI buffer.
+            // nativeScores was copied before SWR reused the fixed JNI buffer.
             val scores=PianoWorkspace.aggregate(
                 { Activity.entries.map { activity ->
                     val i=activity.ordinal
@@ -98,7 +141,8 @@ internal object NativeMind {
                 } },
                 { Activity.entries.map { activity ->
                     val experience=recalled.filter { it.episode.action==activity }
-                    val expected=if(experience.isEmpty()) decisionBank.reflections.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
+                    val expected=if(experience.isEmpty()) decisionBank.semantic.firstOrNull { it.action==activity }?.expectedReward
+                        ?: decisionBank.reflections.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
                         else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
                     expected*.4+(decisionBank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0)*.15+
                         decisionBank.learningFor(activity).practiceBonus(world.tick)+decisionBank.workingMemoryBonus(activity,world.tick)
@@ -147,7 +191,7 @@ internal object NativeMind {
         }
         return CognitiveFrame(
             world.tick,Canonical.hash(Canonical.state(world)),minds,decisions,
-            socialSynchrony=autonomy.orderParameter,economyEnabled=true
+            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true
         )
     }
 }

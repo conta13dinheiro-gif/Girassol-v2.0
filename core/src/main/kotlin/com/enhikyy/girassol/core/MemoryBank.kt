@@ -31,9 +31,15 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val utilities: List<MemoryUtility> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val pendingRecallEventIds: List<Long> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val learning: List<SkillLearningTrace> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val workingMemory: WorkingMemoryState = WorkingMemoryState()
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val workingMemory: WorkingMemoryState = WorkingMemoryState(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val associations: List<AssociativeLink> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val semantic: List<SemanticSchema> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val ripple: RippleTrace? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val opinions: List<ProvenancedOpinion> = emptyList()
 ) {
-    fun valid(tick: Long): Boolean = reflectedTick in -1..tick && episodes.all { e->
+    fun valid(tick: Long): Boolean {
+        val episodeIds=episodes.map { it.eventId }.toSet()
+        return AssociativeCognitiveMemory.valid(this,tick,episodeIds) && ProvenanceImmunity.valid(opinions,tick) && reflectedTick in -1..tick && episodes.all { e->
         e.tick in 0..tick && e.eventId in 1..tick && e.reward.isFinite() && e.reward in -5.0..5.0 && e.emotion.isFinite() && e.emotion in -1.0..1.0 &&
         e.x.isFinite() && e.z.isFinite() && e.importance.isFinite() && e.importance in 0.0..1.0 && e.embedding.size==16 &&
         e.embedding.all { it.isFinite() } && abs(e.embedding.sumOf { it.toDouble()*it }-1)<.002
@@ -43,13 +49,14 @@ import kotlin.math.*
         it.successes>=3 && it.expectedReward.isFinite() && it.expectedReward in -5.0..5.0 && it.lastTick in 0..tick && it.sourceEvent in 1..tick
     } && utilities.map { it.eventId }.distinct().size==utilities.size && utilities.size<=HippocampalSleepConsolidator.MAX_NODES_PER_AGENT &&
         utilities.all { utility ->
-            utility.eventId in episodes.map { it.eventId }.toSet() && utility.qValue.isFinite() && utility.qValue in -5.0..5.0 &&
+            utility.eventId in episodeIds && utility.qValue.isFinite() && utility.qValue in -5.0..5.0 &&
                 utility.retrievals>0 && utility.lastRetrievedTick in 0..tick && utility.lastFeedbackTick in -1..tick
         } && pendingRecallEventIds.distinct().size==pendingRecallEventIds.size && pendingRecallEventIds.size<=MAX_PENDING_RECALLS &&
         pendingRecallEventIds.all { id -> utilities.any { it.eventId==id } } &&
         learning.map { it.action }.distinct().size==learning.size && learning.size<=Activity.entries.size &&
         learning.all { it.valid(tick) } &&
-        workingMemory.valid(tick,episodes.map { it.eventId }.toSet())
+        workingMemory.valid(tick,episodeIds)
+    }
 
     fun snapshot() = copy(
         episodes=episodes.map { it.copy(embedding=it.embedding.toList()) },
@@ -58,7 +65,9 @@ import kotlin.math.*
         utilities=utilities.toList(),
         pendingRecallEventIds=pendingRecallEventIds.toList(),
         learning=learning.toList(),
-        workingMemory=workingMemory.copy(slots=workingMemory.slots.toList())
+        workingMemory=workingMemory.copy(slots=workingMemory.slots.toList()),
+        associations=associations.toList(),semantic=semantic.map { it.copy(sources=it.sources.toList()) },
+        ripple=ripple?.copy(sources=ripple.sources.toList()),opinions=opinions.toList()
     )
 
     /**
@@ -170,7 +179,8 @@ import kotlin.math.*
                 episodes=retainedEpisodes,
                 utilities=next.utilities.filter { it.eventId in retainedIds },
                 pendingRecallEventIds=next.pendingRecallEventIds.filter { it in retainedIds },
-                workingMemory=next.workingMemory.retain(world.tick,retainedIds)
+                workingMemory=next.workingMemory.retain(world.tick,retainedIds),
+                associations=next.associations.filter { it.sourceEvent in retainedIds && it.targetEvent in retainedIds }
             )
         }
         if (due || next.episodes.size > HippocampalSleepConsolidator.MAX_NODES_PER_AGENT) {

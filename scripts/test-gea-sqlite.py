@@ -140,6 +140,22 @@ class MigrationTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM double_entry_ledger WHERE event_id=3').fetchone()[0], 0)
             self.assertEqual(db.execute('SELECT count(*) FROM ecological_niche_structures WHERE event_id=3').fetchone()[0], 0)
 
+    def test_beliefs_commit_with_event_and_invalid_projection_rolls_back(self):
+        with baseline() as db:
+            migrate(db)
+            with db:
+                db.execute("INSERT INTO events VALUES(2,2,'belief-event')")
+                insert(db, TABLES[1], (2, 'agent', 'c'*64, 'd'*64, .57, 0., .43, .5))
+            self.assertEqual(db.execute('SELECT belief+disbelief+uncertainty FROM subjective_beliefs').fetchone()[0], 1.)
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                db.execute("INSERT INTO events VALUES(3,3,'rejected-belief-event')")
+                insert(db, TABLES[1], (3, 'agent', 'c'*64, 'd'*64, .8, 0., .5, .5))
+            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0], 2)
+            self.assertEqual(db.execute('SELECT count(*) FROM subjective_beliefs').fetchone()[0], 1)
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                insert(db, TABLES[1], (2, 'agent', 'c'*64, 'd'*64, .57, 0., .43, .5))
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
     def test_corrupt_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory)/'world.db'

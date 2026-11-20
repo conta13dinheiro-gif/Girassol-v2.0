@@ -5,6 +5,7 @@ import kotlin.math.exp
 import kotlin.math.ln
 
 /** Subjective logic opinion: belief + disbelief + uncertainty = 1. */
+@kotlinx.serialization.Serializable
 data class SubjectiveOpinion(
     val belief: Double,
     val disbelief: Double,
@@ -41,6 +42,21 @@ data class SubjectiveOpinion(
                 priorWeight / denominator,
                 baseRate
             )
+        }
+
+        /** Weighted averaging of evidence; correlated copies must not gain certainty. */
+        fun averagingFuse(first: SubjectiveOpinion,second: SubjectiveOpinion,firstWeight: Double=1.0,secondWeight: Double=1.0): SubjectiveOpinion {
+            require(firstWeight.isFinite() && secondWeight.isFinite() && firstWeight>0 && secondWeight>0)
+            val weight=firstWeight+secondWeight
+            require(weight.isFinite())
+            val base=(firstWeight/weight)*first.baseRate+(secondWeight/weight)*second.baseRate
+            val denominator=firstWeight*second.uncertainty+secondWeight*first.uncertainty
+            if(denominator<=1e-15) return if(first==second) first else SubjectiveOpinion(0.0,0.0,1.0,base)
+            val b=(firstWeight*first.belief*second.uncertainty+secondWeight*second.belief*first.uncertainty)/denominator
+            val d=(firstWeight*first.disbelief*second.uncertainty+secondWeight*second.disbelief*first.uncertainty)/denominator
+            val u=weight*first.uncertainty*second.uncertainty/denominator
+            val norm=b+d+u
+            return SubjectiveOpinion(b/norm,d/norm,u/norm,base)
         }
 
         /** Cumulative fusion is only called by EpistemicImmunityEngine after source de-duplication. */
@@ -214,7 +230,8 @@ object HippocampalSleepConsolidator {
             episodes = retained,
             utilities = bank.utilities.filter { it.eventId in retainedEventIds },
             pendingRecallEventIds = bank.pendingRecallEventIds.filter { it in retainedEventIds },
-            workingMemory = bank.workingMemory.retain(currentTick,retainedEventIds)
+            workingMemory = bank.workingMemory.retain(currentTick,retainedEventIds),
+            associations=bank.associations.filter { it.sourceEvent in retainedEventIds && it.targetEvent in retainedEventIds }
         )
         check(next.valid(currentTick)) { "Consolidation produced an invalid memory bank" }
         return MemoryConsolidationResult(

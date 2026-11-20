@@ -31,4 +31,27 @@ class KnowledgeLessonTest {
         assertEquals(actor.checkpoint(),replay.checkpoint())
         assertFalse(Canonical.state(WorldActor.genesis()).contains("knowledge"))
     }
+    @Test fun immunityRequiresExactConfidenceAndRecipientTrustInCanonicalFrame() {
+        val w=studying();val input=lesson(w)
+        val evidence=CognitiveEvidence(input.rowHash,input.acquisitionHash,Canonical.hash("dataset"),input.domain,input.verifier,input.confidence,0,WorldActor.GENESIS_HASH)
+        val bank=checkNotNull(ProvenanceImmunity.admit(w,input.researcher,MemoryBank(),evidence))
+        val minds=w.agents.associate { it.id to MindState.initial(w,it) }.toMutableMap()
+        minds[input.researcher]=minds.getValue(input.researcher).copy(memory=bank)
+        val frame=CognitiveFrame(w.tick,Canonical.hash(Canonical.state(w)),minds,w.agents.associate { it.id to Activity.STUDY },lesson=input,immunityEnabled=true)
+        assertTrue(frame.applicable(w))
+        val forged=minds.toMutableMap()
+        forged[input.researcher]=minds.getValue(input.researcher).copy(memory=bank.copy(opinions=listOf(bank.opinions.single().copy(trust=1.0))))
+        assertFalse(frame.copy(minds=forged).applicable(w))
+        assertFalse(frame.copy(minds=minds.mapValues { (_,m) -> m.copy(memory=MemoryBank()) }).applicable(w))
+    }
+    @Test fun physicalResearchAnnexIsAcceptedAndExpiryRemovesItsAffordance() {
+        val w=studying();val annex=Room("annex_test_research","Research",24.0,24.0,4.0,4.0,2)
+        val moved=w.copy(rooms=w.rooms+annex,economy=EconomyState(niches=listOf(EcologicalNicheStructure(annex.id,"agent0",200))),
+            agents=w.agents.map { it.copy(x=annex.x,z=annex.z) })
+        assertTrue(lesson(moved).applicable(moved))
+        val expired=moved.copy(tick=199)
+        assertFalse(lesson(expired).applicable(expired))
+        assertFalse(lesson(moved).applicable(moved.copy(agents=moved.agents.map { it.copy(acting=false) })))
+    }
+
 }

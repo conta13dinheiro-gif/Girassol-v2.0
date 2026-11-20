@@ -165,7 +165,8 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lesson: KnowledgeLesson? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val innerSpeech: Map<String,String> = emptyMap(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val economyEnabled: Boolean = false) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val economyEnabled: Boolean = false,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val immunityEnabled: Boolean = false) {
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
         decision=m.decision.copy(topThree=m.decision.topThree.toList(),freeEnergy=m.decision.freeEnergy.toList(),expectedFreeEnergy=m.decision.expectedFreeEnergy.toList(),successProbability=m.decision.successProbability.toList()),
@@ -177,6 +178,10 @@ import kotlin.math.*
         return sourceTick==world.tick && sourceHash==Canonical.hash(Canonical.state(world)) && minds.keys==ids &&
             socialSynchrony.isFinite() && socialSynchrony in 0.0..1.0 &&
             innerSpeech.keys.all { it in ids } && innerSpeech.values.all { text -> text.isNotBlank() && text.length<=240 && text.none { it.isISOControl() } } &&
-            (evolution==null || evolution.applicable(world)) && (lesson==null || lesson.applicable(world)) && decisions.keys==ids && minds.values.all { it.valid(world.tick) }
+            (evolution==null || evolution.applicable(world)) && (lesson==null || (lesson.applicable(world) && (!immunityEnabled ||
+                minds[lesson.researcher]?.memory?.opinions?.any { p -> p.claim==lesson.rowHash && p.root==lesson.acquisitionHash &&
+                    p.sourceAgent==lesson.verifier && p.sourceTick==lesson.originTick && p.sourceEventHash==lesson.originEventHash &&
+                    p.domain==lesson.domain && p.raw==SubjectiveOpinion(lesson.confidence/100.0,0.0,1-lesson.confidence/100.0) &&
+                    abs(p.trust-ProvenanceImmunity.trust(world,lesson.researcher,lesson.verifier,lesson.domain))<1e-12 }==true))) && decisions.keys==ids && minds.values.all { it.valid(world.tick) }
     }
 }

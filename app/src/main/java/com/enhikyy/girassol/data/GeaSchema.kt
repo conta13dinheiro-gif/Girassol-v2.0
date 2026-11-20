@@ -99,7 +99,22 @@ internal object GeaSchema {
                 put("payload", payload); put("digest", Canonical.hash(payload))
             })
         }
+        val before=previous ?: if(transition.state.minds.values.any { it.memory.opinions.isNotEmpty() }) {
+            db.rawQuery("SELECT payload,digest FROM checkpoint WHERE id=1",null).use { rows ->
+                if(rows.moveToFirst()) {
+                    val text=rows.getString(0);check(Canonical.hash(text)==rows.getString(1));Canonical.state(text)
+                } else null
+            }
+        } else null
         for ((agent, mind) in transition.state.minds) {
+            for(opinion in mind.memory.opinions.filter { it !in before?.minds?.get(agent)?.memory?.opinions.orEmpty() }) {
+                verifyOpinion(db,event,agent,opinion)
+                val discounted=opinion.discounted()
+                db.insertOrThrow("subjective_beliefs",null,ContentValues().apply {
+                    put("event_id",event.eventId);put("agent_id",agent);put("claim_id",opinion.claim);put("source_id",opinion.root)
+                    put("belief",discounted.belief);put("disbelief",discounted.disbelief);put("uncertainty",discounted.uncertainty);put("base_rate",discounted.baseRate)
+                })
+            }
             if(mind.tsetlin.hex.isNotEmpty() && mind.tsetlin.hex != previous?.minds?.get(agent)?.tsetlin?.hex) {
                 val bytes=mind.tsetlin.bytes()
                 db.insertOrThrow("tsetlin_automata_blobs",null,ContentValues().apply {
@@ -143,6 +158,42 @@ internal object GeaSchema {
                 check(structure.room==rows.getString(0) && structure.builder==rows.getString(1) && structure.expires==rows.getLong(2) && structure==Json.decodeFromString<EcologicalNicheStructure>(rows.getString(3)))
             }
             check(count==expected.size) { "Missing ecological infrastructure evidence" }
+        }
+    }
+
+    private fun verifyOpinion(db: SQLiteDatabase,event: CanonicalEvent,agent: String,opinion: ProvenancedOpinion) {
+        check(ProvenanceImmunity.valid(listOf(opinion),event.tick) && opinion.receivedTick<event.tick)
+        if(opinion.sourceTick==0L) check(opinion.sourceEventHash==WorldActor.GENESIS_HASH)
+        else db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(opinion.sourceTick.toString())).use { rows ->
+            check(rows.moveToFirst());check(Canonical.event(rows.getString(0)).hash==opinion.sourceEventHash)
+        }
+        val lesson=event.cognition?.lesson
+        if(lesson!=null && lesson.researcher==agent && lesson.rowHash==opinion.claim && lesson.acquisitionHash==opinion.root) {
+            check(opinion.sourceAgent==lesson.verifier && opinion.sourceTick==lesson.originTick && opinion.sourceEventHash==lesson.originEventHash)
+            // ResearchTables.assimilate already checked original dataset, exact row and reviewer confidence in this transaction.
+        } else {
+            db.rawQuery("SELECT b.agent_id,e.payload FROM subjective_beliefs b JOIN events e ON e.id=b.event_id WHERE b.claim_id=? AND b.source_id=? AND b.event_id<? ORDER BY b.event_id LIMIT 1",arrayOf(opinion.claim,opinion.root,event.eventId.toString())).use { rows ->
+                check(rows.moveToFirst()) { "Opinion lacks an original committed admission" }
+                val original=Canonical.event(rows.getString(1)).cognition?.minds?.get(rows.getString(0))?.memory?.opinions?.single { it.claim==opinion.claim && it.root==opinion.root }
+                check(original?.copy(trust=opinion.trust,receivedTick=opinion.receivedTick)==opinion) { "Relayed opinion changed its origin" }
+            }
+        }
+    }
+    fun auditBeliefsEvent(db: SQLiteDatabase,event: CanonicalEvent,prior: Map<String,List<ProvenancedOpinion>>) {
+        val expected=event.cognition?.minds.orEmpty().flatMap { (agent,mind) ->
+            mind.memory.opinions.filter { it !in prior[agent].orEmpty() }.map { agent to it }
+        }.sortedWith(compareBy<Pair<String,ProvenancedOpinion>> { it.first }.thenBy { it.second.claim }.thenBy { it.second.root })
+        db.rawQuery("SELECT agent_id,claim_id,source_id,belief,disbelief,uncertainty,base_rate FROM subjective_beliefs WHERE event_id=? ORDER BY agent_id,claim_id,source_id",arrayOf(event.eventId.toString())).use { rows ->
+            var count=0
+            while(rows.moveToNext()) {
+                check(count<expected.size)
+                val (agent,opinion)=expected[count++]
+                check(agent==rows.getString(0) && opinion.claim==rows.getString(1) && opinion.root==rows.getString(2))
+                val value=opinion.discounted()
+                check(listOf(value.belief,value.disbelief,value.uncertainty,value.baseRate).mapIndexed { i,x -> kotlin.math.abs(x-rows.getDouble(i+3))<1e-10 }.all { it })
+                verifyOpinion(db,event,agent,opinion)
+            }
+            check(count==expected.size) { "Missing subjective belief evidence" }
         }
     }
 

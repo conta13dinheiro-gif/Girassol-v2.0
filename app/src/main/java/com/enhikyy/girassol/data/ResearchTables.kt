@@ -81,6 +81,9 @@ class ResearchTables(private val db: SQLiteDatabase) {
         QuotaLru.victims(emptyList(),bytes(),(ResearchCodec.encode(candidate).toByteArray().size-ResearchCodec.encode(original).toByteArray().size).coerceAtLeast(0).toLong()+candidate.embedding.size*4L,quota)
         db.update("staging_knowledge",ContentValues().apply { put("payload",ResearchCodec.encode(candidate));put("review_tick",tick);put("status",if(approved) "VALIDATED" else "REJECTED") },"id=? AND status='QUARANTINED'",arrayOf(candidate.id)).also { check(it==1) }
     }
+    fun rejectImmunity(id: String,tick: Long) {
+        db.update("staging_knowledge",ContentValues().apply { put("status","IMMUNITY_REJECTED");put("review_tick",tick) },"id=? AND status='VALIDATED'",arrayOf(id))
+    }
     fun rejectExperiment(id: String,tick: Long) {
         db.update("staging_knowledge",ContentValues().apply { put("status","REPLAY_REJECTED");put("review_tick",tick) },"id=? AND status='VALIDATED'",arrayOf(id))
     }
@@ -91,11 +94,15 @@ class ResearchTables(private val db: SQLiteDatabase) {
     }
     private fun readCandidate(id: String): KnowledgeCandidate = db.rawQuery("SELECT payload FROM staging_knowledge WHERE id=?",arrayOf(id)).use { check(it.moveToFirst());ResearchCodec.decode(it.getString(0)) }
     /** Part of the world transaction: no live weights without matching verified evidence. */
-    fun assimilate(lesson: KnowledgeLesson) {
+    fun assimilate(lesson: KnowledgeLesson,opinion: ProvenancedOpinion?=null) {
         verifyPointHash(lesson.originTick,lesson.originEventHash)
         if(lesson.originTick>0) db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(lesson.originTick.toString())).use { source->check(source.moveToFirst());check(Canonical.event(source.getString(0)).stateHash==lesson.originStateHash) }
         val c=readCandidate(lesson.id)
         verifyRow(c)
+        if(opinion!=null) check(opinion.claim==lesson.rowHash && opinion.root==lesson.acquisitionHash &&
+            opinion.sourceGroup==Canonical.hash(c.repo) && opinion.sourceAgent==lesson.verifier && opinion.domain==lesson.domain &&
+            opinion.sourceTick==lesson.originTick && opinion.sourceEventHash==lesson.originEventHash &&
+            opinion.raw==SubjectiveOpinion(lesson.confidence/100.0,0.0,1-lesson.confidence/100.0))
         check(c.acquisitionHash==lesson.acquisitionHash && c.row.digest==lesson.rowHash && c.intent.domain.name==lesson.domain && c.intent.discoverer==lesson.researcher)
         val first=checkNotNull(c.researcher); val second=checkNotNull(c.verifier)
         check(EpistemicQuarantine.approved(c.row,first,second) && first.agent==lesson.researcher && second.agent==lesson.verifier && minOf(first.confidence,second.confidence)==lesson.confidence)

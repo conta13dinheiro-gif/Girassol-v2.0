@@ -15,7 +15,7 @@ import kotlin.math.hypot
     fun applicable(world: WorldState): Boolean {
         if(!valid(world.tick) || tick!=world.tick || world.knowledge.any { it.id==id } || world.agents.none { it.id==verifier }) return false
         val citizen=world.agents.firstOrNull { it.id==researcher } ?: return false
-        val library=world.rooms.firstOrNull { it.id==Activity.STUDY.room } ?: return false
+        val library=SmartTerrain.target(world,citizen,Activity.STUDY)
         val physical=world.spatial[citizen.id]
         val present=if(physical==null) hypot(citizen.x-library.x,citizen.z-library.z)<=.36
             else physical.reached && kotlin.math.abs(citizen.x-library.x)<=library.width/2 && kotlin.math.abs(citizen.z-library.z)<=library.depth/2
