@@ -113,7 +113,7 @@ class BiosphereService : Service() {
                             neuralResult="Bifurcação não criada: ${e.message}"
                             BiosphereHub.mutable.value=BiosphereHub.mutable.value.copy(neuralResult=neuralResult)
                         }
-                        if(wasRunning) startLoop() else { guardian.releaseWakeLock() stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
+                        if(wasRunning) startLoop() else { guardian.releaseWakeLock(); this@BiosphereService.stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
                     }
                     ACTION_SWITCH -> {
                         val wasRunning=running
@@ -127,7 +127,7 @@ class BiosphereService : Service() {
                         } catch(e: Exception) {
                             BiosphereHub.mutable.value=BiosphereHub.mutable.value.copy(neuralResult="Não foi possível abrir a linha: ${e.message}")
                         }
-                        if(wasRunning) startLoop() else { guardian.releaseWakeLock() stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
+                        if(wasRunning) startLoop() else { guardian.releaseWakeLock(); this@BiosphereService.stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(startId) }
                     }
                     ACTION_IMPORT_DOCUMENT -> {
                         val uri=checkNotNull(intent.data) { "Arquivo de origem ausente" }
@@ -204,9 +204,10 @@ class BiosphereService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() {
         handler.removeCallbacks(tick)
+        guardian.close()
         rsi.close()
         research.close()
-        handler.post { running = false; guardian.releaseWakeLock() store.close(); thread.quitSafely() }
+        handler.post { running = false; guardian.close(); store.close(); thread.quitSafely() }
         super.onDestroy()
     }
     companion object {
