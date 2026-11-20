@@ -13,7 +13,7 @@ bool normalized(const std::array<float,dimensions>& v) {
 }
 }
 int recall(const std::array<float,dimensions>& query,std::span<const Entry> entries,std::span<Hit> output) {
-    if(!normalized(query) || entries.size()>std::numeric_limits<hnswlib::tableint>::max()) return -1;
+    if(!normalized(query) || entries.size()>2048) return -1;
     for(const auto& e:entries) if(!normalized(e.embedding) || !std::isfinite(e.age) || e.age<0 || !std::isfinite(e.importance) || e.importance<0 || e.importance>1) return -1;
     if(entries.empty() || output.empty()) return 0;
     hnswlib::InnerProductSpace space(dimensions);

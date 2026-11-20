@@ -7,7 +7,7 @@ dependencies {
 kotlin.sourceSets.main {
     kotlin.srcDir("../app/src/main/java")
     kotlin.include(
-        "**/cognition/NativeMind.kt", "**/cognition/NativeAutonomy.kt",
+        "**/cognition/GeaNativeBridge.kt", "**/cognition/NativeMind.kt", "**/cognition/NativeAutonomy.kt",
         "**/cognition/NativeMemory.kt", "**/cognition/NativeCmaes.kt",
         "**/cognition/ShadowReplay.kt", "**/physics/NativeSpatial.kt",
         "**/render/NativeCityMesh.kt", "**/render/NativeProjection.kt"
@@ -21,3 +21,15 @@ tasks.register("writeHostClasspath") {
     outputs.file(target)
     doLast { target.get().asFile.writeText(sourceSets.main.get().runtimeClasspath.asPath) }
 }
+
+val verifyGeaSqlite by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir)
+    commandLine("python3", "scripts/test-gea-sqlite.py")
+}
+tasks.named("check") { dependsOn(verifyGeaSqlite) }
+
+val verifyJniContract by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir)
+    commandLine("python3", "scripts/test-jni-contract.py")
+}
+tasks.named("check") { dependsOn(verifyJniContract) }

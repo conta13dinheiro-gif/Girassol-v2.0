@@ -26,3 +26,6 @@
 # Shizuku loads this service by class name from a separate shell/root process.
 -keep class com.enhikyy.girassol.privileged.TelemetryUserService { public <init>(); }
 -keep interface com.enhikyy.girassol.privileged.IShizukuTelemetry { *; }
+
+-keep class com.enhikyy.girassol.cognition.GeaNativeBridge { *; }
+-keep class com.enhikyy.girassol.cognition.NativeAutonomy { *; }

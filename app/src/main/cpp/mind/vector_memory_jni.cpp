@@ -2,8 +2,10 @@
 #include <jni.h>
 #include <cstring>
 #include <vector>
-extern "C" JNIEXPORT jint JNICALL Java_com_enhikyy_girassol_cognition_NativeMemory_rank(JNIEnv* env,jobject,jobject input,jint count,jint limit,jobject output) {
-    if(!input || !output || count<0 || limit<0 || limit>count) return -1;
+#include <new>
+#include <exception>
+extern "C" JNIEXPORT jint JNICALL Java_com_enhikyy_girassol_cognition_NativeMemory_rank(JNIEnv* env,jobject,jobject input,jint count,jint limit,jobject output) try {
+    if(!input || !output || count<0 || count>2048 || limit<0 || limit>count) return -1;
     constexpr jlong rowBytes=18*sizeof(float), queryBytes=16*sizeof(float);
     if(env->GetDirectBufferCapacity(input)!=queryBytes+static_cast<jlong>(count)*rowBytes || env->GetDirectBufferCapacity(output)!=static_cast<jlong>(limit)*8) return -1;
     auto* bytes=static_cast<const unsigned char*>(env->GetDirectBufferAddress(input));
@@ -26,4 +28,15 @@ extern "C" JNIEXPORT jint JNICALL Java_com_enhikyy_girassol_cognition_NativeMemo
         std::memcpy(static_cast<unsigned char*>(target)+i*8+4,&result[i].score,4);
     }
     return size;
+}
+ catch (const std::bad_alloc&) {
+    if (!env->ExceptionCheck()) {
+        if (auto type = env->FindClass("java/lang/OutOfMemoryError")) env->ThrowNew(type, "Native memory index allocation failed");
+    }
+    return -1;
+} catch (const std::exception&) {
+    if (!env->ExceptionCheck()) {
+        if (auto type = env->FindClass("java/lang/IllegalStateException")) env->ThrowNew(type, "Native memory index failed");
+    }
+    return -1;
 }

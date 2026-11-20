@@ -7,7 +7,7 @@ import kotlin.math.*
 
 /** Called only by the service's world thread; all learned parameters enter its canonical event. */
 internal object NativeMind {
-    init { System.loadLibrary("girassol_projection") }
+    init { com.enhikyy.girassol.cognition.GeaNativeBridge.requireAvailable() }
     private external fun advance(data: ByteBuffer): Boolean
     private val networkBuffer=ThreadLocal.withInitial { ByteBuffer.allocateDirect(280*8).order(ByteOrder.nativeOrder()) }
     /** One actual Hebbian/LTC study update. The exact parameter diff is later journalled by WorldActor. */

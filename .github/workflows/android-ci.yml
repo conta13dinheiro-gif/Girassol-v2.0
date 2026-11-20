@@ -71,6 +71,12 @@ jobs:
       - name: Run native C++ tests with ASan and UBSan
         run: scripts/test-native.sh
 
+      - name: Verify SQLite migration and failure atomicity
+        run: python3 scripts/test-gea-sqlite.py
+
+      - name: Verify all JNI declarations
+        run: python3 scripts/test-jni-contract.py
+
       - name: Run production JNI integration tests
         run: scripts/test-mind-jni.sh
 

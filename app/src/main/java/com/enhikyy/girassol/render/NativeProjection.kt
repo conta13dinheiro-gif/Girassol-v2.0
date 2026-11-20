@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 
 /** Read-only rendering calculation; simulation authority remains in WorldActor. */
 object NativeProjection {
-    val available = try { System.loadLibrary("girassol_projection"); true } catch (_: LinkageError) { false }
+    val available = try { com.enhikyy.girassol.cognition.GeaNativeBridge.requireAvailable(); true } catch (_: LinkageError) { false }
     private external fun nativeProject(input: ByteBuffer, output: ByteBuffer, count: Int): Boolean
     private class Buffers(val capacity: Int) {
         val input: ByteBuffer = ByteBuffer.allocateDirect(capacity * 8).order(ByteOrder.nativeOrder())
