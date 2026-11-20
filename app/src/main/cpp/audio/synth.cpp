@@ -42,8 +42,6 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         const float air=noise_*(.010f+.016f*weather_);
         const float hum=static_cast<float>(std::sin(hum_)*.023+std::sin(2*hum_)*.012);
         const double attack=std::min(timer_/.025,1.0);
-        const float music=static_cast<float>((std::sin(note_)+.2*mastery_*std::sin(2*note_))*std::exp(-timer_*2.4)*attack*.045+
-                                             std::sin(sub_)*.012);
         // Filtered noise bursts evoke carpet steps. Activity comes from actual movement snapshots.
         const float step_env=static_cast<float>(std::pow(std::max(0.0,std::sin(step_)),18));
         const float steps=noise_*step_env*.18f;
@@ -56,6 +54,13 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
             0.0f,
             sr
         );
+        // Movement is the side-chain: fast attack protects transients, slow release preserves music.
+        const float duckTarget=1.0f-std::min(.45f,std::abs(steps)*2.5f*stepWeight);
+        const double duckTime=duckTarget<musicDuck_?.018:.24;
+        const float duckSmooth=static_cast<float>(1.0-std::exp(-dt/duckTime));
+        musicDuck_+=(duckTarget-musicDuck_)*duckSmooth;
+        const float music=static_cast<float>((std::sin(note_)+.2*mastery_*std::sin(2*note_))*std::exp(-timer_*2.4)*attack*.045+
+                                             std::sin(sub_)*.012)*musicDuck_;
         const float community=static_cast<float>(std::sin(note_*.5))*social_*.003f;
         // Trautonium-inspired mixture of independently phased subharmonic divisions.
         float undertone=0;
