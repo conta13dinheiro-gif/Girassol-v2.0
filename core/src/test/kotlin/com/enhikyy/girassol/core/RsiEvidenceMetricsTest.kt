@@ -14,7 +14,8 @@ class RsiEvidenceMetricsTest {
         harmony = 0.70,
         energyEfficiency = 0.70,
         brierScore = 0.20,
-        semanticEntropy = 0.75
+        semanticEntropy = 0.75,
+        evidenceVersion = 1
     )
 
     @Test
@@ -50,12 +51,39 @@ class RsiEvidenceMetricsTest {
     }
 
     @Test
+    fun promotionEnforcesAbsoluteSemanticEntropyFloor() {
+        val improvedButCollapsed = baseline.copy(
+            innovation = 0.70,
+            resilience = 0.72,
+            harmony = 0.72,
+            energyEfficiency = 0.72,
+            brierScore = 0.19,
+            semanticEntropy = 0.34
+        )
+        assertFalse(improvedButCollapsed.dominates(baseline))
+    }
+
+    @Test
+    fun metricEvidenceVersionsCannotBeMixedForPromotion() {
+        val upgraded = baseline.copy(
+            innovation = 0.70,
+            resilience = 0.72,
+            harmony = 0.72,
+            energyEfficiency = 0.72,
+            brierScore = 0.19,
+            semanticEntropy = 0.76
+        )
+        assertFalse(upgraded.dominates(baseline.copy(evidenceVersion = 0)))
+    }
+
+    @Test
     fun extendedMetricsRemainBackwardCompatibleWithHistoricalPayloads() {
         val legacy = Json.decodeFromString<ReplayMetrics>(
             """{"innovation":0.5,"resilience":0.6,"harmony":0.7,"energyEfficiency":0.8}"""
         )
         assertEquals(0.0, legacy.brierScore, 0.0)
         assertEquals(0.0, legacy.semanticEntropy, 0.0)
+        assertEquals(0, legacy.evidenceVersion)
         assertTrue(legacy.valid())
     }
 
