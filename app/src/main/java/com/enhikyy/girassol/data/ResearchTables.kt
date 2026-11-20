@@ -116,7 +116,7 @@ class ResearchTables(private val db: SQLiteDatabase) {
         }
         val fused=checkNotNull(EpistemicImmunityEngine.fuseCorrelated(witnesses))
         db.insertOrThrow("subjective_beliefs",null,ContentValues().apply {
-            put("event_id",eventId); put("agent_id",lesson.researcher); put("claim_id",c.row.digest)
+            put("event_id",eventId); put("agent_id",lesson.researcher); put("claim_id",c.id)
             put("source_id",c.acquisitionHash); put("belief",fused.opinion.belief)
             put("disbelief",fused.opinion.disbelief); put("uncertainty",fused.opinion.uncertainty)
             put("base_rate",fused.opinion.baseRate)
