@@ -78,8 +78,8 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     check(e.valid() && e.hash==revision.sourceEventHash && e.stateHash==revision.sourceStateHash) { "Proveniência evolutiva inválida" }
                 }
             }
-            event.cognition?.lesson?.let { ResearchTables(db).assimilate(it) }
             db.insertOrThrow("events", null, ContentValues().apply { put("id", event.eventId); put("tick", event.tick); put("payload", Canonical.event(event)) })
+            event.cognition?.lesson?.let { ResearchTables(db).assimilate(it,event.eventId) }
             GeaSchema.record(db, transition, previous)
             db.insertWithOnConflict("checkpoint", null, ContentValues().apply {
                 put("id", 1); put("payload", payload); put("digest", Canonical.hash(payload)); put("event_id", event.eventId); put("event_hash", event.hash)
