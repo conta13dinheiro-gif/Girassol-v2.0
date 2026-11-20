@@ -159,7 +159,7 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinRestore(
     std::vector<std::uint8_t> blob(static_cast<std::size_t>(size));
     for (jsize i = 0; i < size; ++i) blob[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(bytes[static_cast<std::size_t>(i)]);
     try {
-        auto model = std::make_unique<girassol::tsetlin::PersistentTsetlinMachine>(1, 1);
+        auto model = std::make_unique<girassol::tsetlin::PersistentTsetlinMachine>(1, 1, 2, 3.5f, 1, 42U);
         if (!model->deserializeBinary(blob)) {
             throwJava(env, "java/lang/IllegalArgumentException", "Tsetlin snapshot is invalid");
             return 0;
