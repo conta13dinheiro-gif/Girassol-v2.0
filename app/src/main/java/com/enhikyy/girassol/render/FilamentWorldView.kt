@@ -248,7 +248,7 @@ internal class FilamentWorldView(
         schedule()
     }
     private fun syncSpeechBubbles(world: WorldState) {
-        val recent = world.dialogues.asReversed().take(24)
+        val recent = world.dialogues.takeLast(24)
         val latestBySpeaker = recent.filter { it.tick >= world.tick - 12 }
             .associateBy { it.speaker }
         val visibleIds = latestBySpeaker.keys
@@ -286,31 +286,8 @@ internal class FilamentWorldView(
 
     /** Project a world-space head point through the same orbit rig that drives Filament. */
     private fun projectHead(x: Double, y: Double, z: Double): Pair<Int, Int>? {
-        if (width <= 0 || height <= 0) return null
-        val aspect = width.toDouble() / height
-        val eye = rig.eye(aspect)
-        var fx = rig.centerX - eye[0]
-        var fy = rig.centerY - eye[1]
-        var fz = rig.centerZ - eye[2]
-        val fl = sqrt(fx * fx + fy * fy + fz * fz).coerceAtLeast(1e-9)
-        fx /= fl; fy /= fl; fz /= fl
-        var rx = -fz
-        var rz = fx
-        val rl = hypot(rx, rz).coerceAtLeast(1e-9)
-        rx /= rl; rz /= rl
-        val ux = -fy * rz
-        val uy = fz * rx - fx * rz
-        val uz = fy * rx
-        val dx = x - eye[0]
-        val dy = y - eye[1]
-        val dz = z - eye[2]
-        val depth = dx * fx + dy * fy + dz * fz
-        if (depth <= .2) return null
-        val tangent = tan(Math.toRadians(rig.fov) * .5).coerceAtLeast(1e-6)
-        val ndcX = (dx * rx + dz * rz) / (depth * tangent * aspect)
-        val ndcY = (dx * ux + dy * uy + dz * uz) / (depth * tangent)
-        if (abs(ndcX) > 1.2 || abs(ndcY) > 1.2) return null
-        return (((ndcX + 1.0) * .5 * width).roundToInt()) to (((1.0 - ndcY) * .5 * height).roundToInt())
+        val projected = rig.project(x, y, z, width, height) ?: return null
+        return projected.first.roundToInt() to projected.second.roundToInt()
     }
 
     private fun layoutSpeechBubbles(now: Long) {
@@ -330,7 +307,13 @@ internal class FilamentWorldView(
                 val bubbleHeight = bubble.measuredHeight.coerceAtLeast(dp(24))
                 val left = (point.first - bubbleWidth / 2).coerceIn(0, max(0, width - bubbleWidth))
                 val top = (point.second - bubbleHeight - dp(12)).coerceIn(dp(8), max(dp(8), height - bubbleHeight))
-                bubble.layout(left, top, left + bubbleWidth, top + bubbleHeight)
+                val params = bubble.layoutParams as LayoutParams
+                params.gravity = Gravity.TOP or Gravity.START
+                params.leftMargin = left
+                params.topMargin = top
+                params.width = bubbleWidth
+                params.height = bubbleHeight
+                bubble.layoutParams = params
                 bubble.visibility = VISIBLE
             }
         }
