@@ -16,7 +16,7 @@ object GeaNativeBridge {
     }
 
     private external fun contractVersion(): Int
-    internal external fun nativeCreateTsetlin(features: Int, clauses: Int, states: Int, specificity: Float, threshold: Int, seed: Long): Long
+    external fun nativeCreateTsetlin(features: Int, clauses: Int, states: Int, specificity: Float, threshold: Int, seed: Long): Long
     internal external fun nativeDestroyTsetlin(handle: Long)
     internal external fun nativeTsetlinTrainStep(handle: Long, features: ByteArray, targetPositive: Boolean): Boolean
     internal external fun nativeTsetlinPredictVote(handle: Long, features: ByteArray): Int
