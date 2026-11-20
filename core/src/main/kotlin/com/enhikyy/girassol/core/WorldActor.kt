@@ -27,7 +27,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val tick = state.tick + 1
         // 1: Runtime input boundary. Thermal policy changes pacing outside this logical core.
         // 2: Environment, spatial trail and metabolism.
-        val base = state.copy(tick = tick, agents = state.agents.map { it.copy(needs = it.needs.metabolize()) }, trail = state.trail.map { it * .97 })
+        val base = state.copy(tick = tick, agents = state.agents.map { it.copy(needs = it.needs.metabolize()) }, trail = StigmergicField.diffuseAndEvaporate(state.trail))
         // 3-7: Perception, bounded memory, appraisal, utility and intention hysteresis.
         val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
@@ -147,7 +147,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                 a = a.copy(activity = action)
             } else records += ActionRecord(a.id, action, "RESERVED")
             val cell = a.x.toInt().coerceIn(0, 11) + 12 * a.z.toInt().coerceIn(0, 11)
-            trails[cell] = (trails[cell] + .04).coerceAtMost(1.0)
+            StigmergicField.deposit(trails, cell, .04)
             agents[index] = a
         }
         if (rulesVersion >= 7 && cognitiveInput != null) {
