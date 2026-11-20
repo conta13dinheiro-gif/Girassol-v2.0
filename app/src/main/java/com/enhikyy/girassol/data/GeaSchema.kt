@@ -110,6 +110,7 @@ internal object GeaSchema {
         val ttl = 86_400L
         val expiry = Math.addExact(tick, ttl)
 
+        var projectorNeedsCheckpoint = false
         var projector = db.rawQuery(
             "SELECT payload,expires_tick FROM ecological_niche_structures " +
                 "WHERE structure_id='aurora-projector' ORDER BY event_id DESC LIMIT 1",
@@ -119,6 +120,7 @@ internal object GeaSchema {
                 Json.decodeFromString<AuroraOjaProjectorState>(rows.getString(0))
                     .also { check(it.valid()) { "Stored AURORA projector is invalid" } }
             } else {
+                projectorNeedsCheckpoint = true
                 AuroraOjaProjectorState.create(inputDimensions = 6, seed = world.seed)
             }
         }
@@ -138,6 +140,7 @@ internal object GeaSchema {
         check(archive.valid()) { "Stored AURORA archive violates niche invariants" }
 
         val semanticEntropy = SemanticCollapseGuard.normalizedPopulationEntropy(world.actionCounts)
+        val changedCells = linkedMapOf<String, Pair<AuroraCandidate, String>>()
         for (citizen in world.agents.sortedBy { it.id }) {
             val mind = world.minds[citizen.id] ?: continue
             val features = listOf(
@@ -199,27 +202,28 @@ internal object GeaSchema {
             ) {
                 archive = update.state
                 val cell = update.cell
-                db.insertOrThrow("ecological_niche_structures", null, ContentValues().apply {
-                    put("event_id", event.eventId)
-                    put("structure_id", "aurora-cell-\${cell.first}-\${cell.second}-\${cell.third}")
-                    put("owner_id", citizen.id)
-                    put("expires_tick", expiry)
-                    put("payload", Json.encodeToString(candidate))
-                })
+                val structureId = "aurora-cell-\${cell.first}-\${cell.second}-\${cell.third}"
+                changedCells[structureId] = candidate to citizen.id
             }
             if (tick % 30L == 0L) projector = projector.observe(features)
+        }
+
+        for ((structureId, stored) in changedCells.toSortedMap()) {
+            val (candidate, owner) = stored
+            db.insertOrThrow("ecological_niche_structures", null, ContentValues().apply {
+                put("event_id", event.eventId)
+                put("structure_id", structureId)
+                put("owner_id", owner)
+                put("expires_tick", expiry)
+                put("payload", Json.encodeToString(candidate))
+            })
         }
 
         val projectorAlreadyRecorded = db.rawQuery(
             "SELECT 1 FROM ecological_niche_structures WHERE event_id=? AND structure_id='aurora-projector'",
             arrayOf(event.eventId.toString())
         ).use { it.moveToFirst() }
-        if (projectorAlreadyRecorded) return
-        if (tick % 30L == 0L || db.rawQuery(
-                "SELECT 1 FROM ecological_niche_structures WHERE structure_id='aurora-projector' LIMIT 1",
-                null
-            ).use { !it.moveToFirst() }
-        ) {
+        if (!projectorAlreadyRecorded && (tick % 30L == 0L || projectorNeedsCheckpoint)) {
             db.insertOrThrow("ecological_niche_structures", null, ContentValues().apply {
                 put("event_id", event.eventId)
                 put("structure_id", "aurora-projector")
