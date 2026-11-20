@@ -23,6 +23,7 @@ private:
     BinauralHrtfSpatializer stepSpatializer_;
     std::uint32_t write_=0;
     float weather_=0, tension_=0, bow_=0, celebration_=0, last_milestone_=0;
+    float musicDuck_=1.0f;
     float random() noexcept;
 };
 }
