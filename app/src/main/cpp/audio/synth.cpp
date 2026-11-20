@@ -80,13 +80,13 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         const float pan=std::clamp((right_-left_)/(right_+left_+.001f),-1.0f,1.0f);
         const float farDelay=std::abs(pan)*.00062f*static_cast<float>(sr);
         const std::size_t wholeDelay=static_cast<std::size_t>(farDelay);
-        const float fraction=farDelay-static_cast<float>(wholeDelay);
+        const float delayFraction=farDelay-static_cast<float>(wholeDelay);
         hrtfLeftDelay_[hrtfWrite_]=dryLeft;
         hrtfRightDelay_[hrtfWrite_]=dryRight;
         const auto delayed=[&](const std::array<float,128>& ring) noexcept {
             const std::size_t first=(hrtfWrite_+128-wholeDelay)%128;
             const std::size_t second=(first+127)%128;
-            return ring[first]*(1.0f-fraction)+ring[second]*fraction;
+            return ring[first]*(1.0f-delayFraction)+ring[second]*delayFraction;
         };
         const float farFilter=static_cast<float>(1.0-std::exp(-tau*4200.0*dt));
         float leftOut=dryLeft, rightOut=dryRight;
