@@ -6,6 +6,7 @@
 #include <limits>
 #include <queue>
 #include <stdexcept>
+#include <utility>
 
 namespace girassol::physics {
 namespace {
