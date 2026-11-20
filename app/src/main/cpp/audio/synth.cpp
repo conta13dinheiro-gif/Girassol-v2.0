@@ -47,6 +47,15 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         // Filtered noise bursts evoke carpet steps. Activity comes from actual movement snapshots.
         const float step_env=static_cast<float>(std::pow(std::max(0.0,std::sin(step_)),18));
         const float steps=noise_*step_env*.18f;
+        const float stepWeight=std::clamp(left_+right_,0.0f,1.0f);
+        const float stepPan=(left_+right_)>1e-5f ? (right_-left_)/(left_+right_) : 0.0f;
+        const auto binauralSteps=stepSpatializer_.process(
+            steps*stepWeight,
+            stepPan*static_cast<float>(tau*.25),
+            0.0f,
+            0.0f,
+            sr
+        );
         const float community=static_cast<float>(std::sin(note_*.5))*social_*.003f;
         // Trautonium-inspired mixture of independently phased subharmonic divisions.
         float undertone=0;
@@ -70,8 +79,8 @@ bool Synth::render(float* out,std::int32_t frames,int sr,Parameters p) noexcept 
         write_=(write_+1)%string_.size();
         const float milestone=static_cast<float>(std::sin(note_*2)+std::sin(sub_*3))*.015f*celebration_;
         const float common=hum+music+air+community+undertone+wave*.045f+milestone;
-        out[i*2]=std::clamp((common+steps*left_)*gain_,-.35f,.35f);
-        out[i*2+1]=std::clamp((common+steps*right_)*gain_,-.35f,.35f);
+        out[i*2]=std::clamp((common+binauralSteps.left)*gain_,-.35f,.35f);
+        out[i*2+1]=std::clamp((common+binauralSteps.right)*gain_,-.35f,.35f);
     }
     return true;
 }
