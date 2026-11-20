@@ -85,8 +85,9 @@ inline DeterministicEngineOutput stepDeterministicEngines(
     // Brier calibration is updated from the prior success probability and observed outcome.
     const float predictedSuccess = unit((oldQ + 1.0f) * 0.5f);
     const float targetSuccess = unit((outcome + 1.0f) * 0.5f);
-    const float brier = unit(0.8f * predictedSuccess + 0.2f * (predictedSuccess - targetSuccess)
-        * (predictedSuccess - targetSuccess));
+    const float previousBrier = unit(input.priorState[7]);
+    const float calibrationError = predictedSuccess - targetSuccess;
+    const float brier = unit(0.8f * previousBrier + 0.2f * calibrationError * calibrationError);
     output.nextState[7] = brier;
 
     // Four promotion e-gates: calibrated evidence, bounded surprise, low free energy,
