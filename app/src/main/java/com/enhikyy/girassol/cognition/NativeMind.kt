@@ -72,7 +72,8 @@ internal object NativeMind {
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
             bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
             val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive,
-                nativeEngineTrace=autonomy.nativeEngineStates.getValue(citizen.id))
+                nativeEngineTrace=autonomy.nativeEngineStates.getValue(citizen.id),
+                nativeExtendedState=autonomy.nativeExtendedStates.getValue(citizen.id))
             check(next.valid(world.tick))
             minds[citizen.id]=next
             val scores=values(272,8).toMutableList()
@@ -103,7 +104,8 @@ internal object NativeMind {
                 val psyche=old.psyche
                 val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
                 val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
-                scores[i]+=policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
+                scores[i]+=autonomy.candidateBiases.getValue(citizen.id)[i]+
+                    policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
                     tttCuriosity*.08+episodicQ*.10+(subjectiveProbability-.5)*(if(activity==Activity.TALK) .12 else 0.0)-
                     variationalFreeEnergy*.06-expectedFreeEnergy*.04-brierScore*.05+rsiPromotionGate*.015+
                     bank.learningFor(activity).practiceBonus(world.tick)+bank.workingMemoryBonus(activity,world.tick)+

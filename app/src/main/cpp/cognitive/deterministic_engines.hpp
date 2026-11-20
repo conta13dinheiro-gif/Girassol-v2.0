@@ -236,6 +236,19 @@ struct TsetlinMachine {
         const float confidence = static_cast<float>(votes) / static_cast<float>(count);
         return std::fabs(confidence) < threshold ? 0.0f : confidence;
     }
+
+    /** Deterministic Type-I/Type-II feedback over bounded two-action automata. */
+    void observe(std::uint32_t features, float reward) noexcept {
+        if (!std::isfinite(reward) || std::fabs(reward) < 0.01f) return;
+        for (std::uint8_t i = 0; i < count; ++i) {
+            auto& clause = clauses[i];
+            const bool matches = (features & clause.featureMask) == clause.featureMask;
+            const bool reinforceMatch = (reward > 0.0f) == clause.polarity;
+            const bool increase = matches == reinforceMatch;
+            if (increase) clause.state = std::min<std::uint16_t>(kMaxState, static_cast<std::uint16_t>(clause.state + 1));
+            else if (clause.state > 0) --clause.state;
+        }
+    }
 };
 
 inline std::vector<std::uint8_t> serializeGrst(const TsetlinMachine& machine) {

@@ -6,9 +6,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
 import java.security.MessageDigest
+import kotlin.math.abs
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
-class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 5) {
+class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 6) {
     private val app=context.applicationContext
     init { require(name.matches(Regex("girassol(?:-branch-[a-f0-9-]{36})?\\.db"))); setWriteAheadLoggingEnabled(true) }
     override fun onConfigure(db: SQLiteDatabase) {
@@ -25,16 +26,22 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         db.execSQL("CREATE TABLE events (id INTEGER PRIMARY KEY, tick INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL)")
         createHistory(db)
         createCognitiveGrs(db)
+        createRsiPromotionLedger(db)
         ResearchTables.create(db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        check(oldVersion in 1..4 && newVersion==5)
+        check(oldVersion in 1..5 && newVersion==6)
         if(oldVersion<2) createHistory(db)
         if(oldVersion<3) ResearchTables.create(db) else ResearchTables.createVectors(db)
         if(oldVersion<5) createCognitiveGrs(db)
+        if(oldVersion<6) createRsiPromotionLedger(db)
     }
     private fun createCognitiveGrs(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE cognitive_grs (id INTEGER PRIMARY KEY CHECK(id=1), tick INTEGER NOT NULL, payload BLOB NOT NULL, digest TEXT NOT NULL, agent_hash TEXT NOT NULL)")
+    }
+    private fun createRsiPromotionLedger(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE rsi_promotion_ledger (event_id INTEGER NOT NULL, tick INTEGER NOT NULL, citizen_id TEXT NOT NULL, gate_passed INTEGER NOT NULL CHECK(gate_passed IN (0,1)), gate_score REAL NOT NULL CHECK(gate_score BETWEEN 0 AND 1), promotion_count INTEGER NOT NULL CHECK(promotion_count >= 0), veto_count INTEGER NOT NULL CHECK(veto_count >= 0), event_hash TEXT NOT NULL, PRIMARY KEY(event_id,citizen_id))")
+        db.execSQL("CREATE INDEX rsi_ledger_tick ON rsi_promotion_ledger(tick)")
     }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE milestones (id INTEGER PRIMARY KEY AUTOINCREMENT, tick INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, cause TEXT NOT NULL, agents TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, event_hash TEXT NOT NULL)")
@@ -93,6 +100,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 put("id", 1); put("payload", payload); put("digest", Canonical.hash(payload)); put("event_id", event.eventId); put("event_hash", event.hash)
             }, SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
             persistCognitiveGrs(db, transition.state)
+            persistRsiPromotionLedger(db, event)
             val first=db.rawQuery("SELECT 1 FROM milestones LIMIT 1",null).use { !it.moveToFirst() }
             val before=if(first) null else previous
             val causes=if(before!=null || first) Milestones.detect(before,transition) else emptyList()
@@ -138,6 +146,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 try {
                     db.execSQL("INSERT INTO events SELECT * FROM origin.events WHERE id<=?",arrayOf(point.eventId))
                     db.execSQL("INSERT INTO milestones SELECT * FROM origin.milestones WHERE tick<=?",arrayOf(point.state.tick))
+                    db.execSQL("INSERT INTO rsi_promotion_ledger SELECT * FROM origin.rsi_promotion_ledger WHERE event_id<=?",arrayOf(point.eventId))
                     ResearchTables.fork(db,point)
                     val payload=Canonical.state(point.state)
                     db.insertOrThrow("checkpoint",null,ContentValues().apply { put("id",1);put("payload",payload);put("digest",Canonical.hash(payload));put("event_id",point.eventId);put("event_hash",point.eventHash) })
@@ -154,13 +163,17 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
     private fun persistCognitiveGrs(db: SQLiteDatabase, state: WorldState) {
         require(state.agents.isNotEmpty() && state.agents.size <= 4096)
         val values = state.agents.flatMap { citizen ->
-            state.minds[citizen.id]?.nativeEngineTrace ?: List(8) { 0.0 }
+            val mind = state.minds[citizen.id]
+            val trace = mind?.nativeEngineTrace ?: List(8) { 0.0 }
+            val extended = mind?.nativeExtendedState ?: List(52) { 0.0 }
+            require(trace.size == 8 && extended.size == 52)
+            trace + extended
         }.map { value ->
-            require(value.isFinite() && value in 0.0..1.0)
+            require(value.isFinite())
             value.toFloat()
         }
         val encoded = GirassolRecordCodec.encode(
-            GrsMatrix(state.agents.size, 8, values),
+            GrsMatrix(state.agents.size, 60, values),
             GrsEncoding.FLOAT32
         )
         val idsHash = Canonical.hash(state.agents.joinToString("\u0000") { it.id })
@@ -184,14 +197,60 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 "Ordem de cidadãos do sidecar GRS divergente"
             }
             val matrix = GirassolRecordCodec.decode(bytes)
-            check(matrix.rows == state.agents.size && matrix.columns == 8) { "Dimensões do sidecar GRS inválidas" }
+            check(matrix.rows == state.agents.size && matrix.columns in setOf(8, 60)) { "Dimensões do sidecar GRS inválidas" }
             state.agents.forEachIndexed { row, citizen ->
-                val trace = state.minds[citizen.id]?.nativeEngineTrace ?: List(8) { 0.0 }
+                val mind = state.minds[citizen.id]
+                val trace = mind?.nativeEngineTrace ?: List(8) { 0.0 }
+                val extended = mind?.nativeExtendedState ?: List(52) { 0.0 }
                 repeat(8) { column ->
-                    check(kotlin.math.abs(matrix[row, column].toDouble() - trace[column].toFloat().toDouble()) <= 1e-6) {
+                    check(abs(matrix[row, column].toDouble() - trace[column].toFloat().toDouble()) <= 1e-6) {
                         "Trace cognitivo GRS diverge do checkpoint para ${citizen.id}"
                     }
                 }
+                if (matrix.columns == 60) repeat(52) { column ->
+                    check(abs(matrix[row, column + 8].toDouble() - extended[column].toFloat().toDouble()) <= 1e-5) {
+                        "Estado estendido GRS diverge do checkpoint para ${citizen.id}"
+                    }
+                }
+            }
+        }
+    }
+
+    private fun persistRsiPromotionLedger(db: SQLiteDatabase, event: CanonicalEvent) {
+        event.cognition?.minds?.forEach { (citizenId, mind) ->
+            val state = mind.nativeExtendedState
+            require(state.size == 52 && state.all { it.isFinite() })
+            val gate = state[50].coerceIn(0.0, 1.0)
+            db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
+                put("event_id", event.eventId)
+                put("tick", event.tick)
+                put("citizen_id", citizenId)
+                put("gate_passed", if (gate >= .75) 1 else 0)
+                put("gate_score", gate)
+                put("promotion_count", state[48].toLong())
+                put("veto_count", state[49].toLong())
+                put("event_hash", event.hash)
+            })
+        }
+    }
+
+    private fun validateRsiPromotionLedger(db: SQLiteDatabase) {
+        db.rawQuery(
+            "SELECT l.event_id,l.tick,l.citizen_id,l.gate_passed,l.gate_score,l.promotion_count,l.veto_count,l.event_hash,e.payload FROM rsi_promotion_ledger l JOIN events e ON e.id=l.event_id ORDER BY l.event_id,l.citizen_id",
+            null
+        ).use { rows ->
+            while (rows.moveToNext()) {
+                val event = Canonical.event(rows.getString(8))
+                check(event.valid() && event.eventId == rows.getLong(0) && event.tick == rows.getLong(1) &&
+                    event.hash == rows.getString(7)) { "Proveniência do ledger RSI inválida" }
+                val mind = event.cognition?.minds?.get(rows.getString(2))
+                    ?: error("Registro RSI sem estado cognitivo no evento")
+                val state = mind.nativeExtendedState
+                check(state.size == 52 &&
+                    (if (state[50] >= .75) 1 else 0) == rows.getInt(3) &&
+                    abs(state[50] - rows.getDouble(4)) <= 1e-6 &&
+                    state[48].toLong() == rows.getLong(5) &&
+                    state[49].toLong() == rows.getLong(6)) { "Ledger RSI diverge do evento canônico" }
             }
         }
     }
@@ -217,6 +276,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             }
             val count=audit.finish(checkpoint)
             ResearchTables(db).audit()
+            validateRsiPromotionLedger(db)
             db.setTransactionSuccessful()
             return count
         } finally { db.endTransaction() }

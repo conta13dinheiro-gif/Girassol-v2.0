@@ -5,7 +5,10 @@ import kotlin.math.hypot
 
 /** Explicitly packed 56-float/citizen JNI bridge; native code never sees Kotlin object layouts. */
 internal object NativeAutonomy {
-    private const val STRIDE = 72
+    private const val EXTENDED_STATE_SIZE = 52
+    private const val EXTENDED_STATE_OFFSET = 72
+    private const val CANDIDATE_BIAS_OFFSET = 124
+    private const val STRIDE = 132
     private const val DT = 1.0 / 60.0
     init { System.loadLibrary("girassol_projection") }
     private external fun advance(ids: LongArray, packed: FloatArray, couplingK: Float): Float
@@ -15,7 +18,9 @@ internal object NativeAutonomy {
         val actualSensory: Map<String, List<Double>>,
         val orderParameter: Double,
         val nativeEngineStates: Map<String, List<Double>>,
-        val engineSignals: Map<String, List<Double>>
+        val engineSignals: Map<String, List<Double>>,
+        val nativeExtendedStates: Map<String, List<Double>>,
+        val candidateBiases: Map<String, List<Double>>
     )
 
     fun evaluate(world: WorldState, lastActions: List<ActionRecord>, minds: Map<String, MindState>): Result {
@@ -63,6 +68,8 @@ internal object NativeAutonomy {
             put(37, salience); put(38, somaticBias); put(39, DT)
             sensory.forEachIndexed { i, value -> put(40 + i, value) }
             mind.nativeEngineTrace.forEachIndexed { i, value -> put(56 + i, value) }
+            require(mind.nativeExtendedState.size == EXTENDED_STATE_SIZE)
+            mind.nativeExtendedState.forEachIndexed { i, value -> put(EXTENDED_STATE_OFFSET + i, value) }
             ids[index] = Canonical.stream(world.seed, citizen.id, world.tick, "anokhin-citizen-id-v1").nextLong()
         }
 
@@ -97,14 +104,21 @@ internal object NativeAutonomy {
         }
         val nativeStates = LinkedHashMap<String, List<Double>>(world.agents.size)
         val signals = LinkedHashMap<String, List<Double>>(world.agents.size)
+        val extendedStates = LinkedHashMap<String, List<Double>>(world.agents.size)
+        val candidateBiases = LinkedHashMap<String, List<Double>>(world.agents.size)
         world.agents.forEachIndexed { index, citizen ->
             val offset = index * STRIDE
             nativeStates[citizen.id] = List(8) { packed[offset + 56 + it].toDouble() }
             signals[citizen.id] = List(8) { packed[offset + 64 + it].toDouble() }
+            extendedStates[citizen.id] = List(EXTENDED_STATE_SIZE) { packed[offset + EXTENDED_STATE_OFFSET + it].toDouble() }
+            candidateBiases[citizen.id] = List(8) { packed[offset + CANDIDATE_BIAS_OFFSET + it].toDouble() }
             check(nativeStates.getValue(citizen.id).all { it.isFinite() && it in 0.0..1.0 })
             check(signals.getValue(citizen.id).all { it.isFinite() && it in -1.0..1.0 })
+            check(extendedStates.getValue(citizen.id).size == EXTENDED_STATE_SIZE)
+            check(extendedStates.getValue(citizen.id).all { it.isFinite() })
+            check(candidateBiases.getValue(citizen.id).all { it.isFinite() && it in -.25.. .25 })
         }
-        return Result(updated, actualById, order.toDouble(), nativeStates, signals)
+        return Result(updated, actualById, order.toDouble(), nativeStates, signals, extendedStates, candidateBiases)
     }
 
     fun predictNext(world: WorldState, citizen: Citizen, action: Activity, sensory: List<Double>): List<Double> {

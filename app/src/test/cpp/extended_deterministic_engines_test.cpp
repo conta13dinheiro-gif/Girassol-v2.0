@@ -14,6 +14,12 @@ int main() {
     TsetlinMachine restored;
     assert(deserializeGrst(bytes.data(),bytes.size(),restored));
     assert(restored.count==2 && restored.predict(0x3u)==0.0f);
+    const auto positiveState = restored.clauses[0].state;
+    restored.observe(0x3u, 1.0f);
+    assert(restored.clauses[0].state >= positiveState);
+    const auto negativeState = restored.clauses[1].state;
+    restored.observe(0x3u, -1.0f);
+    assert(restored.clauses[1].state >= negativeState);
     auto damaged=bytes; damaged[0]^=1;
     assert(!deserializeGrst(damaged.data(),damaged.size(),restored));
     assert(!deserializeGrst(bytes.data(),bytes.size()-1,restored));

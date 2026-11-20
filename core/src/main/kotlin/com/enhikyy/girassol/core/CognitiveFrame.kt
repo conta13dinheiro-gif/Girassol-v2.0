@@ -96,12 +96,22 @@ import kotlin.math.*
     val learnedTick: Long = -1,val novelty: Double = 0.0,val behaviors: List<List<Double>> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val memory: MemoryBank = MemoryBank(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val psyche: SoulModel = SoulModel(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val nativeEngineTrace: List<Double> = List(8) { 0.0 }) {
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val nativeEngineTrace: List<Double> = List(8) { 0.0 },
+    // Persistent extended engines: Tsetlin automata[0..7], PER priorities[8..15],
+    // Online-EWC anchor[16..23]/Fisher[24..31], 256-bit signature[32..47],
+    // RSI ledger counters/gate[48..50], and Hawkes intensity[51].
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val nativeExtendedState: List<Double> = List(52) { 0.0 }) {
     fun valid(tick: Long): Boolean = parameters.size==248 && parameters.all { it.isFinite() && abs(it)<=8 } &&
         parameters.subList(168,176).all { it in .2..8.0 } && hidden.size==8 && hidden.all { it.isFinite() && abs(it)<=1.00001 } &&
         personality.size==5 && personality.all { it.isFinite() && it in 0.0..1.0 } && exposure.size==8 && exposure.all { it>=0 } &&
         learnedTick in -1..tick && novelty.isFinite() && novelty in 0.0..1.0 &&
-        memory.valid(tick) && psyche.valid() && nativeEngineTrace.size == 8 && nativeEngineTrace.all { it.isFinite() && it in 0.0..1.0 } && behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
+        memory.valid(tick) && psyche.valid() && nativeEngineTrace.size == 8 && nativeEngineTrace.all { it.isFinite() && it in 0.0..1.0 } &&
+        nativeExtendedState.size==52 && nativeExtendedState.all { it.isFinite() } &&
+        nativeExtendedState.subList(0,32).all { it in 0.0..1.0 } &&
+        nativeExtendedState.subList(32,48).all { it in 0.0..65535.0 && it==kotlin.math.floor(it) } &&
+        nativeExtendedState[48] in 0.0..16777216.0 && nativeExtendedState[49] in 0.0..16777216.0 &&
+        nativeExtendedState[50] in 0.0..1.0 && nativeExtendedState[51] in 0.0..1.0 &&
+        behaviors.all { b-> b.size==6 && b.all { it.isFinite() && it in 0.0..1.0 } }
     companion object {
 
         fun inherit(world: WorldState,citizen: Citizen,firstId: String,secondId: String,first: MindState,second: MindState): MindState {
@@ -142,7 +152,13 @@ import kotlin.math.*
                 behaviors=behaviors,
                 memory=inheritedMemory,
                 psyche=SoulModel.inherit(world,citizen,first.psyche,second.psyche),
-                nativeEngineTrace=List(8) { i -> ((first.nativeEngineTrace[i] + second.nativeEngineTrace[i]) / 2.0).coerceIn(0.0,1.0) }
+                nativeEngineTrace=List(8) { i -> ((first.nativeEngineTrace[i] + second.nativeEngineTrace[i]) / 2.0).coerceIn(0.0,1.0) },
+                nativeExtendedState=List(52) { i ->
+                    when (i) {
+                        in 0..31 -> ((first.nativeExtendedState[i] + second.nativeExtendedState[i]) * .5).coerceIn(0.0,1.0)
+                        else -> 0.0 // Signatures and RSI counters are individual experiences, not heritable traits.
+                    }
+                }
             ).also { check(it.valid(world.tick)) }
         }
         fun initial(world: WorldState,citizen: Citizen): MindState {
@@ -169,7 +185,8 @@ import kotlin.math.*
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
         exposure=m.exposure.toList(),behaviors=m.behaviors.map { it.toList() },memory=m.memory.snapshot(),
-        psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList()),nativeEngineTrace=m.nativeEngineTrace.toList()) },
+        psyche=m.psyche.copy(bigFive=m.psyche.bigFive.toList(),expectedSensory=m.psyche.expectedSensory.toList()),
+        nativeEngineTrace=m.nativeEngineTrace.toList(),nativeExtendedState=m.nativeExtendedState.toList()) },
         decisions=decisions.toMap(),evolution=evolution?.snapshot(),innerSpeech=innerSpeech.toMap())
     fun applicable(world: WorldState): Boolean {
         val ids=world.agents.map { it.id }.toSet()
