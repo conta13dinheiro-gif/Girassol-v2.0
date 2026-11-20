@@ -115,6 +115,47 @@ class WorldStoreTest {
         } finally { context.deleteDatabase(name) }
     }
 
+    @Test fun verifiedProgramsRollbackWithTheirEventAndDetectAlteration() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="girassol-branch-${java.util.UUID.randomUUID()}.db"
+        try {
+            val initial=WorldActor.genesis();val room=initial.rooms.first { it.id==Activity.STUDY.room }
+            val stock=initial.balances.toMutableMap()
+            check(WorldActor.transfer(stock,"market","environment","timber",stock.getValue("market/timber")))
+            check(WorldActor.transfer(stock,"market","archive","paper",stock.getValue("market/paper")))
+            val baseline=initial.copy(balances=stock,rooms=initial.rooms.map { if(it.id==Activity.STUDY.room) it.copy(capacity=2) else it },agents=initial.agents.mapIndexed { index,a -> if(index==0)
+                a.copy(x=room.x,z=room.z,activity=Activity.STUDY,needs=Needs(1.0,1.0,1.0,1.0,.01)) else a.copy(x=11.0,z=11.0,activity=Activity.SLEEP) })
+            val rule=AdicoRule.parse("LINEAGE:${baseline.agents[0].lineage} OBRIGADO STUDY WHEN ALWAYS 0 ELSE FINE 0 QUOTA 0 WINDOW 240")
+            val society=SocietyState(listOf(rule),baseline.agents.associate { it.id to SocietyAdicoCliodynamicsEngine.initialOpinion(baseline,it) },emptyList(),emptyList(),emptyList(),SocietyAdicoCliodynamicsEngine.measure(baseline))
+            val actor=WorldActor(Checkpoint(baseline.copy(society=society),0,WorldActor.GENESIS_HASH),8)
+            var actions=emptyList<ActionRecord>();var injected=false
+            WorldStore(context,name).use { store ->
+                repeat(8) {
+                    val before=actor.state
+                    val raw=com.enhikyy.girassol.cognition.NativeMind.evaluate(before,actions)
+                    val frame=raw.copy(decisions=before.agents.associate { it.id to if(it.id=="agent0") Activity.STUDY else Activity.SLEEP })
+                    val spatial=com.enhikyy.girassol.physics.NativeSpatial.advance(before,actor.intentions(cognition=frame))
+                    val transition=actor.step(cognition=frame,spatial=spatial)
+                    if(!injected && transition.state.minds.values.any { it.memory.skills.isNotEmpty() }) {
+                        val previous=store.load()
+                        store.writableDatabase.execSQL("CREATE TRIGGER fail_skill BEFORE INSERT ON voyager_skill_library BEGIN SELECT RAISE(ABORT,'injected'); END")
+                        try { store.commit(transition);fail("Program write failure must abort whole event") } catch(_: android.database.sqlite.SQLiteException) { }
+                        assertEquals(previous,store.load())
+                        store.writableDatabase.execSQL("DROP TRIGGER fail_skill");injected=true
+                    }
+                    store.commit(transition);actions=transition.event.actions
+                }
+                assertTrue(injected);assertEquals(8L,store.audit())
+                store.readableDatabase.rawQuery("SELECT count(*) FROM voyager_skill_library",null).use { rows -> assertTrue(rows.moveToFirst());assertTrue(rows.getInt(0)>0) }
+            }
+            WorldStore(context,name).use { reopened ->
+                assertEquals(actor.checkpoint(),reopened.load());assertEquals(8L,reopened.audit())
+                reopened.writableDatabase.execSQL("UPDATE voyager_skill_library SET program='{}' WHERE event_id=(SELECT min(event_id) FROM voyager_skill_library)")
+                try { reopened.audit();fail("Altered program must fail audit") } catch(_: IllegalStateException) { }
+            }
+        } finally { context.deleteDatabase(name) }
+    }
+
     @Test fun oldCheckpointLoadsAndNewEventContinuesItsChain() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = InstrumentationRegistry.getInstrumentation().context.assets

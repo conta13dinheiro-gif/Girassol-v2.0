@@ -55,6 +55,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val socialNeighbors=if(societyEnabled) state.ties.groupBy { it.from } else emptyMap()
         val contacts=mutableListOf<SocialContact>()
         require(state.economy==null || economyEnabled) { "Active economy requires its canonical input" }
+        require(state.economy?.jobs.orEmpty().none { it.skill!=null } || cognitiveInput?.pedagogyEnabled==true) { "Active skill programs require canonical pedagogy input" }
         fun transfer(stock: MutableMap<String,Int>,from: String,to: String,item: String,amount: Int): Boolean {
             val accepted=Companion.transfer(stock,from,to,item,amount)
             if(accepted && economyEnabled) {
@@ -63,7 +64,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             }
             return accepted
         }
-        val economy=if(economyEnabled) DoubleEntryEconomyAndStigmergy(state) { from,to,item,amount -> transfer(balances,from,to,item,amount) } else null
+        val economy=if(economyEnabled) DoubleEntryEconomyAndStigmergy(state,if(cognitiveInput?.pedagogyEnabled==true) cognitiveInput.minds else null) { from,to,item,amount -> transfer(balances,from,to,item,amount) } else null
         val expiredRooms=economy?.expiredRooms().orEmpty()
 
         if (rulesVersion >= 2) {
@@ -107,8 +108,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                 occupied[room.id] = (occupied[room.id] ?: 0) + 1
                 val before = a.needs
                 var needs = before
-                var success = true
-                when (action) {
+                var success = economy?.beginWork(a,action,balances) ?: true
+                if(success) when (action) {
                     Activity.WATER -> { val source=if(economyEnabled && (balances["market/water"] ?: 0)==0) DoubleEntryEconomyAndStigmergy.COMMONS else "market"; success = transfer(balances, source, "environment", "water", 1); if (success) needs = needs.copy(hydration = .99) }
                     Activity.COFFEE -> { success = transfer(balances, "market", "environment", "coffee", 1); if (success) needs = needs.copy(energy = (needs.energy + .12).coerceAtMost(1.0)) }
                     Activity.EAT -> {

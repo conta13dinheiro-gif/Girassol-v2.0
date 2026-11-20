@@ -56,6 +56,9 @@ class SocietyTest {
     }
     @Test fun adicoParsesRealGrammarAndRejectsUnsupportedOrUnsafeActions() {
         for(rule in SocietyAdicoCliodynamicsEngine.foundingRules()) assertEquals(rule,AdicoRule.parse(rule.statement()))
+        val real=AdicoRule.parse("LINEAGE:${initial.agents[0].lineage} OBRIGADO STUDY WHEN ALWAYS 0 ELSE FINE 0 QUOTA 0 WINDOW 240")
+        assertTrue(real.applies(initial,initial.agents[0]))
+        assertFalse(real.applies(initial,initial.agents.first { it.lineage!=initial.agents[0].lineage }))
         for(text in listOf("ALL EXEC BUILD WHEN ALWAYS 0 ELSE FINE 1 QUOTA 0 WINDOW 240",
             "ALL PROIBIDO WATER WHEN ALWAYS 0 ELSE FINE 1 QUOTA 0 WINDOW 240",
             "ALL PROIBIDO BUILD WHEN TIMBER_LT NaN ELSE FINE 1 QUOTA 0 WINDOW 240",

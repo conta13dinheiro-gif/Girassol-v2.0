@@ -79,7 +79,13 @@ A memória persistida no checkpoint SQLite tem quatro representações:
 
 O HNSW nativo recupera até oito candidatos por produto interno; a segunda fase os reordena por similaridade e utilidade Q persistida (adaptação compacta de MemRL). O retorno da próxima ação registrada atualiza apenas os episódios que foram recuperados, com crédito atrasado e determinístico. A similaridade cosseno é normalizada para pesos não negativos antes da média de recompensa. O índice é reconstruído em RAM a partir dos episódios persistidos; não é um segundo banco autoritativo. Os vetores descrevem atividade, posição, necessidades e resultado, **não são embeddings linguísticos**. As rotinas ainda correspondem às oito atividades existentes; não executam programas inventados como Voyager. O perfil mostra os registros e conexões recuperados, sem métricas fictícias.
 
-A memória também mantém um `SkillLearningTrace` por atividade observada: BKT bayesiano estima domínio, uma curva DSR determinística agenda revisão em ticks e um estimador IRT 3PL simplificado atualiza habilidade latente. Esses valores entram no mesmo `MemoryBank` persistido e acrescentam somente um bônus pequeno ao escore cognitivo; GOAP e o `WorldActor` continuam validando toda execução. A agenda usa a curva (R(t,S)=(1+(19/81)t/S)^{-0.5}) especificada nos prompts. **Não é uma implementação completa de FSRS-6/7**: parâmetros IRT não são calibrados por banco de itens e a atualização de estabilidade é uma heurística documentada. Veja [contrato e fórmulas de aprendizagem](docs/aprendizagem-bkt-dsr-irt.md).
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:e5daead763f5b6efd703ac49bb3d841ef4d20a3a99c29f612fa1b0b7b65678a3 -->
+
+A aprendizagem preserva o caminho histórico BKT/DSR/IRT e acrescenta um modelo versionado FSRS 4.5 com quatro notas, BKT genético e calibração online IRT 2PL/3PL. Programas de habilidades tipados são destilados de trabalhos físicos comprovados e só podem ser compartilhados com três execuções locais e domínio >=0,75. Reservas, movimento JNI, ferramentas, trabalho e recibos usam o executor real. O registro canônico e as projeções SQLite conservam os modelos e a proveniência. Consulte o [contrato versionado de pedagogia e habilidades](docs/pedagogia-fsrs45-voyager.md) para fórmulas, limites e compatibilidade; o [contrato anterior](docs/aprendizagem-bkt-dsr-irt.md) descreve o caminho histórico. As verificações executadas estão em `progresso-implementacao-girassol.md`.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 ## Pedidos, Hugging Face & Biblioteca
 

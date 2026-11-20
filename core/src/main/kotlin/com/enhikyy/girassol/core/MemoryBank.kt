@@ -35,11 +35,16 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val associations: List<AssociativeLink> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val semantic: List<SemanticSchema> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val ripple: RippleTrace? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val opinions: List<ProvenancedOpinion> = emptyList()
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val opinions: List<ProvenancedOpinion> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val skills: List<VoyagerSkill> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val practiceProofs: List<PracticeProof> = emptyList()
 ) {
     fun valid(tick: Long): Boolean {
         val episodeIds=episodes.map { it.eventId }.toSet()
-        return AssociativeCognitiveMemory.valid(this,tick,episodeIds) && ProvenanceImmunity.valid(opinions,tick) && reflectedTick in -1..tick && episodes.all { e->
+        return VoyagerSkillLibrary.valid(skills,tick) && practiceProofs.size<=24 &&
+            practiceProofs.groupBy { it.action }.values.all { it.size<=3 && it.map { p -> p.proof.tick }.distinct().size==it.size } &&
+            practiceProofs.all { it.proof.tick in 1..tick && it.proof.stateHash.matches(Regex("[a-f0-9]{64}")) && it.proof.job.matches(Regex("[a-f0-9]{64}")) && it.proof.room.isNotBlank() && it.proof.room.length<=128 } &&
+            AssociativeCognitiveMemory.valid(this,tick,episodeIds) && ProvenanceImmunity.valid(opinions,tick) && reflectedTick in -1..tick && episodes.all { e->
         e.tick in 0..tick && e.eventId in 1..tick && e.reward.isFinite() && e.reward in -5.0..5.0 && e.emotion.isFinite() && e.emotion in -1.0..1.0 &&
         e.x.isFinite() && e.z.isFinite() && e.importance.isFinite() && e.importance in 0.0..1.0 && e.embedding.size==16 &&
         e.embedding.all { it.isFinite() } && abs(e.embedding.sumOf { it.toDouble()*it }-1)<.002
@@ -67,7 +72,8 @@ import kotlin.math.*
         learning=learning.toList(),
         workingMemory=workingMemory.copy(slots=workingMemory.slots.toList()),
         associations=associations.toList(),semantic=semantic.map { it.copy(sources=it.sources.toList()) },
-        ripple=ripple?.copy(sources=ripple.sources.toList()),opinions=opinions.toList()
+        ripple=ripple?.copy(sources=ripple.sources.toList()),opinions=opinions.toList(),
+        skills=skills.map { it.copy(operators=it.operators.toList(),proofs=it.proofs.toList()) },practiceProofs=practiceProofs.toList()
     )
 
     /**
@@ -116,7 +122,7 @@ import kotlin.math.*
         return copy(utilities=retainedUtilities,pendingRecallEventIds=pending,workingMemory=nextWorking)
     }
 
-    fun observe(world: WorldState,citizen: Citizen,record: ActionRecord?,learningRate: Double=MEMRL_ALPHA,activationDecay: Double=.5): MemoryBank {
+    fun observe(world: WorldState,citizen: Citizen,record: ActionRecord?,learningRate: Double=MEMRL_ALPHA,activationDecay: Double=.5,pedagogyEnabled: Boolean=false,sourceHash: String=""): MemoryBank {
         require(learningRate.isFinite() && learningRate in .05.. .50 && activationDecay.isFinite() && activationDecay in .20.. .85)
         val last=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick }
         val failed=record?.outcome=="PRECONDITION_FAILED" || record?.outcome=="RESERVED"
@@ -126,7 +132,11 @@ import kotlin.math.*
             val importance=(.15+abs(reward)*1.8+if(failed) .2 else 0.0).coerceIn(0.0,1.0)
             val episode=Episode(world.tick,last?.eventId ?: world.tick,citizen.activity,reward,citizen.x,citizen.z,
                 (reward*2).coerceIn(-1.0,1.0),importance,embedding(citizen,citizen.activity,reward))
-            val skill=learningFor(citizen.activity).observe(correct=last!=null,tick=world.tick)
+            val job=world.economy?.jobs?.singleOrNull { it.agent==citizen.id && it.action==citizen.activity && it.phase=="DONE" && it.receiptTick==world.tick }
+            val skill=if(pedagogyEnabled) learningFor(citizen.activity).observeFsrs(
+                if(last==null) ReviewGrade.AGAIN else if(reward>=.25) ReviewGrade.EASY else if(reward<.03) ReviewGrade.HARD else ReviewGrade.GOOD,
+                world.tick,citizen.genome.curiosity.express(),last!=null && job!=null)
+                else learningFor(citizen.activity).observe(correct=last!=null,tick=world.tick)
             val episodeIds=episodes.map { it.eventId }.toSet()+episode.eventId
             val active=workingMemory.activate(
                 episode.eventId,world.tick,(0.55+episode.importance*0.30).coerceIn(0.0,1.0),episodeIds
@@ -136,6 +146,14 @@ import kotlin.math.*
                 learning=(learning.filterNot { it.action==citizen.activity }+skill).sortedBy { it.action.ordinal },
                 workingMemory=active
             )
+            if(pedagogyEnabled && last!=null && job!=null) {
+                require(sourceHash.matches(Regex("[a-f0-9]{64}")))
+                val proof=PracticeProof(job.action,SkillProof(world.tick,sourceHash,job.id,job.room))
+                next=next.copy(practiceProofs=(next.practiceProofs.filterNot { it.action==job.action }+
+                    (next.practiceProofs.filter { it.action==job.action }+proof).distinctBy { it.proof.tick }.takeLast(3))
+                    .sortedWith(compareBy<PracticeProof> { it.action.ordinal }.thenBy { it.proof.tick }))
+                next=VoyagerSkillLibrary.distill(world,citizen,next,sourceHash)
+            }
             // Delayed reward updates only memories actually selected before this outcome.
             if (pendingRecallEventIds.isNotEmpty()) {
                 val byId=next.utilities.associateBy { it.eventId }.toMutableMap()

@@ -1,6 +1,8 @@
 package com.enhikyy.girassol.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlin.math.hypot
 
 @Serializable data class StockTransfer(val from: String,val to: String,val resource: String,val amount: Int) {
@@ -10,8 +12,11 @@ import kotlin.math.hypot
 @Serializable data class WorkLease(val room: String,val agent: String,val expires: Long)
 @Serializable data class WorkTool(val agent: String,val action: Activity,val uses: Int)
 @Serializable data class EcologicalNicheStructure(val room: String,val builder: String,val expires: Long,val investedTimber: Int=4)
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable data class PhysicalJob(val id: String,val agent: String,val action: Activity,val room: String,val started: Long,
-    val phase: String,val toils: List<String>,val attachmentEvent: Long=0,val toolUsed: Boolean=false,val receiptTick: Long=0,val interruptedJob: String="")
+    val phase: String,val toils: List<String>,val attachmentEvent: Long=0,val toolUsed: Boolean=false,val receiptTick: Long=0,val interruptedJob: String="",
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val skill: VoyagerSkill?=null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val programCounter: Int=0)
 @Serializable data class EconomyState(val pheromones: List<Double> = List(8*144){0.0},val leases: List<WorkLease> = emptyList(),
     val tools: List<WorkTool> = emptyList(),val niches: List<EcologicalNicheStructure> = emptyList(),val jobs: List<PhysicalJob> = emptyList(),val legacyTimber: Int=0) {
     fun valid(world: WorldState): Boolean {
@@ -26,9 +31,12 @@ import kotlin.math.hypot
             jobs.size<=150 && jobs.map { it.agent }.distinct().size==jobs.size && jobs.all { it.agent in ids && it.room in rooms && it.started in 1..world.tick &&
                 it.id==Canonical.hash("${world.seed}:${it.agent}:${it.started}:${it.action}:${it.room}") &&
                 SmartTerrain.supports(world.rooms.first { room -> room.id==it.room },it.action) && it.phase in setOf("MOVE_TO","DONE","FAILED") && it.toils in listOf(emptyList(),listOf("RESERVE"),listOf("RESERVE","MOVE_TO"),listOf("RESERVE","MOVE_TO","EXECUTE_WORK","DEPOSIT_LEDGER")) &&
+                (if(it.skill==null) it.programCounter==0 else it.skill.valid(world.tick) && it.skill.action==it.action &&
+                    it.programCounter in 0..it.skill.operators.size && (it.phase!="DONE" || it.programCounter==it.skill.operators.size) &&
+                    (it.phase!="MOVE_TO" || it.programCounter in 0..1 && (it.programCounter==0 || leases.any { lease -> lease.agent==it.agent && lease.room==it.room }))) &&
                 it.attachmentEvent in 0..world.tick && it.receiptTick in 0..world.tick && (it.phase!="DONE" || (it.receiptTick>0 && it.toils==listOf("RESERVE","MOVE_TO","EXECUTE_WORK","DEPOSIT_LEDGER"))) && (it.interruptedJob.isEmpty() || it.interruptedJob.matches(Regex("[a-f0-9]{64}"))) }
     }
-    fun snapshot() = copy(pheromones=pheromones.toList(),leases=leases.toList(),tools=tools.toList(),niches=niches.toList(),jobs=jobs.map { it.copy(toils=it.toils.toList()) })
+    fun snapshot() = copy(pheromones=pheromones.toList(),leases=leases.toList(),tools=tools.toList(),niches=niches.toList(),jobs=jobs.map { it.copy(toils=it.toils.toList(),skill=it.skill?.copy(operators=it.skill.operators.toList(),proofs=it.skill.proofs.toList())) })
 }
 
 /** Smart Terrain advertisements are derived from actual rooms, including constructed annexes. */
@@ -53,7 +61,7 @@ object SmartTerrain {
 }
 
 /** One tick writer, fixed bounds; resource mutations are accepted only through the ledger callback. */
-class DoubleEntryEconomyAndStigmergy(private val world: WorldState,private val transfer: (String,String,String,Int)->Boolean) {
+class DoubleEntryEconomyAndStigmergy(private val world: WorldState,private val skillMinds: Map<String,MindState>?=null,private val transfer: (String,String,String,Int)->Boolean) {
     companion object {
         const val COMMONS="COMMUNAL_COMMONS"
         const val TOOL_USES=32
@@ -78,17 +86,43 @@ class DoubleEntryEconomyAndStigmergy(private val world: WorldState,private val t
         val old=jobs[citizen.id]
         if(old?.action!=action || old.room!=room.id || old.phase!="MOVE_TO") {
             leases.removeAll { it.agent==citizen.id }
-            jobs[citizen.id]=WorkGiver.assign(world,citizen,action,room,old)
+            val bank=skillMinds?.get(citizen.id)?.memory
+            val skill=bank?.skills?.singleOrNull { it.action==action && it.admits(world,citizen,bank) }
+            jobs[citizen.id]=WorkGiver.assign(world,citizen,action,room,old).copy(skill=skill)
         }
+        // A long native route can outlive its lease. Re-execute RESERVE before continuing MOVE_TO.
+        val pending=jobs.getValue(citizen.id)
+        if(pending.skill!=null && pending.programCounter==1 && leases.none { it.agent==citizen.id })
+            jobs[citizen.id]=pending.copy(programCounter=0,toils=emptyList())
         if(leases.none { it.agent==citizen.id } && leases.count { it.room==room.id }<room.capacity) {
             leases+=WorkLease(room.id,citizen.id,Math.addExact(tick,30))
-            jobs[citizen.id]=jobs.getValue(citizen.id).copy(toils=listOf("RESERVE"))
+            val job=jobs.getValue(citizen.id)
+            if(job.skill!=null) check(job.skill.operators[job.programCounter]==SkillOperator.RESERVE)
+            jobs[citizen.id]=job.copy(toils=listOf("RESERVE"),programCounter=if(job.skill==null) 0 else 1)
         }
         check(jobs.size<=150 && leases.size<=150)
     }
     fun reserve(citizen: Citizen,room: Room): Boolean {
         if(leases.none { it.agent==citizen.id && it.room==room.id }) return false
-        jobs[citizen.id]=jobs.getValue(citizen.id).copy(toils=listOf("RESERVE","MOVE_TO"))
+        val job=jobs.getValue(citizen.id)
+        if(job.skill!=null) check(job.skill.operators[job.programCounter]==SkillOperator.MOVE_TO)
+        jobs[citizen.id]=job.copy(toils=listOf("RESERVE","MOVE_TO"),programCounter=if(job.skill==null) 0 else job.programCounter+1)
+        return true
+    }
+    /** Interprets the stored work program only after physical arrival and a valid lease.
+     * The caller performs the guarded work effect; finish consumes its actual outcome and ledger receipt.
+     */
+    fun beginWork(citizen: Citizen,action: Activity,balances: Map<String,Int>): Boolean {
+        var job=jobs.getValue(citizen.id)
+        val skill=job.skill ?: return true
+        val bank=skillMinds?.get(citizen.id)?.memory ?: return false
+        if(!skill.admits(world.copy(balances=balances),citizen,bank)) return false
+        check(job.action==action && leases.any { it.agent==citizen.id && it.room==job.room })
+        if(skill.operators.getOrNull(job.programCounter)==SkillOperator.ACQUIRE_TOOL) {
+            if(!ensureTool(citizen,action,balances)) return false
+            job=job.copy(programCounter=job.programCounter+1);jobs[citizen.id]=job
+        }
+        check(skill.operators.getOrNull(job.programCounter)==SkillOperator.EXECUTE_WORK)
         return true
     }
     /** A hammer/stylus is physical timber held in tools, reused 32 times, then returned to environment. */
@@ -105,13 +139,19 @@ class DoubleEntryEconomyAndStigmergy(private val world: WorldState,private val t
     fun finish(citizen: Citizen,action: Activity,success: Boolean) {
         val job=jobs.getValue(citizen.id)
         if(success) {
+            if(job.skill!=null) {
+                check(job.skill.operators.getOrNull(job.programCounter)==SkillOperator.EXECUTE_WORK)
+                check(job.skill.operators.getOrNull(job.programCounter+1)==SkillOperator.DEPOSIT_LEDGER)
+                check(job.programCounter+2==job.skill.operators.size)
+            }
+            // DEPOSIT_LEDGER settles real tool wear, receipt and the spatial work signal.
             val index=tools.indexOfFirst { it.agent==citizen.id && it.action==action }
             if(index>=0) {
                 val tool=tools[index]
                 if(tool.uses==1) { check(transfer("tools","environment","timber",1)); tools.removeAt(index) }
                 else tools[index]=tool.copy(uses=tool.uses-1)
             }
-            jobs[citizen.id]=job.copy(phase="DONE",toils=listOf("RESERVE","MOVE_TO","EXECUTE_WORK","DEPOSIT_LEDGER"),toolUsed=index>=0,receiptTick=tick)
+            jobs[citizen.id]=job.copy(phase="DONE",programCounter=if(job.skill==null) 0 else job.programCounter+2,toils=listOf("RESERVE","MOVE_TO","EXECUTE_WORK","DEPOSIT_LEDGER"),toolUsed=index>=0,receiptTick=tick)
             val cell=cell(citizen.x,citizen.z)
             grid[action.ordinal*144+cell]=(grid[action.ordinal*144+cell]+1.0).coerceAtMost(100.0)
         } else jobs[citizen.id]=job.copy(phase="FAILED")

@@ -129,6 +129,16 @@ internal object GeaSchema {
                     put("digest",java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) })
                 })
             }
+            val oldSkills=previous?.minds?.get(agent)?.memory?.skills.orEmpty().associateBy { it.action }
+            for(skill in mind.memory.skills) {
+                if(oldSkills[skill.action]==skill) continue
+                verifySkill(db,skill,event.tick-1)
+                db.insertOrThrow("voyager_skill_library",null,ContentValues().apply {
+                    put("event_id",event.eventId);put("agent_id",agent);put("skill_id",skill.id)
+                    put("executions",skill.executions);put("knowledge",skill.knowledge)
+                    put("preconditions",Json.encodeToString(skill.preconditions));put("program",Json.encodeToString(skill))
+                })
+            }
             val old = previous?.minds?.get(agent)?.memory?.learning.orEmpty().associateBy { it.action }
             for (trace in mind.memory.learning) {
                 if (old[trace.action] == trace) continue
@@ -165,6 +175,45 @@ internal object GeaSchema {
                 check(structure.room==rows.getString(0) && structure.builder==rows.getString(1) && structure.expires==rows.getLong(2) && structure==Json.decodeFromString<EcologicalNicheStructure>(rows.getString(3)))
             }
             check(count==expected.size) { "Missing ecological infrastructure evidence" }
+        }
+    }
+
+    private fun verifySkill(db: SQLiteDatabase,skill: VoyagerSkill,tick: Long) {
+        check(skill.valid(tick))
+        for(proof in skill.proofs) db.rawQuery("SELECT payload FROM events WHERE id=?",arrayOf(proof.tick.toString())).use { source ->
+            check(source.moveToFirst()) { "Skill source execution missing" }
+            val event=Canonical.event(source.getString(0))
+            check(event.valid() && event.stateHash==proof.stateHash && event.version>=8 && event.cognition?.economyEnabled==true &&
+                event.actions.any { it.agentId==skill.author && it.activity==skill.action && it.outcome=="OK" }) { "Unverified skill execution" }
+        }
+    }
+
+    fun auditPedagogyEvent(db: SQLiteDatabase,event: CanonicalEvent,previousLearning: Map<String,List<SkillLearningTrace>>,previousSkills: Map<String,List<VoyagerSkill>>) {
+        val minds=event.cognition?.minds.orEmpty()
+        val learning=minds.flatMap { (agent,mind) -> mind.memory.learning.filter { trace -> trace !in previousLearning[agent].orEmpty() }.map { agent to it } }
+            .sortedWith(compareBy<Pair<String,SkillLearningTrace>> { it.first }.thenBy { it.second.action.name })
+        // Migrations deliberately do not fabricate pre-schema mastery rows. New activated events are complete.
+        if(event.cognition?.pedagogyEnabled==true) db.rawQuery("SELECT agent_id,skill_id,knowledge,difficulty,stability,theta,reviews,last_review_tick FROM bkt_fsrs_mastery WHERE event_id=? ORDER BY agent_id,skill_id",arrayOf(event.eventId.toString())).use { rows ->
+            var count=0
+            while(rows.moveToNext()) {
+                check(count<learning.size);val (agent,trace)=learning[count++]
+                check(rows.getString(0)==agent && rows.getString(1)==trace.action.name && rows.getDouble(2)==trace.knowledgeProbability &&
+                    rows.getDouble(3)==trace.difficulty && rows.getDouble(4)==trace.stabilityTicks && rows.getDouble(5)==trace.theta &&
+                    rows.getInt(6)==trace.reviews && rows.getLong(7)==trace.lastReviewTick)
+            }
+            check(count==learning.size) { "Missing mastery evidence" }
+        }
+        val skills=minds.flatMap { (agent,mind) -> mind.memory.skills.filter { it !in previousSkills[agent].orEmpty() }.map { agent to it } }
+            .sortedWith(compareBy<Pair<String,VoyagerSkill>> { it.first }.thenBy { it.second.id })
+        db.rawQuery("SELECT agent_id,skill_id,executions,knowledge,preconditions,program FROM voyager_skill_library WHERE event_id=? ORDER BY agent_id,skill_id",arrayOf(event.eventId.toString())).use { rows ->
+            var count=0
+            while(rows.moveToNext()) {
+                check(count<skills.size);val (agent,skill)=skills[count++]
+                check(rows.getString(0)==agent && rows.getString(1)==skill.id && rows.getInt(2)==skill.executions && rows.getDouble(3)==skill.knowledge &&
+                    rows.getString(4)==Json.encodeToString(skill.preconditions) && rows.getString(5)==Json.encodeToString(skill))
+                verifySkill(db,skill,event.tick-1)
+            }
+            check(count==skills.size) { "Missing verified skill evidence" }
         }
     }
 

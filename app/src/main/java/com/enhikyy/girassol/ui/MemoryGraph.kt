@@ -48,4 +48,13 @@ import kotlin.math.*
         Spacer(Modifier.height(12.dp)); Text("Biblioteca de técnicas",fontSize=12.sp,color=Solar.Biosphere)
         mind.memory.procedures.forEach { p-> Text("${p.action.label} · ${p.successes} sucessos${p.teacher?.let { " · aprendido com $it" } ?: ""}",fontSize=11.sp,color=Solar.Muted) }
     }
+    if(mind.memory.skills.isNotEmpty()) {
+        Spacer(Modifier.height(12.dp));Text("Habilidades verificadas",fontSize=12.sp,color=Solar.Biosphere)
+        mind.memory.skills.forEach { skill ->
+            val local=mind.memory.learningFor(skill.action)
+            Text("${skill.action.label} · ${(local.knowledgeProbability*100).roundToInt()}% de domínio · ${local.verifiedExecutions} execuções locais${skill.teacher?.let { " · ensino de $it" } ?: ""}",fontSize=11.sp,color=Solar.Muted)
+            local.fsrs?.let { review -> Text("Revisão prevista: ciclo ${review.due}",fontSize=11.sp,color=Solar.Muted) }
+        }
+    }
+
 }

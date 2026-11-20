@@ -34,7 +34,7 @@ object DunbarNetwork {
     val threshold: Double,val fine: Int,val quota: Int,val window: Int) {
     @kotlinx.serialization.Transient val id=Canonical.hash(statement())
     fun statement()="$attribute ${deontic.name} ${aim.name} WHEN ${condition.name} $threshold ELSE FINE $fine QUOTA $quota WINDOW $window"
-    fun valid()=attribute.matches(Regex("ALL|LINEAGE:[a-zA-Z0-9_-]{1,64}")) && threshold.isFinite() && threshold in 0.0..1e9 &&
+    fun valid()=attribute.matches(Regex("ALL|LINEAGE:[\\p{L}\\p{N}_·–-]{1,64}")) && threshold.isFinite() && threshold in 0.0..1e9 &&
         fine in 0..3 && window in 1..1440 && (if(deontic==Deontic.PERMITIDO) quota in 1..50 else quota==0) &&
         (condition !in setOf(NormCondition.HYDRATION_LT,NormCondition.ENERGY_LT) || threshold<=1) &&
         (deontic!=Deontic.PROIBIDO || aim !in setOf(Activity.WATER,Activity.EAT,Activity.SLEEP))

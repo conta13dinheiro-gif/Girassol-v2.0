@@ -214,6 +214,30 @@ class MigrationTest(unittest.TestCase):
                 target.close()
 
 
+    def test_skill_mastery_and_event_are_atomic_and_survive_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=str(pathlib.Path(directory)/'skills.db')
+            db=baseline(path)
+            migrate(db)
+            with db:
+                db.execute("INSERT INTO events VALUES(2,2,'trained')")
+                insert(db,'bkt_fsrs_mastery',(2,'learner','STUDY',.94,5.1,4.1386,.2,3,2))
+                insert(db,'voyager_skill_library',(2,'learner','skill',3,.94,'{domain:LOGIC}','[RESERVE,MOVE_TO,EXECUTE_WORK,DEPOSIT_LEDGER]'))
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                db.execute("INSERT INTO events VALUES(3,3,'unverified')")
+                insert(db,'bkt_fsrs_mastery',(3,'learner','STUDY',.5,5.,1.,0.,4,3))
+                insert(db,'voyager_skill_library',(3,'learner','skill',2,.99,'LOGIC','STUDY'))
+            self.assertIsNone(db.execute('SELECT 1 FROM events WHERE id=3').fetchone())
+            self.assertEqual(db.execute('SELECT count(*) FROM bkt_fsrs_mastery WHERE event_id=3').fetchone()[0],0)
+            db.close()
+            db=sqlite3.connect(path)
+            try:
+                self.assertEqual(db.execute('SELECT executions,knowledge FROM voyager_skill_library').fetchone(),(3,.94))
+                self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
+            finally:
+                db.close()
+
+
 V6 = (ROOT / 'app/src/main/assets/database/gea-v6.sql').read_text().split('-- @statement')
 
 

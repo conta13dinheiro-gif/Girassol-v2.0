@@ -67,6 +67,7 @@ internal object NativeMind {
     ): CognitiveFrame {
         require(genome.valid())
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
+        val sourceHash=Canonical.hash(Canonical.state(world))
         val institutionalWorld=world.copy(tick=world.tick+1)
         val institutionalRules=world.society?.rules ?: SocietyAdicoCliodynamicsEngine.foundingRules()
         val prepared=world.agents.associate { citizen ->
@@ -105,13 +106,13 @@ internal object NativeMind {
             val exposure=old.exposure.toMutableList()
             if(learn && exposure[citizen.activity.ordinal]<Int.MAX_VALUE) exposure[citizen.activity.ordinal]++
             val archive=if(learn && (distances.firstOrNull() ?: 1.0)>.06) old.behaviors+listOf(behavior) else old.behaviors
-            var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id },genome.memRlLearningRate,genome.actRDecayExponent)
+            var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id },genome.memRlLearningRate,genome.actRDecayExponent,true,sourceHash)
             if(citizen.acting && citizen.activity==Activity.TALK && outcome=="OK") {
                 val contact=world.society?.contacts?.firstOrNull { it.from==citizen.id && it.tick==world.tick }
                 val teacher=if(world.society!=null) world.agents.firstOrNull { it.id==contact?.peer }
                     else world.agents.filter { it.id!=citizen.id && hypot(it.x-citizen.x,it.z-citizen.z)<=2.5 }.minByOrNull { it.id }
                 if(teacher!=null) world.minds[teacher.id]?.let {
-                    bank=bank.learnFrom(teacher.id,it.memory,world.tick)
+                    bank=VoyagerSkillLibrary.teach(world,citizen,bank,teacher,it.memory)
                     bank=ProvenanceImmunity.learnFrom(world,citizen.id,bank,it.memory)
                 }
             }
@@ -178,7 +179,14 @@ internal object NativeMind {
                 { List(8) { i -> nativeScores[i]+noise[i]+.4/sqrt(exposure[i]+1.0) } }
             )
             val likelihoods=Activity.entries.map {
-                (GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,it),false)+9.0)/18.0
+                val gate=(GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,it),false)+9.0)/18.0
+                val trace=decisionBank.learningFor(it)
+                val item=trace.item
+                if(item==null) gate else {
+                    val recall=trace.retrievability(world.tick)
+                    val forecast=trace.responseProbability()*recall+item.guessing*(1-recall)
+                    (.75*gate+.25*forecast).coerceIn(.001,.999)
+                }
             }
             val selection=ActiveInferencePianoEngine.select(citizen,scores,likelihoods,genome)
             val decision=selection.action
@@ -197,8 +205,8 @@ internal object NativeMind {
             )
         }
         return CognitiveFrame(
-            world.tick,Canonical.hash(Canonical.state(world)),minds,decisions,
-            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true
+            world.tick,sourceHash,minds,decisions,
+            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true,pedagogyEnabled=true
         )
     }
 }

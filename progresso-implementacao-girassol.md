@@ -224,7 +224,11 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - Build final `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon` aprovado em **5m10s**, 137 tarefas. Os **oito APKs** passaram em apksigner verify; 18 declarações/exportações JNI conferidas nas três ABIs. Release mantém a chave debug de desenvolvimento.
 - Teste Android do WorldStore com aquisição real, gate, falha forçada na escrita da crença, rollback da quarentena/evento e detecção de projeção ausente **compilou, mas não executou**. Continuam ausentes dispositivo/AVD/KVM. Não foram medidos RAM total, latência ou operação 24 horas no Moto G62. Regras v8, admissão de 150 habitantes, alelos, IDs por hash, idade Double e CURRENT_RULES_VERSION=8 foram preservados. A próxima implementação é a Frente 6.
 
-## Entrega atual — Frente 6 / Sociedade e instituições (2026-11-20)
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:141b2586f214339c3899835989e3ac73da2af2e79847f199390aad8fbbceafc6 -->
+
+## Histórico — Frente 6 / Sociedade e instituições (2026-11-20)
 
 **54,5% de cobertura funcional local (6/11 frentes: 3, 5, 1, 8, 2 e 6)** após esta validação. O peso de cada frente é igual; a medida não representa esforço, operação 24/7, RAM medida ou prontidão de distribuição. As frentes 4, 7, 9, 10 e 11 permanecem pendentes.
 
@@ -250,6 +254,35 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 ### Limitações ainda abertas
 
 A medição de RAM/latência no Moto G62, carga 24/7 e execução dos testes instrumentados não foram realizadas. Release ainda usa identidade debug de desenvolvimento. O resultado local e os limites estruturais não comprovam adequação total a 4 GB. A Frente 4 exige FSRS/IRT completos e biblioteca executável Voyager; as frentes 7/9/10/11 ainda não foram declaradas concluídas.
+
+## Entrega atual — Frente 4 / Pedagogia e habilidades executáveis (2026-11-20)
+
+**63,6% de cobertura funcional local (7/11 frentes: 3, 5, 1, 8, 2, 6 e 4).** Conta frentes integradas e verificadas com peso igual; não mede esforço, linhas, RAM, operação contínua ou aceite no aparelho. Permanecem 7, 9, 10 e 11.
+
+### Implementação integrada
+
+- FSRS **4.5** completo e versionado: dificuldade, estabilidade inicial, memória após acerto/erro, modificadores Hard/Easy, esquecimento e intervalo inverso da curva exigida. Parâmetros fixados ao projeto oficial ts-fsrs v3.5.7, commit `0fdaa11f74fc236546cdcb8d48cb678b053b397b`; valores conferidos com execução independente dos métodos originais. O tempo é medido em ticks determinísticos, sem calendário/fuzz. Não é uma alegação de FSRS 6/7 nem de parâmetros ajustados a seres humanos.
+- BKT usa resultado observado e aptidão genética expressa, conservando o estado anterior na migração. IRT calcula probabilidades 2PL/3PL, derivadas exatas e informação de Fisher; calibra habilidade, discriminação, dificuldade e acerto ao acaso por MAP regularizado com limites explícitos. Probabilidade/recordação passam à energia esperada PIANO. É um modelo operacional da simulação, sem validação psicométrica empírica.
+- Biblioteca Voyager destila somente depois de três execuções físicas comprovadas e domínio BKT ≥0,75. Programas tipados executam RESERVE, MOVE_TO, ACQUIRE_TOOL quando exigido, EXECUTE_WORK e DEPOSIT_LEDGER; são receitas interpretadas das oito atividades existentes. Pré-condições conferem domínio local, necessidades, recursos, parceiro e ferramenta. Não há geração arbitrária de código. Ensino presencial exige domínio/execuções do professor; o aluno não herda contagens de prática nem domínio inventado.
+- Jobs realmente interpretam o programa dentro de WorldActor, com chegada pelo solver nativo, renovação de lease expirado, aquisição/desgaste da ferramenta, trabalho e lançamento contábil. Cada habilidade contém três provas com hash do estado, tick, job e cômodo. Limites: oito habilidades e 24 provas por agente; contadores e parâmetros limitados. Nenhum buffer nativo novo nesta frente.
+- Produtor `voyager_skill_library` grava programa/pré-condições e domínio na mesma transação de evento/checkpoint; verifica a existência/hash das três provas canônicas. A auditoria compara programas e projeções FSRS/BKT. Estados completos FSRS/IRT ficam nos eventos/checkpoints SQLite. Auditoria exaustiva nova é ativada explicitamente: a migração histórica não inventava projeções ausentes.
+- Defaults omitidos preservam eventos antigos e o modelo pedagógico legado. Regras v8, teto 150, IDs por hash, alelos, idade Double e CURRENT_RULES_VERSION=8 permanecem. Reparado o parser ADICO para nomes reais de linhagem com letras Unicode, travessão e ponto médio, mantendo gramática e limite de 64 caracteres.
+
+### Evidência executada
+
+- **133 testes core e 13 testes JVM do app**, zero falhas/erros/ignorados. Os sete testes pedagógicos incluem quatro notas FSRS contra referência independente, fluxos de 10.000 revisões/calibrações, derivadas IRT por diferenças finitas, BKT, migração sem prática inventada, ensino condicionado e programa real com TTL/ferramenta/conservação.
+- **15 testes SQLite reais** passaram: corrupção, disco cheio, constraints, rollback e atomicidade de evento/domínio/habilidade incluídos. Teste instrumentado WorldStore de falha forçada no insert de habilidade, reabertura e adulteração compilou; não executou por ausência de alvo Android.
+- `scripts/test-native.sh`: dez suítes ASan/UBSan e recuperação de falhas de alocação em 36/34 posições passaram. `scripts/test-mind-jni.sh`: contrato ausente/presente, 500 transições com replay exato, oito transições pedagógicas reais com cinco execuções do programa, sociedade, memória/SWR/imunidade, economia física, live/shadow, RSI, cancelamento/falha de escrita e idade/entradas inválidas passaram. Todos os vinte candidatos RSI foram rejeitados em treino; promoção vencedora continua não exercitada.
+- Build completo com `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon` passou em **7m39s**, 137 tarefas (47 executadas, 90 atualizadas). Lint: zero erros e 27 avisos existentes.
+- **Oito APKs aprovados em apksigner verify**; 18 assinaturas/exportações JNI conferidas nas três ABIs. As identidades SHA-256 dos insumos testados ficaram no registro local de validação. Release ainda usa a chave debug de desenvolvimento.
+- Base desta entrega: `9489b119d75e229ffef59e38af133d7f43e916cf`. Sua [Action 44662048569](https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44662048569) terminou com sucesso. O workflow existente gera APKs/checksums a cada push e manualmente. Moto G62: baixar `app-arm64-v8a-debug.apk` de `Girassol-debug`. O resultado remoto deste novo commit será conferido após a publicação.
+
+### Pendências
+
+Frentes 7/9/10/11, execução instrumentada no Android, medição de RAM/latência no Moto G62, carga 24/7 e identidade persistente de assinatura. Não se atribui aceite dessas verificações à compilação ou aos limites estruturais. Detalhes do modelo pedagógico estão em `docs/pedagogia-fsrs45-voyager.md`.
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 

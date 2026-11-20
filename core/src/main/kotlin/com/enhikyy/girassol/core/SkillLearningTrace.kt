@@ -1,6 +1,8 @@
 package com.enhikyy.girassol.core
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlin.math.exp
 import kotlin.math.pow
 
@@ -8,11 +10,11 @@ import kotlin.math.pow
  * Per-activity learning state.
  *
  * BKT estimates latent knowledge. The DSR curve schedules practice in simulation ticks.
- * A compact 3PL item-response estimate adapts theta online; item discrimination and guessing
- * are fixed because the current world has no calibrated item bank.
- *
- * This is deliberately not labelled as a full FSRS-6/FSRS-7 implementation.
+ * Historical records use a compact fixed-item 3PL and a DSR stability heuristic.
+ * Explicit fsrs/item fields select the pinned FSRS4.5 scheduler and bounded online 2/3PL
+ * calibration. Neither path claims empirical psychometric calibration or FSRS6/7.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SkillLearningTrace(
     val action: Activity,
@@ -21,15 +23,20 @@ data class SkillLearningTrace(
     val stabilityTicks: Double = 1.0,
     val theta: Double = 0.0,
     val reviews: Int = 0,
-    val lastReviewTick: Long = -1
+    val lastReviewTick: Long = -1,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val fsrs: FsrsReview? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val item: IrtItem? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val verifiedExecutions: Int = 0
 ) {
     fun valid(currentTick: Long): Boolean =
         currentTick >= 0 &&
             knowledgeProbability.isFinite() && knowledgeProbability in 0.0..1.0 &&
             difficulty.isFinite() && difficulty in 1.0..10.0 &&
-            stabilityTicks.isFinite() && stabilityTicks in MIN_STABILITY..MAX_STABILITY &&
+            stabilityTicks.isFinite() && stabilityTicks in (if(fsrs==null) MIN_STABILITY else .1)..MAX_STABILITY &&
             theta.isFinite() && theta in -4.0..4.0 &&
-            reviews >= 0 &&
+            reviews >= 0 && verifiedExecutions in 0..reviews &&
+            (item==null)==(fsrs==null) && (item==null || item.valid() && item.observations<=reviews) &&
+            (fsrs==null || fsrs.valid(currentTick) && fsrs.difficulty==difficulty && fsrs.stability==stabilityTicks && fsrs.tick==lastReviewTick && fsrs.repetitions==reviews) &&
             lastReviewTick in -1..currentTick &&
             ((reviews == 0 && lastReviewTick == -1L) || (reviews > 0 && lastReviewTick >= 0))
 
@@ -50,6 +57,7 @@ data class SkillLearningTrace(
 
     /** 3PL success probability for the current ability estimate and this skill's difficulty. */
     fun responseProbability(): Double {
+        item?.let { return it.probability(theta) }
         val b = (difficulty - 5.5) / 2.25
         val logistic = 1.0 / (1.0 + exp(-(theta - b).coerceIn(-12.0, 12.0)))
         return (IRT_GUESSING + (1.0 - IRT_GUESSING) * logistic).coerceIn(IRT_GUESSING, 1.0)
@@ -61,11 +69,13 @@ data class SkillLearningTrace(
      */
     fun practiceBonus(currentTick: Long): Double {
         val due = 1.0 - retrievability(currentTick)
-        return (0.045 * (1.0 - knowledgeProbability) + 0.025 * due).coerceIn(0.0, 0.07)
+        return if(item==null) (0.045 * (1.0 - knowledgeProbability) + 0.025 * due).coerceIn(0.0, 0.07)
+        else (.035*(1-knowledgeProbability)+.035*due+.01*item.information(theta)).coerceIn(0.0,.09)
     }
 
     /** Apply one validated success/failure observation and update BKT, DSR and IRT state. */
     fun observe(correct: Boolean, tick: Long): SkillLearningTrace {
+        if(fsrs!=null) return observeFsrs(if(correct) ReviewGrade.GOOD else ReviewGrade.AGAIN,tick,.5,false)
         require(tick >= 0 && (lastReviewTick < 0 || tick >= lastReviewTick))
         val prior = (knowledgeProbability * retrievability(tick)).coerceIn(EPSILON, 1.0 - EPSILON)
 
@@ -99,6 +109,28 @@ data class SkillLearningTrace(
             reviews = if (reviews == Int.MAX_VALUE) reviews else reviews + 1,
             lastReviewTick = tick
         )
+    }
+
+    /** New version: full FSRS4.5 D/S scheduler, genetic BKT and regularized IRT calibration.
+     * Verified executions count only completed real physical jobs, independently of review/teaching.
+     */
+    fun observeFsrs(grade: ReviewGrade,tick: Long,aptitude: Double,verified: Boolean): SkillLearningTrace {
+        require(valid(tick) && tick>lastReviewTick && aptitude.isFinite() && aptitude in 0.0..1.0)
+        val success=grade!=ReviewGrade.AGAIN
+        require(!verified || success)
+        val prior=knowledgeProbability.coerceIn(EPSILON,1-EPSILON)
+        val known=if(success) .92 else .08;val unknown=if(success) .15 else .85
+        val posterior=prior*known/(prior*known+(1-prior)*unknown)
+        val transition=.10+.18*aptitude
+        val knowledge=(posterior+(1-posterior)*transition).coerceIn(0.0,1.0)
+        val migrated=fsrs ?: if(reviews==0) null else FsrsReview(difficulty,stabilityTicks,lastReviewTick,
+            if(lastReviewTick==Long.MAX_VALUE) Long.MAX_VALUE else lastReviewTick+1,reviews,0,ReviewGrade.GOOD)
+        val scheduled=Fsrs45.review(migrated,grade,tick)
+        val priorItem=IrtItem.prior(action)
+        val (ability,calibrated)=(item ?: priorItem).observe(theta,success,priorItem)
+        return copy(knowledgeProbability=knowledge,difficulty=scheduled.difficulty,stabilityTicks=scheduled.stability,
+            theta=ability,reviews=scheduled.repetitions,lastReviewTick=tick,fsrs=scheduled,item=calibrated,
+            verifiedExecutions=(verifiedExecutions.toLong()+if(verified) 1 else 0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
     }
 
     companion object {

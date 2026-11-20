@@ -178,6 +178,8 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             val checkpoint=load()
             val audit=JournalAudit()
             var opinions=emptyMap<String,List<ProvenancedOpinion>>()
+            var learning=emptyMap<String,List<SkillLearningTrace>>()
+            var skills=emptyMap<String,List<VoyagerSkill>>()
             db.rawQuery("SELECT id,tick,payload FROM events ORDER BY id",null).use { rows ->
                 while (rows.moveToNext()) {
                     val event=Canonical.event(rows.getString(2))
@@ -185,7 +187,12 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     GeaSchema.auditEconomyEvent(db,event)
                     GeaSchema.auditInstitutionsEvent(db,event)
                     GeaSchema.auditBeliefsEvent(db,event,opinions)
-                    event.cognition?.let { opinions=it.minds.mapValues { entry -> entry.value.memory.opinions } }
+                    GeaSchema.auditPedagogyEvent(db,event,learning,skills)
+                    event.cognition?.let {
+                        opinions=it.minds.mapValues { entry -> entry.value.memory.opinions }
+                        learning=it.minds.mapValues { entry -> entry.value.memory.learning }
+                        skills=it.minds.mapValues { entry -> entry.value.memory.skills }
+                    }
                 }
             }
             val count=audit.finish(checkpoint)
