@@ -10,7 +10,13 @@
 
 Objetivo solicitado: completar as 11 frentes de `knowledge-base/girassol-diretrizes.md`. **Objetivo ainda não atingido.**
 
-**Estado mais recente: 45,5% de cobertura funcional local (5/11 frentes: 3, 5, 1, 8 e 2).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 2”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:75f853dccb3d0759d2ba9f8d68970b637c037e35433ba1f5f1c63424f62e9ebe -->
+
+**Estado mais recente: 54,5% de cobertura funcional local (6/11 frentes: 3, 5, 1, 8, 2 e 6).** Critério: frentes com implementação integrada e verificações locais, todas com peso igual; não mede esforço, RAM ou prontidão de produção. Evidências mais recentes estão em “Entrega atual — Frente 6”, ao final. As porcentagens nos históricos pertencem às suas respectivas etapas.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- /coderabbit-ai-generated:v1 -->
 
@@ -191,7 +197,17 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - Comando final `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon` passou em **5m35s**, 137 tarefas. Os **oito APKs** corrigidos passaram em apksigner verify. Release ainda usa chave debug; identidade persistente para distribuição atualizável continua pendente.
 - Testes instrumentados de WorldStore, reabertura e remoção indevida de lançamento compilaram, mas não executaram: continuam ausentes dispositivo/AVD/KVM. Não foram medidos RAM total, latência ou operação 24 horas no alvo. A Frente 2 é a próxima implementação.
 
-## Entrega atual — Frente 2 / Memória, crenças e consolidação (2026-11-20)
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:8df380389efa27fd8b9ac0d857b08ea039da56cfb8a0b72aa088025015cb1a88 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:f65fc8586e928bd9cbd5985a35db59601e5541eb660a882fa25a312d3daca11c -->
+
+## Histórico — Frente 2 / Memória, crenças e consolidação (2026-11-20)
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 **Cobertura funcional local: 45,5% (5/11 frentes: 3, 5, 1, 8 e 2).** Conta frentes implementadas, integradas e verificadas localmente com peso igual. Não representa esforço, cobertura de linhas, verdade semântica dos dados externos ou aceite no Moto G62. Permanecem seis frentes: 6, 4, 7, 9, 10 e 11.
 
@@ -207,6 +223,37 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - scripts/test-mind-jni.sh passou: contrato ausente/presente, 500 transições com replay exato, nova integração de memória, economia física, live/shadow determinístico de 256 ticks, 21 avaliações RSI, contabilização das vinte mutações/terminais, isolamento, cancelamento, falha de escrita, idade Double e entradas inválidas. Os vinte candidatos foram rejeitados em treino; nenhuma promoção foi fabricada. A integração de memória foi repetida separadamente sobre o código final compatível com Android e passou.
 - Build final `:core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon` aprovado em **5m10s**, 137 tarefas. Os **oito APKs** passaram em apksigner verify; 18 declarações/exportações JNI conferidas nas três ABIs. Release mantém a chave debug de desenvolvimento.
 - Teste Android do WorldStore com aquisição real, gate, falha forçada na escrita da crença, rollback da quarentena/evento e detecção de projeção ausente **compilou, mas não executou**. Continuam ausentes dispositivo/AVD/KVM. Não foram medidos RAM total, latência ou operação 24 horas no Moto G62. Regras v8, admissão de 150 habitantes, alelos, IDs por hash, idade Double e CURRENT_RULES_VERSION=8 foram preservados. A próxima implementação é a Frente 6.
+
+## Entrega atual — Frente 6 / Sociedade e instituições (2026-11-20)
+
+**54,5% de cobertura funcional local (6/11 frentes: 3, 5, 1, 8, 2 e 6)** após esta validação. O peso de cada frente é igual; a medida não representa esforço, operação 24/7, RAM medida ou prontidão de distribuição. As frentes 4, 7, 9, 10 e 11 permanecem pendentes.
+
+### Implementação integrada
+
+- Dunbar classifica relações em limites cumulativos 5/15/50/150; contatos presenciais e testemunhos usam os cinco vínculos elegíveis por proximidade e força. As relações mantêm confiança Beta por domínio (até dez domínios), atualizada por resultados realmente observados e lições admitidas; o posterior específico participa diretamente da imunidade e da assimilação. Contagens têm regularização/reescalonamento limitado para fluxo prolongado.
+- Opiniões combinam Deffuant-Weisbuch com confiança limitada e ancoragem Friedkin-Johnsen. A percepção é uma fotografia imutável, inclusive no primeiro contato recíproco; testes verificam valores numéricos e independência da ordem. Heider usa coordenada assinada `2*affinity-1` preservando o contrato público histórico `affinity` em `[0,1]`.
+- Gramática ADICO finita interpreta papéis, condições, ações, obrigações/proibições/permissões, quotas e janelas. As regras atuam antes da navegação JNI e novamente na execução. Necessidades vitais têm prioridade. Intervenções graduais transferem moedas reais ao commons pelo mesmo ledger de partidas dobradas; não criam moeda. Regras fundadoras: proteção de madeira, quota de escrita e hidratação obrigatória.
+- Instituições são emitidas no evento canônico e gravadas em `adico_institutions` na transação do mundo. A auditoria compara todas as condições/sanções e detecta remoção/alteração. As multas aparecem no ledger existente. Defaults novos são omitidos para conservar a codificação dos eventos antigos; o caminho social usa ativação explícita no frame.
+- PSI usa população/capacidade, Gini dos saldos reais, aspirantes/posições e tesouro comum, com denominadores limitados e valores finitos. É um modelo operacional com premissas explícitas; afeta a decisão e aparece na interface, sem alegação de previsão sociológica empírica.
+- Limites: 150 agentes, até 150 vínculos por agente, 32 regras, 4.800 contadores de agente/regra, até 150 contatos e sanções no tick. Índices por proprietário/par evitam varrer todos os vínculos em cada consulta. Não houve nova alocação nativa ou alteração das 18 assinaturas JNI.
+
+### Evidência executada
+
+- `:core:test`: 126 testes, zero falhas; inclui 11 testes sociais novos. `testDebugUnitTest`: 13 testes, zero falhas.
+- `python3 scripts/test-gea-sqlite.py`: 14 testes passaram com SQLite real, incluindo instituição + sanção em transação e rollback após deôntica inválida; preservados os testes de disco cheio/corrupção.
+- `scripts/test-native.sh`: dez suítes ASan/UBSan e recuperação em 36/34 posições de falha de alocação passaram.
+- `scripts/test-mind-jni.sh`: contrato ausente/presente, 500 transições reais com replay exato, ADICO antes da rota nativa, multas 1/2/3 conservadas, eventos institucionais, memória/SWR/imunidade e economia física passaram. A suíte terminou com sucesso: live/shadow de 256 ticks, 21 avaliações de busca, 20 propostas com registros terminais, isolamento/cancelamento/falha de escrita e idade Double/entradas inválidas passaram. Todos os 20 genomas foram rejeitados no treino; uma promoção vencedora e sua janela independente não foram exercitadas.
+- `ANDROID_HOME="$HOME/runtime/android/sdk" FILAMENT_TOOLS_DIR="$HOME/runtime/filament/1.56.0" mise exec java@temurin-17 -- ./gradlew :core:test :host-validation:check :app:compileDebugAndroidTestKotlin testDebugUnitTest lintDebug :app:assembleDebug :app:assembleRelease --no-daemon`: sucesso em 4m51s, 137 tarefas (38 executadas, 99 atualizadas). Lint: zero erros, 27 avisos existentes.
+- Os oito APKs finais passaram em `apksigner verify`; 18 símbolos JNI conferidos nas três ABIs. Testes instrumentados Android do produtor/auditoria foram compilados; execução continua pendente por ausência de alvo Android nesta sessão.
+- Base publicada anterior: `fa7e23313d820f4bc2d1bf722fb16305419e7088`; seu CI remoto terminou com sucesso: https://github.com/conta14dinheiro-droid/Girassol-v2.0/actions/runs/44658819506 . O workflow continua gerando `Girassol-debug`, `Girassol-release` e checksums a cada push. Moto G62: `app-arm64-v8a-debug.apk`.
+
+### Limitações ainda abertas
+
+A medição de RAM/latência no Moto G62, carga 24/7 e execução dos testes instrumentados não foram realizadas. Release ainda usa identidade debug de desenvolvimento. O resultado local e os limites estruturais não comprovam adequação total a 4 GB. A Frente 4 exige FSRS/IRT completos e biblioteca executável Voyager; as frentes 7/9/10/11 ainda não foram declaradas concluídas.
+
+
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 
 

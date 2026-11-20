@@ -67,6 +67,8 @@ internal object NativeMind {
     ): CognitiveFrame {
         require(genome.valid())
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
+        val institutionalWorld=world.copy(tick=world.tick+1)
+        val institutionalRules=world.society?.rules ?: SocietyAdicoCliodynamicsEngine.foundingRules()
         val prepared=world.agents.associate { citizen ->
             val mind=world.minds[citizen.id] ?: run {
                 val family=world.genealogy.lastOrNull { it.child==citizen.id }
@@ -105,7 +107,9 @@ internal object NativeMind {
             val archive=if(learn && (distances.firstOrNull() ?: 1.0)>.06) old.behaviors+listOf(behavior) else old.behaviors
             var bank=old.memory.observe(world,citizen,lastActions.firstOrNull { it.agentId==citizen.id },genome.memRlLearningRate,genome.actRDecayExponent)
             if(citizen.acting && citizen.activity==Activity.TALK && outcome=="OK") {
-                val teacher=world.agents.filter { it.id!=citizen.id && hypot(it.x-citizen.x,it.z-citizen.z)<=2.5 }.minByOrNull { it.id }
+                val contact=world.society?.contacts?.firstOrNull { it.from==citizen.id && it.tick==world.tick }
+                val teacher=if(world.society!=null) world.agents.firstOrNull { it.id==contact?.peer }
+                    else world.agents.filter { it.id!=citizen.id && hypot(it.x-citizen.x,it.z-citizen.z)<=2.5 }.minByOrNull { it.id }
                 if(teacher!=null) world.minds[teacher.id]?.let {
                     bank=bank.learnFrom(teacher.id,it.memory,world.tick)
                     bank=ProvenanceImmunity.learnFrom(world,citizen.id,bank,it.memory)
@@ -149,7 +153,9 @@ internal object NativeMind {
                 } },
                 { Activity.entries.map { activity ->
                     val psyche=old.psyche
-                    when(activity) {
+                    val pressure=world.society?.pressure?.psi ?: 0.0
+                    val opinion=world.society?.opinions?.get(citizen.id)?.value ?: 0.0
+                    (if(activity==Activity.TALK) minOf(pressure,10.0)*.02+opinion*.03 else 0.0)+when(activity) {
                         Activity.STUDY -> psyche.dopamine*.12+(psyche.ignitionIndex-.65).coerceAtLeast(0.0)*.45
                         Activity.TALK -> psyche.oxytocin*.12+maxOf(0.0,psyche.pleasure)*.04
                         Activity.SLEEP -> psyche.cortisol*.06
@@ -166,6 +172,7 @@ internal object NativeMind {
                     if(activity==Activity.WRITE && ((world.balances["market/paper"] ?: 0)==0 || (!hasTool && (world.balances["market/timber"] ?: 0)==0))) value-=3
                     if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0 && (world.economy==null || (world.balances["${DoubleEntryEconomyAndStigmergy.COMMONS}/coins"] ?: 0)==0)) value-=3
                     value+=(world.economy?.pheromones?.get(activity.ordinal*144+DoubleEntryEconomyAndStigmergy.cell(citizen.x,citizen.z)) ?: 0.0)*.01
+                    if(SocietyAdicoCliodynamicsEngine.admit(institutionalWorld,citizen,activity,institutionalRules).action!=activity) value-=.8
                     value+GeaNativeBridge.tsetlinVote(gateBytes,TsetlinState.features(citizen,activity),true).coerceIn(-4,4)*.05
                 } },
                 { List(8) { i -> nativeScores[i]+noise[i]+.4/sqrt(exposure[i]+1.0) } }
@@ -191,7 +198,7 @@ internal object NativeMind {
         }
         return CognitiveFrame(
             world.tick,Canonical.hash(Canonical.state(world)),minds,decisions,
-            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true
+            socialSynchrony=autonomy.orderParameter,economyEnabled=true,immunityEnabled=true,societyEnabled=true
         )
     }
 }

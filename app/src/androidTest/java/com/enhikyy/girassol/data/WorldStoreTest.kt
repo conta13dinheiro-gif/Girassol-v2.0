@@ -88,6 +88,33 @@ class WorldStoreTest {
         } finally { context.deleteDatabase(name) }
     }
 
+    @Test fun actualInstitutionsPersistAndAlteredSanctionFailsAudit() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val name="girassol-branch-00000000-0000-0000-0000-000000000006.db"
+        context.deleteDatabase(name)
+        try {
+            val actor=WorldActor(rulesVersion=WorldActor.CURRENT_RULES_VERSION)
+            var actions=emptyList<ActionRecord>()
+            WorldStore(context,name).use { store ->
+                repeat(10) {
+                    val before=actor.state
+                    val frame=com.enhikyy.girassol.cognition.NativeMind.evaluate(before,actions)
+                    val physical=com.enhikyy.girassol.physics.NativeSpatial.advance(before,actor.intentions(cognition=frame))
+                    val transition=actor.step(cognition=frame,spatial=physical)
+                    store.commit(transition,before);actions=transition.event.actions
+                }
+                assertEquals(10L,store.audit())
+                store.readableDatabase.rawQuery("SELECT count(*) FROM adico_institutions",null).use { rows -> assertTrue(rows.moveToFirst());assertEquals(3,rows.getInt(0)) }
+            }
+            WorldStore(context,name).use { store ->
+                assertEquals(actor.checkpoint(),store.load());assertEquals(10L,store.audit())
+                store.writableDatabase.execSQL("UPDATE adico_institutions SET or_else='FINE:3' WHERE rowid=(SELECT rowid FROM adico_institutions LIMIT 1)")
+                try { store.audit();fail("Altered institutional sanction must fail audit") } catch(_: IllegalStateException) { }
+                assertEquals(actor.checkpoint(),store.load())
+            }
+        } finally { context.deleteDatabase(name) }
+    }
+
     @Test fun oldCheckpointLoadsAndNewEventContinuesItsChain() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = InstrumentationRegistry.getInstrumentation().context.assets

@@ -15,12 +15,21 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
     fun checkpoint() = Checkpoint(state, eventId, previousHash)
 
     /** Same admitted intentions used by the native planner and by execution. */
-    @Synchronized fun intentions(neural: NeuralProposal? = null,cognition: CognitiveFrame? = null): Map<String,Activity> {
+    @Synchronized fun intentions(neural: NeuralProposal? = null,cognition: CognitiveFrame? = null): Map<String,Activity> =
+        plans(neural,cognition).mapValues { it.value.second.action }
+
+    private fun plans(neural: NeuralProposal?,cognition: CognitiveFrame?): Map<String,Pair<Activity,InstitutionalDecision>> {
         val base=state.copy(tick=state.tick+1,agents=state.agents.map { it.copy(needs=metabolize(it)) })
         val admitted=neural?.takeIf { rulesVersion>=2 && it.applicable(state) }
         val input=cognition?.takeIf { rulesVersion>=4 && it.applicable(state) }
-        return base.agents.associate { a->a.id to (if(a.id==admitted?.agentId) admitted.activity
-            else if(input!=null && a.acceptsNeuralActivity()) { val proposed=input.decisions.getValue(a.id); if(rulesVersion>=6) UtilityGoapPlanner.choose(base,a,proposed) else proposed } else choose(a,base.tick,base)) }
+        val institutionalRules=if(rulesVersion>=8 && input?.societyEnabled==true) state.society?.rules ?: SocietyAdicoCliodynamicsEngine.foundingRules() else emptyList()
+        return base.agents.associate { a ->
+            val proposed=if(a.id==admitted?.agentId) admitted.activity
+                else if(input!=null && a.acceptsNeuralActivity()) { val action=input.decisions.getValue(a.id); if(rulesVersion>=6) UtilityGoapPlanner.choose(base,a,action) else action }
+                else choose(a,base.tick,base)
+            val decision=if(rulesVersion>=8 && input?.societyEnabled==true) SocietyAdicoCliodynamicsEngine.admit(base,a,proposed,institutionalRules) else InstitutionalDecision(proposed)
+            a.id to (proposed to decision)
+        }
     }
 
     @Synchronized fun step(neural: NeuralProposal? = null, cognition: CognitiveFrame? = null, spatial: SpatialFrame? = null): Transition {
@@ -31,7 +40,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         // 3-7: Perception, bounded memory, appraisal, utility and intention hysteresis.
         val admitted = neural?.takeIf { rulesVersion >= 2 && it.applicable(state) }
         val cognitiveInput=cognition?.snapshot()?.takeIf { rulesVersion>=4 && it.applicable(state) }
-        val proposals = intentions(neural,cognitiveInput)
+        val planned=plans(neural,cognitiveInput)
+        val proposals=planned.mapValues { it.value.second.action }
         val physics=spatial?.snapshot()?.takeIf { rulesVersion>=5 && it.applicable(state,proposals) }
         require(rulesVersion<5 || physics!=null) { "Resultado físico ausente ou incompatível" }
         // 8-9: Bounded typed neural input; arbitration below rechecks physical preconditions.
@@ -39,6 +49,11 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         val balances = base.balances.toMutableMap()
         val stockJournal=ArrayList<StockTransfer>(1024)
         val economyEnabled=rulesVersion>=8 && cognitiveInput?.economyEnabled==true
+        val societyEnabled=rulesVersion>=8 && cognitiveInput?.societyEnabled==true
+        require(state.society==null || societyEnabled) { "Active society requires its canonical input" }
+        val society=if(societyEnabled) SocietyAdicoCliodynamicsEngine(state) else null
+        val socialNeighbors=if(societyEnabled) state.ties.groupBy { it.from } else emptyMap()
+        val contacts=mutableListOf<SocialContact>()
         require(state.economy==null || economyEnabled) { "Active economy requires its canonical input" }
         fun transfer(stock: MutableMap<String,Int>,from: String,to: String,item: String,amount: Int): Boolean {
             val accepted=Companion.transfer(stock,from,to,item,amount)
@@ -76,6 +91,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
         for (index in order) {
             var a = agents[index]
             val action = proposals.getValue(a.id)
+            if(society!=null) society.sanction(a.id,planned.getValue(a.id).first,planned.getValue(a.id).second,balances) { from,to,item,amount -> transfer(balances,from,to,item,amount) }
             val room = if(economyEnabled) SmartTerrain.target(state,a,action) else base.rooms.first { it.id == action.room }
             economy?.prepare(a,action,room)
             val pose=physics?.poses?.get(a.id)
@@ -106,7 +122,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                     }
                     Activity.SLEEP -> needs = needs.copy(energy = (needs.energy + .1).coerceAtMost(1.0))
                     Activity.TALK -> {
-                        val partner = base.agents.filter { it.id != a.id && hypot(it.x - a.x, it.z - a.z) <= 2.5 }.minByOrNull { it.id }
+                        val partner = if(societyEnabled) SocietyAdicoCliodynamicsEngine.partner(base,a,socialNeighbors[a.id].orEmpty())
+                            else base.agents.filter { it.id != a.id && hypot(it.x - a.x, it.z - a.z) <= 2.5 }.minByOrNull { it.id }
                         success = partner != null
                         if (partner != null) {
                             needs = needs.copy(social = (needs.social + .15).coerceAtMost(1.0))
@@ -114,6 +131,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
                             val w = words[wi]; words[wi] = w.copy(uses = w.uses + 1)
                             val topics = a.memories.map { it.action }.filter { it != Activity.TALK }.distinct()
                             val topic = if (rulesVersion >= 2 && topics.isNotEmpty()) topics[Canonical.stream(state.seed, a.id, tick, "conversation").nextInt(topics.size)] else Activity.STUDY
+                            if(societyEnabled) contacts+=SocialContact(a.id,partner.id,SocietyAdicoCliodynamicsEngine.domain(topic),tick)
                             val topicIndex = words.indexOfFirst { it.lineage == a.lineage && it.concept == topic }
                             val topicWord = words[topicIndex]
                             if (rulesVersion >= 2) words[topicIndex] = topicWord.copy(uses = topicWord.uses + 1)
@@ -227,14 +245,19 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             }
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val next = base.copy(economy=economy?.snapshot() ?: base.economy,socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        var next = base.copy(economy=economy?.snapshot() ?: base.economy,socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        if(society!=null) {
+            val settlement=society.settle(base,next,records,contacts,cognitiveInput?.lesson)
+            next=next.copy(society=settlement.state,ties=settlement.ties)
+        }
         check(violations(next).isEmpty()) { violations(next).joinToString() }
         if(economyEnabled) {
             val projected=state.balances.toMutableMap()
             stockJournal.forEach { check(Companion.transfer(projected,it.from,it.to,it.resource,it.amount)) }
             check((projected.keys+next.balances.keys).all { (projected[it] ?: 0)==(next.balances[it] ?: 0) }) { "Unjournaled stock mutation" }
         }
-        val raw = CanonicalEvent(constructed=next.economy?.niches.orEmpty().filter { n -> state.economy?.niches.orEmpty().none { it.room==n.room } },transfers=stockJournal.toList(),version = if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
+        val newInstitutions=next.society?.rules.orEmpty().filter { rule -> state.society?.rules.orEmpty().none { it.id==rule.id } }
+        val raw = CanonicalEvent(institutions=newInstitutions,constructed=next.economy?.niches.orEmpty().filter { n -> state.economy?.niches.orEmpty().none { it.room==n.room } },transfers=stockJournal.toList(),version = if(rulesVersion>=8 && physics!=null) 8 else if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
         state = next; eventId = event.eventId; previousHash = event.hash
         return Transition(next, event)
@@ -408,6 +431,7 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
+            if(s.society?.valid(s)==false) add("Sociedade inválida")
             if(s.economy?.valid(s)==false) add("Economia inválida")
             if(!s.socialSynchrony.isFinite() || s.socialSynchrony !in 0.0..1.0) add("Sincronização social inválida")
             if(s.spatial.keys.any { id->s.agents.none { it.id==id } } || s.spatial.values.any { !it.valid() }) add("Estado espacial inválido")

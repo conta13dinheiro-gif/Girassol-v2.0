@@ -20,7 +20,8 @@ object ProvenanceImmunity {
     fun trust(world: WorldState,recipient: String,source: String,domain: String): Double {
         require(domain in DOMAINS)
         if(recipient==source) return 1.0
-        val relation=world.ties.firstOrNull { it.from==recipient && it.to==source }?.trust ?: .5
+        val tie=world.ties.firstOrNull { it.from==recipient && it.to==source }
+        val relation=tie?.domains?.get(domain)?.mean ?: tie?.trust ?: .5
         val actions=when(domain) {
             "LANGUAGE","MUSIC" -> listOf(Activity.WRITE,Activity.STUDY)
             "AGRICULTURE","ECOLOGY" -> listOf(Activity.EAT,Activity.WATER)

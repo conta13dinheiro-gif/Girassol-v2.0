@@ -48,6 +48,13 @@ import kotlin.math.*
             val travelling=economy.jobs.count { it.phase=="MOVE_TO" }
             Text("Trabalho no ciclo: $completed concluídos · $travelling em deslocamento",color=Solar.Muted)
         }
+        world.society?.let { society ->
+            Text("Sociedade e normas",style=MaterialTheme.typography.titleLarge)
+            Text("Pressão social (modelo): ${"%.2f".format(java.util.Locale.ROOT,society.pressure.psi)}",color=Solar.Muted)
+            Text("${society.rules.size} normas · ${society.sanctions.size} intervenções neste ciclo",color=Solar.Muted)
+            Text("${society.sanctions.sumOf { it.paid }} moedas transferidas aos bens comuns por sanções neste ciclo",fontSize=11.sp,color=Solar.Muted)
+            Text("Convivência em anéis de até 5, 15, 50 e 150 relações por habitante.",fontSize=11.sp,color=Solar.Muted)
+        }
         Spacer(Modifier.height(8.dp)); Text("Práticas da comunidade",style=MaterialTheme.typography.titleLarge)
         val total=world.actionCounts.values.sum().coerceAtLeast(1)
         val colors=listOf(Solar.Cognitive,Solar.Amber,Solar.Biosphere,Color(0xffa78bfa),Color(0xfff472b6),Color(0xfffb923c),Color(0xff2dd4bf),Color(0xff818cf8))

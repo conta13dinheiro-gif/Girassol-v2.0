@@ -183,6 +183,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                     val event=Canonical.event(rows.getString(2))
                     audit.accept(rows.getLong(0),rows.getLong(1),event)
                     GeaSchema.auditEconomyEvent(db,event)
+                    GeaSchema.auditInstitutionsEvent(db,event)
                     GeaSchema.auditBeliefsEvent(db,event,opinions)
                     event.cognition?.let { opinions=it.minds.mapValues { entry -> entry.value.memory.opinions } }
                 }

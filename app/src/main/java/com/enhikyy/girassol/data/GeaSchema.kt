@@ -87,6 +87,13 @@ internal object GeaSchema {
                 put("expires_tick",structure.expires); put("payload",Json.encodeToString(structure))
             })
         }
+        for(rule in event.institutions) {
+            check(rule in transition.state.society!!.rules)
+            db.insertOrThrow("adico_institutions",null,ContentValues().apply {
+                put("event_id",event.eventId);put("institution_id",rule.id);put("attribute",rule.attribute)
+                put("deontic",rule.deontic.name);put("aim",rule.aim.name);put("condition",rule.statement());put("or_else","FINE:${rule.fine}")
+            })
+        }
         event.cognition?.evolution?.let { revision ->
             val payload = Json.encodeToString(revision)
             db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
@@ -158,6 +165,21 @@ internal object GeaSchema {
                 check(structure.room==rows.getString(0) && structure.builder==rows.getString(1) && structure.expires==rows.getLong(2) && structure==Json.decodeFromString<EcologicalNicheStructure>(rows.getString(3)))
             }
             check(count==expected.size) { "Missing ecological infrastructure evidence" }
+        }
+    }
+
+    fun auditInstitutionsEvent(db: SQLiteDatabase,event: CanonicalEvent) {
+        val expected=event.institutions.sortedBy { it.id }
+        db.rawQuery("SELECT institution_id,attribute,deontic,aim,condition,or_else FROM adico_institutions WHERE event_id=? ORDER BY institution_id",arrayOf(event.eventId.toString())).use { rows ->
+            var count=0
+            while(rows.moveToNext()) {
+                check(count<expected.size)
+                val rule=expected[count++]
+                check(rule.id==rows.getString(0) && rule.attribute==rows.getString(1) && rule.deontic.name==rows.getString(2) &&
+                    rule.aim.name==rows.getString(3) && rule.statement()==rows.getString(4) && "FINE:${rule.fine}"==rows.getString(5))
+                check(AdicoRule.parse(rows.getString(4))==rule)
+            }
+            check(count==expected.size) { "Missing institutional evidence" }
         }
     }
 

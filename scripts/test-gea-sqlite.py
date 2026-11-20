@@ -156,6 +156,21 @@ class MigrationTest(unittest.TestCase):
                 insert(db, TABLES[1], (2, 'agent', 'c'*64, 'd'*64, .57, 0., .43, .5))
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
 
+    def test_institution_and_sanction_ledger_commit_or_roll_back_together(self):
+        with baseline() as db:
+            migrate(db)
+            with db:
+                db.execute("INSERT INTO events VALUES(2,2,'institution-event')")
+                insert(db, TABLES[4], (2, 'rule', 'ALL', 'PROIBIDO', 'BUILD', 'TIMBER_LT:8', 'FINE:1'))
+                insert(db, TABLES[5], (2, 0, 'COMMUNAL_COMMONS', 'agent', 'coins', 1))
+            with self.assertRaises(sqlite3.IntegrityError), db:
+                db.execute("INSERT INTO events VALUES(3,3,'invalid-institution-event')")
+                insert(db, TABLES[5], (3, 0, 'COMMUNAL_COMMONS', 'agent', 'coins', 2))
+                insert(db, TABLES[4], (3, 'bad', 'ALL', 'EXECUTE', 'BUILD', 'ALWAYS', 'FINE:1'))
+            self.assertEqual(db.execute('SELECT count(*) FROM events').fetchone()[0], 2)
+            self.assertEqual(db.execute('SELECT count(*) FROM double_entry_ledger WHERE event_id=3').fetchone()[0], 0)
+            self.assertEqual(db.execute('SELECT count(*) FROM adico_institutions').fetchone()[0], 1)
+
     def test_corrupt_file_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory)/'world.db'
