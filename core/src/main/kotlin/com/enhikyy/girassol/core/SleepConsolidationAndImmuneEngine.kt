@@ -185,6 +185,35 @@ object HippocampalSleepConsolidator {
     const val MAX_NODES_PER_AGENT = 512
     const val DEFAULT_REPLAY_BATCH_SIZE = 12
 
+    /**
+     * Returns a deterministic ripple batch using both prediction error and the
+     * event-specific TD MemRL utility. The selected episodes are replayed by the
+     * native plasticity loop; this method itself never mutates the memory bank.
+     */
+    fun prioritizedReplay(
+        bank: MemoryBank,
+        currentTick: Long,
+        replayBatchSize: Int = DEFAULT_REPLAY_BATCH_SIZE
+    ): List<Episode> {
+        require(bank.valid(currentTick)) { "Memory bank is not valid at the requested tick" }
+        require(replayBatchSize > 0)
+        val expectedByAction = bank.reflections.associate { it.action to it.expectedReward }
+        val qByEvent = bank.utilities.associate { it.eventId to it.qValue }
+        fun expected(episode: Episode): Double =
+            qByEvent[episode.eventId] ?: (expectedByAction[episode.action] ?: 0.0)
+        fun priority(episode: Episode): Double {
+            val q = expected(episode)
+            return 0.65 * abs(episode.reward - q) + 0.35 * abs(q)
+        }
+        return bank.episodes.sortedWith(
+            compareByDescending<Episode> { priority(it) }
+                .thenByDescending { it.importance }
+                .thenByDescending { it.tick }
+                .thenByDescending { it.eventId }
+                .thenBy { it.action.ordinal }
+        ).take(replayBatchSize)
+    }
+
     fun consolidate(
         bank: MemoryBank,
         currentTick: Long,
@@ -198,10 +227,10 @@ object HippocampalSleepConsolidator {
         require(activationDecay.isFinite() && activationDecay in 0.0..1.0)
 
         val expectedByAction = bank.reflections.associate { it.action to it.expectedReward }
-        fun expected(episode: Episode) = expectedByAction[episode.action] ?: 0.0
+        val qByEvent = bank.utilities.associate { it.eventId to it.qValue }
+        fun expected(episode: Episode) =
+            qByEvent[episode.eventId] ?: (expectedByAction[episode.action] ?: 0.0)
         fun predictionError(episode: Episode) = episode.reward - expected(episode)
-        fun replayPriority(episode: Episode) =
-            0.65 * abs(predictionError(episode)) + 0.35 * abs(expected(episode))
         fun retentionScore(episode: Episode): Double {
             val age = (currentTick - episode.tick).coerceAtLeast(0L).toDouble()
             val activation = ln(episode.importance.coerceAtLeast(1e-6)) -
@@ -209,14 +238,7 @@ object HippocampalSleepConsolidator {
             return activation + 1.5 * abs(expected(episode)) + 0.65 * abs(predictionError(episode))
         }
 
-        val selectedReplay = bank.episodes
-            .sortedWith(
-                compareByDescending<Episode> { replayPriority(it) }
-                    .thenByDescending { it.importance }
-                    .thenByDescending { it.tick }
-                    .thenByDescending { it.eventId }
-            )
-            .take(replayBatchSize)
+        val selectedReplay = prioritizedReplay(bank, currentTick, replayBatchSize)
             .map { it.eventId }
             .distinct()
 
