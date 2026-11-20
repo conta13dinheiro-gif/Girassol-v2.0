@@ -25,6 +25,7 @@ internal object GeaSchema {
         val event = transition.event
         recordDoubleEntryLedger(db, event.eventId, previous?.balances, transition.state.balances)
         recordAuroraArchive(db, event, transition.state)
+        recordAdicoInstitutions(db, event.eventId, transition.state)
         event.cognition?.evolution?.let { revision ->
             val payload = Json.encodeToString(revision)
             db.insertOrThrow("rsi_promotion_ledger", null, ContentValues().apply {
@@ -95,6 +96,45 @@ internal object GeaSchema {
         }
     }
 
+
+    /** Persist the canonical ADICO rule catalog as event-scoped institutional state. */
+    private fun recordAdicoInstitutions(
+        db: SQLiteDatabase,
+        eventId: Long,
+        world: WorldState
+    ) {
+        val citizen = world.agents.minByOrNull { it.id } ?: return
+        val graph = SocietyAdicoCliodynamicsEngine.buildGraphIndex(world)
+        val decisions = SocietyAdicoCliodynamicsEngine.evaluate(world, citizen, graph).adicoDecisions
+        val rules = decisions.distinctBy {
+            listOf(it.deontic.name, it.aim.name, it.condition, it.objectOrElse).joinToString("|")
+        }.sortedWith(
+            compareBy<AdicoRuleDecision> { it.aim.ordinal }
+                .thenBy { it.deontic.ordinal }
+                .thenBy { it.condition }
+        )
+        for (rule in rules) {
+            val attribute = "biosphere-commons"
+            val deontic = when (rule.deontic) {
+                AdicoDeontic.MUST -> "OBRIGADO"
+                AdicoDeontic.MAY -> "PERMITIDO"
+                AdicoDeontic.MUST_NOT -> "PROIBIDO"
+            }
+            val aim = rule.aim.name
+            val institutionId = Canonical.hash(
+                "$attribute|$deontic|$aim|\${rule.condition}|\${rule.objectOrElse}"
+            ).take(32)
+            db.insertOrThrow("adico_institutions", null, ContentValues().apply {
+                put("event_id", eventId)
+                put("institution_id", institutionId)
+                put("attribute", attribute)
+                put("deontic", deontic)
+                put("aim", aim)
+                put("condition", rule.condition)
+                put("or_else", rule.objectOrElse)
+            })
+        }
+    }
 
     /**
      * Projects committed cognitive features into a persistent 3D MAP-Elites archive.
@@ -338,6 +378,26 @@ internal object GeaSchema {
             null
         ).use { rows ->
             check(!rows.moveToFirst()) { "Invalid double-entry posting" }
+        }
+
+        db.rawQuery(
+            "SELECT institution_id,attribute,deontic,aim,condition,or_else FROM adico_institutions",
+            null
+        ).use { rows ->
+            while (rows.moveToNext()) {
+                val institutionId = rows.getString(0)
+                val attribute = rows.getString(1)
+                val deontic = rows.getString(2)
+                val aim = rows.getString(3)
+                val condition = rows.getString(4)
+                val orElse = rows.getString(5)
+                check(attribute == "biosphere-commons")
+                check(deontic in setOf("OBRIGADO", "PERMITIDO", "PROIBIDO"))
+                Activity.valueOf(aim)
+                check(condition.isNotBlank() && orElse.isNotBlank())
+                val expectedId = Canonical.hash("$attribute|$deontic|$aim|$condition|$orElse").take(32)
+                check(institutionId == expectedId) { "ADICO institution identity mismatch" }
+            }
         }
 
         db.rawQuery(
