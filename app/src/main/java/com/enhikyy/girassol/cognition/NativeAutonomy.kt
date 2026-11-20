@@ -73,7 +73,7 @@ internal object NativeAutonomy {
             val old = minds.getValue(citizen.id).psyche
             fun value(position: Int) = packed[o + position].toDouble()
             val next = old.copy(
-                ageYears = (value(0) + DT / (365.25 * 24.0 * 3600.0)).coerceAtMost(120.0),
+                ageYears = value(0).coerceIn(0.0, 120.0),
                 biologicalHealth = value(1).coerceIn(0.0, 1.0),
                 attachment = AttachmentPattern.entries[value(2).toInt().coerceIn(0, 3)],
                 bigFive = (3 until 8).map { value(it).coerceIn(0.0, 1.0) },
