@@ -46,5 +46,11 @@ internal object TsetlinReflexEngine {
         handle = replacement
     }
 
+    @Synchronized
+    fun reset() {
+        handle?.let(GeaNativeBridge::nativeDestroyTsetlin)
+        handle = null
+    }
+
     const val persistenceKey: String = SNAPSHOT_KEY
 }
