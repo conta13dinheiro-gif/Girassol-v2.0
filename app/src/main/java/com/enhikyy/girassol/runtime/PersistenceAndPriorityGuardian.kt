@@ -1,7 +1,10 @@
 package com.enhikyy.girassol.runtime
 
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
+import android.os.Build
+import android.os.Handler
 import android.os.PerformanceHintManager
 import android.os.PowerManager
 import android.os.Process
@@ -11,11 +14,18 @@ import android.os.SystemClock
  * Cooperative runtime governor. It never pins CPU cores or requests battery-optimization
  * exemptions; ADPF is advisory and every wake-lock lease expires automatically.
  */
-internal class PersistenceAndPriorityGuardian(context: Context) : AutoCloseable {
+internal class PersistenceAndPriorityGuardian(context: Context, private val scheduler: Handler) : AutoCloseable {
     private val appContext = context.applicationContext
     private val power = requireNotNull(appContext.getSystemService(PowerManager::class.java))
     private val battery = appContext.getSystemService(BatteryManager::class.java)
     private val wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Girassol:Biosphere")
+    private val wifiLock: WifiManager.WifiLock? = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appContext.getSystemService(WifiManager::class.java)
+                ?.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "Girassol:LanIngest")
+        } else null
+    }.getOrNull()
+    private val wifiRelease = Runnable { releaseLanWifiLease() }
     private var hintSession: PerformanceHintManager.Session? = null
     private var closed = false
 
@@ -65,6 +75,27 @@ internal class PersistenceAndPriorityGuardian(context: Context) : AutoCloseable 
         }
     }
 
+    /**
+     * Optional LAN-ingestion lease. Call only while an mDNS/transfer session is active;
+     * the scheduler releases it automatically even if the caller disappears.
+     */
+    @Synchronized
+    fun acquireLanWifiLease(timeoutMs: Long = 60_000L): Boolean {
+        if (closed || wifiLock == null) return false
+        return runCatching {
+            scheduler.removeCallbacks(wifiRelease)
+            if (!wifiLock.isHeld) wifiLock.acquire()
+            scheduler.postDelayed(wifiRelease, timeoutMs.coerceIn(1_000L, MAX_WIFI_LEASE_MS))
+            true
+        }.getOrDefault(false)
+    }
+
+    @Synchronized
+    fun releaseLanWifiLease() {
+        scheduler.removeCallbacks(wifiRelease)
+        runCatching { if (wifiLock?.isHeld == true) wifiLock.release() }
+    }
+
     fun releaseWakeLock() {
         runCatching { if (wakeLock.isHeld) wakeLock.release() }
     }
@@ -73,6 +104,7 @@ internal class PersistenceAndPriorityGuardian(context: Context) : AutoCloseable 
         if (closed) return
         closed = true
         releaseWakeLock()
+        releaseLanWifiLease()
         runCatching { hintSession?.close() }
         hintSession = null
     }
@@ -80,6 +112,7 @@ internal class PersistenceAndPriorityGuardian(context: Context) : AutoCloseable 
     private companion object {
         const val WAKE_LEASE_MS = 60_000L
         const val MAX_WAKE_LEASE_MS = 120_000L
+        const val MAX_WIFI_LEASE_MS = 120_000L
         const val NORMAL_TARGET_NS = 16_666_667L
         const val WARM_TARGET_NS = 33_333_334L
         const val HOT_TARGET_NS = 50_000_000L
