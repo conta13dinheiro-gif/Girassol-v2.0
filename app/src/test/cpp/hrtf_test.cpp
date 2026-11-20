@@ -5,7 +5,6 @@
 #include <iostream>
 #include <vector>
 
-using girassol::audio::BinauralFrame;
 using girassol::audio::BinauralHrtfSpatializer;
 
 int main() {
