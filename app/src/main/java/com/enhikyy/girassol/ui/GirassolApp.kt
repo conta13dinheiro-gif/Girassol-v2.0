@@ -52,13 +52,13 @@ import com.enhikyy.girassol.cognition.CognitionStatus
 import java.util.Locale
 import kotlin.math.*
 
-private val Ink=Solar.Ink
-private val Muted=Solar.Muted
-private val Ground=Solar.Black
-private val Panel=Solar.Surface
-private val Gold=Solar.Amber
-private val Mint=Solar.Biosphere
-private val Line=Solar.Border
+private val Ink: Color @Composable get() = Solar.Ink
+private val Muted: Color @Composable get() = Solar.Muted
+private val Ground: Color @Composable get() = Solar.Black
+private val Panel: Color @Composable get() = Solar.Surface
+private val Gold: Color @Composable get() = Solar.Amber
+private val Mint: Color @Composable get() = Solar.Biosphere
+private val Line: Color @Composable get() = Solar.Border
 private fun percent(v: Double) = "${(v * 100).roundToInt()}%"
 private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%.2f", v)
 
@@ -78,7 +78,21 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var renderError by remember { mutableStateOf<String?>(null) }
     var historical by remember { mutableStateOf<WorldState?>(null) }
     var historySection by rememberSaveable { mutableIntStateOf(0) }
-    var hfSection by rememberSaveable { mutableIntStateOf(0) }
+    var architectureSection by rememberSaveable { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    var visualTheme by rememberSaveable {
+        mutableStateOf(runCatching {
+            GirassolVisualTheme.valueOf(
+                context.getSharedPreferences("girassol_visual", 0)
+                    .getString("theme", GirassolVisualTheme.OLED_KODAK_70MM.name)!!
+            )
+        }.getOrDefault(GirassolVisualTheme.OLED_KODAK_70MM))
+    }
+    val selectVisualTheme: (GirassolVisualTheme) -> Unit = { selectedTheme ->
+        visualTheme = selectedTheme
+        context.getSharedPreferences("girassol_visual", 0).edit()
+            .putString("theme", selectedTheme.name).apply()
+    }
     val research by com.enhikyy.girassol.research.ResearchHub.state.collectAsStateWithLifecycle()
     val world=historical ?: ui.world
     val selected=world?.agents?.firstOrNull { it.id==selectedId }
@@ -86,7 +100,57 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     androidx.activity.compose.BackHandler(cinema || tab!=0 || selectedId!=null) {
         when { selectedId!=null->selectedId=null; cinema->cinema=false; else->tab=0 }
     }
-    GirassolTheme {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    GirassolTheme(theme = visualTheme) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = !cinema,
+            drawerContent = {
+                ModalDrawerSheet(drawerContainerColor = Solar.Surface) {
+                    Text("GIRASSOL", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 6.dp),
+                        color = Solar.Amber, style = MaterialTheme.typography.titleLarge)
+                    Text("NAVEGAÇÃO", Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                        color = Solar.Muted, style = MaterialTheme.typography.labelSmall)
+                    listOf("Biosfera", "Cidadãos", "Arquiteto", "Sistema").forEachIndexed { index, label ->
+                        NavigationDrawerItem(
+                            label = { Text(label) },
+                            selected = tab == index,
+                            onClick = {
+                                tab = index
+                                drawerScope.launch { drawerState.close() }
+                            },
+                            icon = {
+                                Icon(
+                                    when (index) {
+                                        0 -> Icons.Outlined.Public
+                                        1 -> Icons.Outlined.PeopleOutline
+                                        2 -> Icons.Outlined.AccountTree
+                                        else -> Icons.Outlined.Tune
+                                    }, null
+                                )
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                    Text("APARÊNCIA · 15 PALETAS", Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                        color = Solar.Muted, style = MaterialTheme.typography.labelSmall)
+                    GirassolVisualTheme.entries.forEach { option ->
+                        NavigationDrawerItem(
+                            label = { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            selected = visualTheme == option,
+                            onClick = {
+                                selectVisualTheme(option)
+                                drawerScope.launch { drawerState.close() }
+                            },
+                            icon = { Icon(Icons.Outlined.Palette, null) },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    }
+                }
+            }
+        ) {
         Box(Modifier.fillMaxSize().background(Solar.Black)) {
             if(world!=null) {
                 if(!tactical && renderError==null) {
@@ -106,7 +170,13 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 if(!cinema) {
                     Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.verticalGradient(listOf(Solar.Black.copy(alpha=.94f),Color.Transparent))))
                     Box(Modifier.fillMaxWidth().height(180.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent,Solar.Black.copy(alpha=.94f)))))
-                    CompactHud(ui.copy(world=world,running=ui.running && historical==null),cognition,{ if(historical==null) onToggle() },{ if(historical==null) onSpeed() },Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal=14.dp,vertical=8.dp))
+                    CompactHud(
+                        ui.copy(world=world,running=ui.running && historical==null), cognition,
+                        { if(historical==null) onToggle() }, { if(historical==null) onSpeed() },
+                        onThemeSelected = selectVisualTheme,
+                        onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal=14.dp,vertical=8.dp)
+                    )
                     if(historical!=null) {
                         FilledTonalButton(onClick={ historical=null },modifier=Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top=154.dp,end=14.dp)) { Text("Flashback · voltar ao presente") }
                     }
@@ -130,31 +200,34 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     } else {
                         SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start=10.dp,end=10.dp,bottom=92.dp).fillMaxWidth().fillMaxHeight(.72f)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text(listOf("","Gênesis & Cidadãos","Pedidos & Biblioteca","Hugging Face & Plugins","Marcos, Laboratório & Sistema")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
+                                Text(listOf("Biosfera","Cidadãos","Arquiteto","Sistema")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
                                 IconButton(onClick={ tab=0 }) { Icon(Icons.Outlined.Close,"Voltar ao mundo") }
                             }
                             when(tab) {
-                                1->Citizens(world,Modifier.weight(1f)) { selectedId=it }
-                                2->ResearchRequests(Modifier.weight(1f))
-                                3->{
-                                    TabRow(hfSection,containerColor=Color.Transparent) {
-                                        listOf("Pesquisa","Plugins").forEachIndexed { i,label->
-                                            Tab(hfSection==i,{ hfSection=i },text={ Text(label) })
+                                1 -> Citizens(world, Modifier.weight(1f)) { selectedId = it }
+                                2 -> {
+                                    TabRow(architectureSection, containerColor = Color.Transparent) {
+                                        listOf("Pedidos", "Biblioteca", "Plugins").forEachIndexed { i, label ->
+                                            Tab(architectureSection == i, { architectureSection = i }, text = { Text(label) })
                                         }
                                     }
-                                    if(hfSection==0) {
-                                        if(historical==null) ResearchLibrary(Modifier.weight(1f))
-                                        else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
-                                    } else PluginsPage(Modifier.weight(1f))
+                                    when (architectureSection) {
+                                        0 -> ResearchRequests(Modifier.weight(1f))
+                                        1 -> if (historical == null) ResearchLibrary(Modifier.weight(1f))
+                                            else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.", Modifier.padding(16.dp), color = Solar.Muted)
+                                        else -> PluginsPage(Modifier.weight(1f))
+                                    }
                                 }
-                                4->{
-                                    TabRow(historySection,containerColor=Color.Transparent) {
-                                        listOf("Marcos","Cultura","Sistema").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
+                                3 -> {
+                                    TabRow(historySection, containerColor = Color.Transparent) {
+                                        listOf("Marcos", "Cultura", "Sistema").forEachIndexed { i, label ->
+                                            Tab(historySection == i, { historySection = i }, text = { Text(label) })
+                                        }
                                     }
                                     when(historySection) {
-                                        0->Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
-                                        1->Culture(world,Modifier.weight(1f))
-                                        else->SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
+                                        0 -> Timeline(ui.world ?: world, Modifier.weight(1f)) { historical = it; selectedId = null; tab = 0 }
+                                        1 -> Culture(world, Modifier.weight(1f))
+                                        else -> SystemPage(ui, Modifier.weight(1f), sound, onSound, onVolume, cognition, onImportModel, onRemoveModel, onInfer, onCancelInference, onAutomaticInference, onImportAdapter, onRemoveAdapter)
                                     }
                                 }
                             }
@@ -162,8 +235,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     }
                     SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.Inbox,Icons.Outlined.CloudDownload,Icons.Outlined.Tune)
-                            listOf("Biosfera","Gênesis","Pedidos","HF & Plugins","Marcos/Sistema").forEachIndexed { i,label->
+                            val icons = listOf(Icons.Outlined.Public, Icons.Outlined.PeopleOutline, Icons.Outlined.AccountTree, Icons.Outlined.Tune)
+                            listOf("Biosfera", "Cidadãos", "Arquiteto", "Sistema").forEachIndexed { i,label->
                                 Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
                                     Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
@@ -228,9 +301,19 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         if(economy && world!=null) ModalBottomSheet(onDismissRequest={ economy=false },containerColor=Solar.Surface) {
             Economy(world,Modifier.fillMaxWidth().fillMaxHeight(.82f))
         }
+        }
     }
 }
-@Composable private fun CompactHud(ui: BiosphereUi,cognition: CognitionStatus,onToggle: ()->Unit,onSpeed: ()->Unit,modifier: Modifier) {
+@Composable private fun CompactHud(
+    ui: BiosphereUi,
+    cognition: CognitionStatus,
+    onToggle: () -> Unit,
+    onSpeed: () -> Unit,
+    onThemeSelected: (GirassolVisualTheme) -> Unit,
+    onOpenDrawer: () -> Unit,
+    modifier: Modifier
+) {
+    var paletteMenu by rememberSaveable { mutableStateOf(false) }
     val w=ui.world!!
     val metrics=remember(w.tick) { w.telemetry() }
     val minutes=(w.tick+461)%1440
@@ -247,6 +330,23 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             }
             Spacer(Modifier.width(10.dp))
             FilledIconButton(onClick=onToggle,modifier=Modifier.size(34.dp),shape=RoundedCornerShape(11.dp)) { Icon(if(ui.running) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,if(ui.running) "Pausar" else "Continuar",Modifier.size(20.dp)) }
+            Box {
+                IconButton(onClick = { paletteMenu = true }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Outlined.Palette, "Selecionar paleta", Modifier.size(19.dp), tint = Solar.Amber)
+                }
+                DropdownMenu(expanded = paletteMenu, onDismissRequest = { paletteMenu = false }) {
+                    GirassolVisualTheme.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            leadingIcon = { Icon(Icons.Outlined.Palette, null) },
+                            onClick = { onThemeSelected(option); paletteMenu = false }
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = onOpenDrawer, modifier = Modifier.size(34.dp)) {
+                Icon(Icons.Outlined.Menu, "Abrir navegação", Modifier.size(19.dp), tint = Solar.Amber)
+            }
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
             Box(Modifier.size(5.dp).background(if(cognition.model!=null) Solar.Cognitive else Solar.Biosphere,CircleShape)); Spacer(Modifier.width(6.dp))

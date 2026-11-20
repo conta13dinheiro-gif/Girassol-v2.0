@@ -58,14 +58,15 @@ private val palettes = mapOf(
 )
 
 object Solar {
-    val Black=Color(0xFF080808)
-    val Surface=Color(0xFF141414)
-    val Ink=Color(0xFFF4F0E6)
-    val Muted=Color(0xFFA9A49A)
-    val Amber=Color(0xFFE0B84F)
-    val Biosphere=Color(0xFF78866B)
-    val Cognitive=Color(0xFFB6A27A)
-    val Border=Color(0xFFE0B84F).copy(alpha=.20f)
+    // Resolve semantic colors from the selected palette rather than a hard-coded OLED fallback.
+    val Black: Color @Composable get() = MaterialTheme.colorScheme.background
+    val Surface: Color @Composable get() = MaterialTheme.colorScheme.surface
+    val Ink: Color @Composable get() = MaterialTheme.colorScheme.onBackground
+    val Muted: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+    val Amber: Color @Composable get() = MaterialTheme.colorScheme.primary
+    val Biosphere: Color @Composable get() = MaterialTheme.colorScheme.secondary
+    val Cognitive: Color @Composable get() = MaterialTheme.colorScheme.tertiary
+    val Border: Color @Composable get() = MaterialTheme.colorScheme.outline.copy(alpha=.20f)
     val Metric=TextStyle(fontFamily=FontFamily.Monospace,fontFeatureSettings="tnum",fontWeight=FontWeight.Medium)
 }
 
