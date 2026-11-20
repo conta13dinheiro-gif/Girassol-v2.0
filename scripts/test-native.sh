@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_root="$(mktemp -d)"
 trap 'rm -rf "$build_root"' EXIT
 cd "$repo_root"
-for suite in projection city_mesh synth plasticity vector_memory semantic_index cma_es dataset_decoder anokhin_gnw_core; do
+for suite in projection city_mesh synth plasticity vector_memory semantic_index cma_es dataset_decoder anokhin_gnw_core tsetlin_machine; do
   case "$suite" in
     synth) source=audio/synth ;;
     plasticity) source=mind/plasticity ;;
@@ -12,7 +12,7 @@ for suite in projection city_mesh synth plasticity vector_memory semantic_index 
     semantic_index) source=mind/semantic_index ;;
     cma_es) source=evolution/cma_es ;;
     dataset_decoder) source=research/dataset_decoder ;;
-    anokhin_gnw_core) source= ;;
+    anokhin_gnw_core|tsetlin_machine) source= ;;
     *) source="$suite" ;;
   esac
   sources=()
