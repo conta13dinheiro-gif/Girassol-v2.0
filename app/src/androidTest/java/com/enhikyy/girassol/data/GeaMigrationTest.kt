@@ -75,6 +75,65 @@ class GeaMigrationTest {
         }
     }
 
+    @Test fun validatedVoyagerSkillsArePersistedWithCanonicalProvenance() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val name = "girassol-branch-00000000-0000-0000-0000-000000000007.db"
+        context.deleteDatabase(name)
+        try {
+            val actor = WorldActor(rulesVersion = 4)
+            WorldStore(context, name).use { store ->
+                repeat(3) {
+                    val previous = actor.state
+                    val transition = actor.step()
+                    store.commit(transition, previous)
+                }
+                val previous = actor.state
+                val minds = previous.agents.associate { citizen ->
+                    val initial = MindState.initial(previous, citizen)
+                    if (citizen.id != previous.agents.first().id) citizen.id to initial
+                    else {
+                        val bank = MemoryBank(
+                            procedures = listOf(Procedure(Activity.STUDY, 3, 0.4, previous.tick, previous.tick)),
+                            learning = listOf(
+                                SkillLearningTrace(
+                                    action = Activity.STUDY,
+                                    knowledgeProbability = 0.80,
+                                    reviews = 3,
+                                    lastReviewTick = previous.tick
+                                )
+                            ),
+                            reflectedTick = previous.tick
+                        )
+                        citizen.id to initial.copy(memory = bank)
+                    }
+                }
+                val cognition = CognitiveFrame(
+                    sourceTick = previous.tick,
+                    sourceHash = Canonical.hash(Canonical.state(previous)),
+                    minds = minds,
+                    decisions = previous.agents.associate { it.id to it.activity }
+                )
+                val transition = actor.step(cognition = cognition)
+                store.commit(transition, previous)
+
+                store.readableDatabase.rawQuery(
+                    "SELECT agent_id,skill_id,executions,knowledge FROM voyager_skill_library WHERE event_id=?",
+                    arrayOf(transition.event.eventId.toString())
+                ).use { rows ->
+                    assertTrue(rows.moveToFirst())
+                    assertEquals(previous.agents.first().id, rows.getString(0))
+                    assertEquals(Activity.STUDY.name, rows.getString(1))
+                    assertEquals(3, rows.getInt(2))
+                    assertEquals(0.80, rows.getDouble(3), 1e-9)
+                    assertFalse(rows.moveToNext())
+                }
+                assertEquals(4L, store.audit())
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+    }
+
     @Test fun upgradesEveryHistoricalSchemaWithoutChangingEvents() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         for (version in 1..4) {
