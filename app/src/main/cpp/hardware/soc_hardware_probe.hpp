@@ -5,7 +5,7 @@
 #include <dlfcn.h>
 #include <sys/auxv.h>
 #include <unistd.h>
-#include <vector>
+#include <array>
 
 #if defined(__has_include)
 #  if __has_include(<asm/hwcap.h>)
@@ -39,7 +39,7 @@ inline bool hasOpenClDevice() noexcept {
     using ClPlatform = void*;
     using ClDevice = void*;
     constexpr ClInt kSuccess = 0;
-    constexpr ClDeviceType kAllDevices = ~ClDeviceType{0};
+    constexpr ClDeviceType kAllDevices = 0xFFFFFFFFULL;
     void* library = dlopen("libOpenCL.so", RTLD_NOW | RTLD_LOCAL);
     if (library == nullptr) return false;
     const auto getPlatforms = reinterpret_cast<ClInt (*)(ClUInt, ClPlatform*, ClUInt*)>(
@@ -50,11 +50,11 @@ inline bool hasOpenClDevice() noexcept {
     if (getPlatforms != nullptr && getDevices != nullptr) {
         ClUInt platformCount = 0;
         if (getPlatforms(0, nullptr, &platformCount) == kSuccess && platformCount > 0 && platformCount <= 64) {
-            std::vector<ClPlatform> platforms(platformCount);
+            std::array<ClPlatform, 64> platforms{};
             if (getPlatforms(platformCount, platforms.data(), nullptr) == kSuccess) {
-                for (const auto platform : platforms) {
+                for (ClUInt i = 0; i < platformCount; ++i) {
                     ClUInt deviceCount = 0;
-                    if (getDevices(platform, kAllDevices, 0, nullptr, &deviceCount) == kSuccess && deviceCount > 0) {
+                    if (getDevices(platforms[i], kAllDevices, 0, nullptr, &deviceCount) == kSuccess && deviceCount > 0) {
                         found = true;
                         break;
                     }
@@ -105,8 +105,8 @@ inline bool hasVulkanPhysicalDevice() noexcept {
         if (createInstance(&createInfo, nullptr, &instance) == 0 && instance != nullptr) {
             std::uint32_t count = 0;
             if (enumerate(instance, &count, nullptr) == 0 && count > 0 && count <= 256) {
-                std::vector<VkPhysicalDevice> devices(count);
-                found = enumerate(instance, &count, devices.data()) == 0 && count > 0 &&
+                std::array<VkPhysicalDevice, 256> devices{};
+                found = enumerate(instance, &count, devices.data()) == 0 && count > 0 && count <= devices.size() &&
                     std::any_of(devices.begin(), devices.begin() + count, [](auto device) { return device != nullptr; });
             }
             destroy(instance, nullptr);
