@@ -203,7 +203,7 @@ std::vector<Velocity> stepRvo2OrcaVelocities(const std::vector<OrcaAgent>& agent
            !std::isfinite(self.preferredVelocity.x)||!std::isfinite(self.preferredVelocity.z)||
            !std::isfinite(self.radius)||self.radius<=0.0)
             throw std::invalid_argument("Non-finite ORCA agent");
-        const V2 pos{self.position.x,self.position.z},velocity{self.velocity.x,self.velocity.z};
+        const V2 velocity{self.velocity.x,self.velocity.z};
         const V2 preferred{self.preferredVelocity.x,self.preferredVelocity.z};
         std::vector<OrcaLine> lines;lines.reserve(agents.size()?agents.size()-1:0);
         for(std::size_t j=0;j<agents.size();++j) if(j!=i) {
