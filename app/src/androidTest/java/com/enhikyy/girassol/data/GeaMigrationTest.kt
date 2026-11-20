@@ -141,6 +141,14 @@ class GeaMigrationTest {
                     assertTrue(rows.moveToFirst())
                     assertEquals(1L, rows.getLong(0))
                 }
+                store.readableDatabase.rawQuery(
+                    "SELECT COUNT(*),COUNT(DISTINCT deontic) FROM adico_institutions WHERE event_id=?",
+                    arrayOf(transition.event.eventId.toString())
+                ).use { rows ->
+                    assertTrue(rows.moveToFirst())
+                    assertEquals("The civic rule catalog should contain seven deduplicated rules", 7L, rows.getLong(0))
+                    assertEquals(3L, rows.getLong(1))
+                }
                 assertEquals(4L, store.audit())
             }
         } finally {
