@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_root="$(mktemp -d)"
 trap 'rm -rf "$build_root"' EXIT
 cd "$repo_root"
-for suite in projection city_mesh synth plasticity vector_memory semantic_index cma_es dataset_decoder anokhin_gnw_core deterministic_engines soc_hardware_probe; do
+for suite in projection city_mesh synth plasticity vector_memory semantic_index cma_es dataset_decoder anokhin_gnw_core deterministic_engines extended_deterministic_engines soc_hardware_probe; do
   case "$suite" in
     synth) source=audio/synth ;;
     plasticity) source=mind/plasticity ;;

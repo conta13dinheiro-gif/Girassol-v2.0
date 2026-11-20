@@ -199,3 +199,175 @@ inline DeterministicEngineOutput stepDeterministicEngines(
 }
 
 } // namespace girassol::cognition
+
+
+// Extended deterministic primitives for the 06-09 cognitive pipeline.
+// These are bounded, allocation-conscious value types; callers own persistence.
+namespace extended {
+
+struct TsetlinClause {
+    std::uint32_t id = 0;
+    std::uint16_t state = 0; // 0..2N-1 automaton state
+    std::uint32_t featureMask = 0;
+    bool polarity = true;
+};
+
+struct TsetlinMachine {
+    static constexpr std::uint16_t kMaxState = 31;
+    std::array<TsetlinClause, 32> clauses{};
+    std::uint8_t count = 0;
+
+    bool add(TsetlinClause clause) noexcept {
+        if (count >= clauses.size() || clause.state > kMaxState) return false;
+        clauses[count++] = clause;
+        return true;
+    }
+
+    float predict(std::uint32_t features, float threshold = 0.05f) const noexcept {
+        if (count == 0) return 0.0f;
+        std::int32_t votes = 0;
+        for (std::uint8_t i = 0; i < count; ++i) {
+            const auto& c = clauses[i];
+            const bool matches = (features & c.featureMask) == c.featureMask;
+            if (matches && c.state >= 16) votes += c.polarity ? 1 : -1;
+        }
+        const float confidence = static_cast<float>(votes) / static_cast<float>(count);
+        return std::fabs(confidence) < threshold ? 0.0f : confidence;
+    }
+};
+
+inline std::vector<std::uint8_t> serializeGrst(const TsetlinMachine& machine) {
+    std::vector<std::uint8_t> out;
+    out.reserve(8 + static_cast<std::size_t>(machine.count) * 11);
+    auto put = [&out](std::uint32_t value, int bytes) {
+        for (int i = 0; i < bytes; ++i) out.push_back(static_cast<std::uint8_t>(value >> (i * 8)));
+    };
+    put(0x54535247u, 4); // "GRST" little-endian
+    put(1, 2);
+    put(machine.count, 2);
+    for (std::uint8_t i = 0; i < machine.count; ++i) {
+        const auto& c = machine.clauses[i];
+        put(c.id, 4); put(c.state, 2); put(c.featureMask, 4); put(c.polarity ? 1u : 0u, 1);
+    }
+    return out;
+}
+
+inline bool deserializeGrst(const std::uint8_t* data, std::size_t size, TsetlinMachine& out) noexcept {
+    if (data == nullptr || size < 8) return false;
+    auto get = [data, size](std::size_t offset, int bytes, std::uint32_t& value) {
+        if (offset > size || static_cast<std::size_t>(bytes) > size - offset) return false;
+        value = 0;
+        for (int i = 0; i < bytes; ++i) value |= static_cast<std::uint32_t>(data[offset + i]) << (i * 8);
+        return true;
+    };
+    std::uint32_t magic = 0, version = 0, count = 0;
+    if (!get(0,4,magic) || !get(4,2,version) || !get(6,2,count)
+        || magic != 0x54535247u || version != 1 || count > 32
+        || size != 8 + static_cast<std::size_t>(count) * 11) return false;
+    TsetlinMachine candidate{};
+    std::size_t offset = 8;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        std::uint32_t id=0,state=0,mask=0,polarity=0;
+        if (!get(offset,4,id) || !get(offset+4,2,state) || !get(offset+6,4,mask)
+            || !get(offset+10,1,polarity) || state > TsetlinMachine::kMaxState || polarity > 1) return false;
+        candidate.add({id,static_cast<std::uint16_t>(state),mask,polarity==1});
+        offset += 11;
+    }
+    out = candidate;
+    return true;
+}
+
+class PrioritizedReplayTree {
+public:
+    static constexpr std::size_t kCapacity = 64;
+    void update(std::size_t index, float priority) noexcept {
+        if (index >= kCapacity || !std::isfinite(priority)) return;
+        std::size_t node = index + kCapacity;
+        tree_[node] = std::max(0.0f, priority);
+        while (node > 1) { node /= 2; tree_[node] = tree_[node*2] + tree_[node*2+1]; }
+    }
+    float total() const noexcept { return tree_[1]; }
+    std::size_t sample(float mass) const noexcept {
+        if (!(total() > 0.0f)) return kCapacity;
+        float remaining = std::clamp(mass, 0.0f, std::nextafter(total(), 0.0f));
+        std::size_t node = 1;
+        while (node < kCapacity) {
+            const auto left = node * 2;
+            if (remaining < tree_[left]) node = left;
+            else { remaining -= tree_[left]; node = left + 1; }
+        }
+        return node - kCapacity;
+    }
+private:
+    std::array<float, kCapacity * 2> tree_{};
+};
+
+struct OnlineEwc {
+    std::array<float, 32> fisher{};
+    std::array<float, 32> anchor{};
+    float penalty(const std::array<float,32>& parameters, float lambda) const noexcept {
+        if (!std::isfinite(lambda) || lambda < 0.0f) return 0.0f;
+        double sum = 0.0;
+        for (std::size_t i=0;i<parameters.size();++i) {
+            const float d=parameters[i]-anchor[i];
+            sum += static_cast<double>(std::max(0.0f,fisher[i]))*d*d;
+        }
+        return static_cast<float>(std::min<double>(lambda*sum, 1.0e12));
+    }
+    void consolidate(const std::array<float,32>& parameters, const std::array<float,32>& newFisher,
+                     float decay = 0.95f) noexcept {
+        decay = std::clamp(std::isfinite(decay)?decay:0.95f,0.0f,1.0f);
+        for(std::size_t i=0;i<parameters.size();++i) {
+            anchor[i]=std::isfinite(parameters[i])?parameters[i]:anchor[i];
+            fisher[i]=decay*std::max(0.0f,fisher[i])+(1.0f-decay)*std::max(0.0f,newFisher[i]);
+        }
+    }
+};
+
+struct Signature256 { std::array<std::uint64_t,4> words{}; };
+inline unsigned hammingDistance(const Signature256& a,const Signature256& b) noexcept {
+    unsigned distance=0;
+    for(std::size_t i=0;i<4;++i) distance += static_cast<unsigned>(__builtin_popcountll(a.words[i]^b.words[i]));
+    return distance;
+}
+inline float reciprocalRankFusion(unsigned rankA,unsigned rankB,unsigned k=60) noexcept {
+    return 1.0f/(static_cast<float>(k)+static_cast<float>(rankA)+1.0f)
+         + 1.0f/(static_cast<float>(k)+static_cast<float>(rankB)+1.0f);
+}
+inline float hawkesDecay(float intensity,float dt,float decay,float excitation) noexcept {
+    if(!std::isfinite(intensity)||!std::isfinite(dt)||!std::isfinite(decay)||!std::isfinite(excitation)) return 0.0f;
+    const float safeDt=std::clamp(dt,0.0f,60.0f);
+    const float safeDecay=std::clamp(decay,0.0f,100.0f);
+    return std::clamp(intensity*std::exp(-safeDecay*safeDt)+std::max(0.0f,excitation),0.0f,1.0e6f);
+}
+
+struct CoreSelf final {
+    const std::array<float,8> identity;
+    explicit CoreSelf(std::array<float,8> values) : identity(values) {}
+    CoreSelf(const CoreSelf&) = default;
+    CoreSelf& operator=(const CoreSelf&) = delete;
+};
+struct PianoCandidate { float utility=0.0f; float epistemic=0.0f; float identityAlignment=0.0f; };
+inline std::array<std::size_t,3> pianoTop3(const std::array<PianoCandidate,8>& candidates,
+                                          const CoreSelf& self) noexcept {
+    std::array<std::size_t,3> best{8,8,8};
+    std::array<float,3> scores{-1.0e30f,-1.0e30f,-1.0e30f};
+    float identityNorm=0.0f;
+    for(float v:self.identity) identityNorm += v*v;
+    for(std::size_t i=0;i<candidates.size();++i) {
+        const auto& c=candidates[i];
+        const float score=c.utility+0.25f*c.epistemic+0.5f*c.identityAlignment*std::sqrt(identityNorm);
+        for(std::size_t slot=0;slot<3;++slot) if(score>scores[slot]) {
+            for(std::size_t j=2;j>slot;--j){scores[j]=scores[j-1];best[j]=best[j-1];}
+            scores[slot]=score;best[slot]=i;break;
+        }
+    }
+    return best;
+}
+inline float expectedFreeEnergy(const PianoCandidate& policy,const CoreSelf& self) noexcept {
+    float norm=0.0f; for(float v:self.identity) norm += v*v;
+    const float identityPenalty=std::clamp(1.0f-policy.identityAlignment*std::sqrt(norm),0.0f,1.0f);
+    return std::clamp(0.45f*(1.0f-policy.utility)+0.30f*(1.0f-policy.epistemic)+0.25f*identityPenalty,0.0f,1.0f);
+}
+
+} // namespace extended
