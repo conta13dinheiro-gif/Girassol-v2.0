@@ -164,6 +164,7 @@ import kotlin.math.*
     @EncodeDefault(EncodeDefault.Mode.NEVER) val evolution: PolicyRevision? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lesson: KnowledgeLesson? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val rsiPromotionGate: Boolean = false,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val innerSpeech: Map<String,String> = emptyMap()) {
     fun snapshot(): CognitiveFrame = copy(minds=minds.mapValues { (_,m)-> m.copy(
         parameters=m.parameters.toList(),hidden=m.hidden.toList(),personality=m.personality.toList(),
