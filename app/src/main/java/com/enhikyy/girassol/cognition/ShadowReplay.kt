@@ -45,7 +45,7 @@ internal object ShadowReplay {
         val brierScore=if(brierSamples>0L) (brierSquaredError/brierSamples).coerceIn(0.0,1.0) else 1.0
         val semanticEntropy=SemanticCollapseGuard.normalizedPopulationEntropy(w.actionCounts)
         return Rollout(ReplayMetrics((discoveries/observations).coerceIn(0.0,1.0),resilience/horizon,harmony/horizon,
-            (energy/horizon/(1+consumption/observations)).coerceIn(0.0,1.0),brierScore,semanticEntropy),actor.checkpoint(),last)
+            (energy/horizon/(1+consumption/observations)).coerceIn(0.0,1.0),brierScore,semanticEntropy,evidenceVersion=1),actor.checkpoint(),last)
     }
     fun search(origin: Checkpoint,actions: List<ActionRecord>,cancel: ()->Boolean,progress: (Int,Int)->Unit): Result {
         val horizon=256; val generations=2; val total=generations*10+3
