@@ -68,10 +68,13 @@ inline DeterministicEngineOutput stepDeterministicEngines(
 
     // Jøsang subjective opinion: evidence is discounted by relational warmth.
     const float evidence = unit(0.15f + 0.70f * warmth + 0.15f * retention);
-    const float belief = evidence * unit((outcome + 1.0f) * 0.5f);
-    const float disbelief = evidence - belief;
-    const float uncertainty = 1.0f - evidence;
-    const float projected = unit(belief + 0.5f * uncertainty);
+    const float priorUncertainty = unit(input.priorState[6]);
+    const float uncertainty = unit(0.75f * priorUncertainty + 0.25f * (1.0f - evidence));
+    const float evidenceMass = 1.0f - uncertainty;
+    const float belief = evidenceMass * unit((outcome + 1.0f) * 0.5f);
+    const float disbelief = evidenceMass - belief;
+    const float opinionMass = belief + disbelief + uncertainty;
+    const float projected = unit((belief + 0.5f * uncertainty) / std::max(opinionMass, 1e-6f));
     output.nextState[6] = uncertainty;
 
     // Variational free energy and expected free energy remain finite and bounded.
