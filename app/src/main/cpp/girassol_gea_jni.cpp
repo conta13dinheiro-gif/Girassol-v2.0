@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <unordered_map>
 #include <vector>
 
@@ -21,16 +22,21 @@ bool readFeatures(JNIEnv* env, jbyteArray array, std::vector<std::uint8_t>& outp
     if (array == nullptr) return false;
     const jsize size = env->GetArrayLength(array);
     if (size <= 0 || size > 4096) return false;
-    std::vector<jbyte> bytes(static_cast<std::size_t>(size));
-    env->GetByteArrayRegion(array, 0, size, bytes.data());
-    if (env->ExceptionCheck()) return false;
-    output.resize(static_cast<std::size_t>(size));
-    for (jsize i = 0; i < size; ++i) {
-        const auto value = static_cast<std::uint8_t>(bytes[static_cast<std::size_t>(i)]);
-        if (value > 1U) return false;
-        output[static_cast<std::size_t>(i)] = value;
+    try {
+        std::vector<jbyte> bytes(static_cast<std::size_t>(size));
+        env->GetByteArrayRegion(array, 0, size, bytes.data());
+        if (env->ExceptionCheck()) return false;
+        output.resize(static_cast<std::size_t>(size));
+        for (jsize i = 0; i < size; ++i) {
+            const auto value = static_cast<std::uint8_t>(bytes[static_cast<std::size_t>(i)]);
+            if (value > 1U) return false;
+            output[static_cast<std::size_t>(i)] = value;
+        }
+        return true;
+    } catch (const std::bad_alloc&) {
+        throwJava(env, "java/lang/OutOfMemoryError", "Tsetlin feature allocation failed");
+        return false;
     }
-    return true;
 }
 } // namespace
 
@@ -128,19 +134,24 @@ extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinSerialize(
     JNIEnv* env, jobject, jlong handle
 ) {
-    std::vector<std::uint8_t> blob;
-    {
-        std::lock_guard<std::mutex> lock(gTsetlinMutex);
-        const auto it = gTsetlinModels.find(handle);
-        if (it == gTsetlinModels.end()) return nullptr;
-        blob = it->second->serializeBinary();
+    try {
+        std::vector<std::uint8_t> blob;
+        {
+            std::lock_guard<std::mutex> lock(gTsetlinMutex);
+            const auto it = gTsetlinModels.find(handle);
+            if (it == gTsetlinModels.end()) return nullptr;
+            blob = it->second->serializeBinary();
+        }
+        if (blob.empty() || blob.size() > 1024U * 1024U) return nullptr;
+        jbyteArray result = env->NewByteArray(static_cast<jsize>(blob.size()));
+        if (result == nullptr) return nullptr;
+        env->SetByteArrayRegion(result, 0, static_cast<jsize>(blob.size()),
+                                reinterpret_cast<const jbyte*>(blob.data()));
+        return result;
+    } catch (const std::bad_alloc&) {
+        throwJava(env, "java/lang/OutOfMemoryError", "Tsetlin serialization allocation failed");
+        return nullptr;
     }
-    if (blob.empty() || blob.size() > 1024U * 1024U) return nullptr;
-    jbyteArray result = env->NewByteArray(static_cast<jsize>(blob.size()));
-    if (result == nullptr) return nullptr;
-    env->SetByteArrayRegion(result, 0, static_cast<jsize>(blob.size()),
-                            reinterpret_cast<const jbyte*>(blob.data()));
-    return result;
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -153,12 +164,12 @@ Java_com_enhikyy_girassol_cognition_GeaNativeBridge_nativeTsetlinRestore(
         throwJava(env, "java/lang/IllegalArgumentException", "Tsetlin snapshot size is invalid");
         return 0;
     }
-    std::vector<jbyte> bytes(static_cast<std::size_t>(size));
-    env->GetByteArrayRegion(blobArray, 0, size, bytes.data());
-    if (env->ExceptionCheck()) return 0;
-    std::vector<std::uint8_t> blob(static_cast<std::size_t>(size));
-    for (jsize i = 0; i < size; ++i) blob[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(bytes[static_cast<std::size_t>(i)]);
     try {
+        std::vector<jbyte> bytes(static_cast<std::size_t>(size));
+        env->GetByteArrayRegion(blobArray, 0, size, bytes.data());
+        if (env->ExceptionCheck()) return 0;
+        std::vector<std::uint8_t> blob(static_cast<std::size_t>(size));
+        for (jsize i = 0; i < size; ++i) blob[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(bytes[static_cast<std::size_t>(i)]);
         auto model = std::make_unique<girassol::tsetlin::PersistentTsetlinMachine>(1, 1, 2, 3.5f, 1, 42U);
         if (!model->deserializeBinary(blob)) {
             throwJava(env, "java/lang/IllegalArgumentException", "Tsetlin snapshot is invalid");
