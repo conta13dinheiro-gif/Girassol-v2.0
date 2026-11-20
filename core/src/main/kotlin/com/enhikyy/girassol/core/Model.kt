@@ -90,7 +90,8 @@ class DeterministicRng(private var state: Long) {
     @EncodeDefault(EncodeDefault.Mode.NEVER) val knowledge: List<KnowledgeLesson> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val spatial: Map<String,SpatialPose> = emptyMap(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val genealogy: List<GenealogyRecord> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,\n    @EncodeDefault(EncodeDefault.Mode.NEVER) val civic: CivicEvolutionState = CivicEvolutionState())
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val socialSynchrony: Double = 0.0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val civic: CivicEvolutionState = CivicEvolutionState())
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable data class CanonicalEvent(val version: Int = 1, val eventId: Long, val tick: Long,
     val actions: List<ActionRecord>, val stateHash: String, val previousHash: String, val hash: String = "",

@@ -101,8 +101,8 @@ object CivicEvolutionEngine {
         // Existing BKT/DSR trace plus a separate bounded online 2PL ability estimate.
         val learning=previous.learning.toMutableMap()
         val theta=previous.learningTheta2pl.toMutableMap()
-        actions.filter { it.outcome=="OK" && it.action in setOf(Activity.STUDY,Activity.WRITE) }.forEach { record ->
-            val old=learning[record.agentId] ?: SkillLearningTrace(record.action)
+        actions.filter { it.outcome=="OK" && it.activity in setOf(Activity.STUDY,Activity.WRITE) }.forEach { record ->
+            val old=learning[record.agentId] ?: SkillLearningTrace(record.activity)
             learning[record.agentId]=old.observe(true,after.tick)
             val current=(theta[record.agentId] ?: 0.0).coerceIn(-4.0,4.0)
             val b=(old.difficulty-5.5)/2.25

@@ -200,7 +200,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             }
         }
         // 12: Bounded social/memory outputs; immutable publication follows validation.
-        val published = base.copy(socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())\n        val next = published.copy(civic=CivicEvolutionEngine.advance(base.civic,base,published,records))
+        val published = base.copy(socialSynchrony=if(rulesVersion>=7) cognitiveInput?.socialSynchrony ?: 0.0 else base.socialSynchrony,spatial=physics?.poses ?: base.spatial,knowledge=base.knowledge+listOfNotNull(cognitiveInput?.lesson),evolution=cognitiveInput?.evolution ?: base.evolution,minds=cognitiveInput?.minds ?: base.minds, agents = agents.toList(), balances = balances.toMap(), ties = ties.toList(), words = words.toList(), rooms = rooms.toList(), dialogues = dialogues.takeLast(40), artifacts = artifacts.takeLast(24), actionCounts = counts.toMap(), trail = trails.toList(), genealogy = genealogy.toList())
+        val next = published.copy(civic=CivicEvolutionEngine.advance(base.civic,base,published,records))
         check(violations(next).isEmpty()) { violations(next).joinToString() }
         val raw = CanonicalEvent(version = if(rulesVersion>=7 && physics!=null && cognitiveInput!=null) 7 else if(physics!=null) { if(rulesVersion>=6) 6 else 5 } else if(cognitiveInput!=null) 4 else if (admitted != null) 3 else minOf(rulesVersion, 2), spatial=physics,cognition=cognitiveInput, neural = admitted, eventId = eventId + 1, tick = tick, actions = records.toList(), stateHash = Canonical.hash(Canonical.state(next)), previousHash = previousHash)
         val event = raw.copy(hash = raw.computedHash())
@@ -359,7 +360,8 @@ class WorldActor(checkpoint: Checkpoint = Checkpoint(genesis(), 0, GENESIS_HASH)
             return true
         }
         fun violations(s: WorldState): List<String> = buildList {
-            if(!s.socialSynchrony.isFinite() || s.socialSynchrony !in 0.0..1.0) add("Sincronização social inválida")\n            if(!s.civic.valid(s.tick)) add("Estado cívico/evolutivo inválido")
+            if(!s.socialSynchrony.isFinite() || s.socialSynchrony !in 0.0..1.0) add("Sincronização social inválida")
+            if(!s.civic.valid(s.tick)) add("Estado cívico/evolutivo inválido")
             if(s.spatial.keys.any { id->s.agents.none { it.id==id } } || s.spatial.values.any { !it.valid() }) add("Estado espacial inválido")
             if (s.agents.isEmpty() || s.agents.map { it.id }.distinct().size != s.agents.size) add("Identidades inválidas")
             if(s.knowledge.any { !it.valid(s.tick) || s.agents.none { a->a.id==it.researcher } || s.agents.none { a->a.id==it.verifier } } || s.knowledge.map { it.id }.distinct().size!=s.knowledge.size) add("Proveniência de conhecimento inválida")
