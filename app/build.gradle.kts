@@ -29,16 +29,13 @@ android {
     }
     packaging {
         jniLibs {
+            // Store native libraries uncompressed and load them directly from the APK.
             useLegacyPackaging = false
-            // Sherpa is an optional voice feature. Keep its Java API at compile
-            // time, but provision the pinned ARM64 native runtime on first use.
-            excludes += setOf(
-                "**/libonnxruntime.so",
-                "**/libsherpa-onnx-c-api.so",
-                "**/libsherpa-onnx-cxx-api.so",
-                "**/libsherpa-onnx-jni.so"
-            )
         }
+    }
+    androidResources {
+        // Model and media assets can be memory-mapped/read without heap-sized copies.
+        noCompress += listOf("gguf", "onnx", "bin", "filamat", "wav", "ktx2")
     }
     buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
