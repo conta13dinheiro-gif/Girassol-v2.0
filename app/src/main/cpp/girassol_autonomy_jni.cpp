@@ -1,4 +1,5 @@
 #include "cognitive/anokhin_gnw_core.hpp"
+#include "cognitive/deterministic_engines.hpp"
 #include "hardware/soc_hardware_probe.hpp"
 
 #include <jni.h>
@@ -17,7 +18,9 @@ using girassol::psyche::HumanSoulState;
 constexpr std::size_t kStateFloats = 34;
 constexpr std::size_t kContextFloats = 6;
 constexpr std::size_t kSensoryFloats = 16;
-constexpr std::size_t kStride = kStateFloats + kContextFloats + kSensoryFloats;
+constexpr std::size_t kEngineStateFloats = 8;
+constexpr std::size_t kEngineSignalFloats = 8;
+constexpr std::size_t kStride = kStateFloats + kContextFloats + kSensoryFloats + kEngineStateFloats + kEngineSignalFloats;
 
 enum Field : std::size_t {
     kAge = 0,
@@ -182,6 +185,31 @@ Java_com_enhikyy_girassol_cognition_NativeAutonomy_advance(
         citizen.pad.arousal = std::clamp(0.55f * cortisol + 0.35f * dopamine - 0.25f, -1.0f, 1.0f);
         citizen.pad.dominance = std::clamp(0.45f * (1.0f - cortisol) + 0.25f * citizen.biologicalHealth - 0.35f, -1.0f, 1.0f);
         citizen.computeIgnition(values[kSalience], values[kSomaticBias]);
+
+        girassol::cognition::DeterministicEngineInput engineInput{};
+        for (std::size_t j = 0; j < engineInput.priorState.size(); ++j) {
+            if (!finiteRange(values[56 + j], 0.0f, 1.0f)) {
+                throwIllegalArgument(env, "Estado persistido dos motores cognitivos inválido");
+                return std::numeric_limits<jfloat>::quiet_NaN();
+            }
+            engineInput.priorState[j] = values[56 + j];
+        }
+        engineInput.threat = values[kThreat];
+        engineInput.socialWarmth = values[kWarmth];
+        engineInput.surprise = std::max(values[kSurprise], predictionError);
+        engineInput.novelty = values[kActualSensory + 8];
+        engineInput.predictionError = predictionError;
+        const float observed = values[kActualSensory + 9];
+        engineInput.observedOutcome = observed >= 0.90f ? 1.0f
+            : observed >= 0.50f ? 0.25f
+            : observed >= 0.20f ? -0.25f : -1.0f;
+        engineInput.dt = deltaTime;
+        const auto engineOutput = girassol::cognition::stepDeterministicEngines(engineInput);
+        auto* mutableValues = packed.data() + static_cast<std::size_t>(i) * kStride;
+        for (std::size_t j = 0; j < engineOutput.nextState.size(); ++j) {
+            mutableValues[56 + j] = engineOutput.nextState[j];
+            mutableValues[64 + j] = engineOutput.signals[j];
+        }
         citizens.push_back(citizen);
     }
 
