@@ -29,6 +29,8 @@ object GirassolRecordCodec {
     private const val PREFIX_BYTES = 22
     private const val DIGEST_BYTES = 32
     private const val HEADER_BYTES = PREFIX_BYTES + DIGEST_BYTES
+    // Bound decoded allocations even when a tiny, checksummed file advertises huge dimensions.
+    private const val MAX_ELEMENTS = 1_048_576
     private val MAGIC = byteArrayOf(71.toByte(), 82.toByte(), 83.toByte(), 49.toByte())
 
     fun encode(matrix: GrsMatrix, encoding: GrsEncoding): ByteArray {
@@ -74,9 +76,21 @@ object GirassolRecordCodec {
         val payloadLength = input.int
         require(rows > 0 && columns > 0)
         val count = Math.multiplyExact(rows, columns)
+        require(count in 1..MAX_ELEMENTS) { "Matriz GRS excede o limite de $MAX_ELEMENTS elementos" }
         require(scale.isFinite() && scale >= 0f)
         require(payloadLength >= 0 && payloadLength == bytes.size - HEADER_BYTES) {
             "Tamanho do payload GRS divergente"
+        }
+        when (encoding) {
+            GrsEncoding.FLOAT32 -> require(payloadLength.toLong() == count.toLong() * 4L) {
+                "Payload Float32 incompatível com as dimensões"
+            }
+            GrsEncoding.INT8_DELTA_VARINT -> require(payloadLength in count..(count * 2)) {
+                "Payload INT8 incompatível com as dimensões"
+            }
+            GrsEncoding.TERNARY_2BIT -> require(payloadLength.toLong() == (count.toLong() + 3L) / 4L) {
+                "Payload ternário incompatível com as dimensões"
+            }
         }
         val expectedDigest = ByteArray(DIGEST_BYTES).also { input.get(it) }
         val prefix = bytes.copyOfRange(0, PREFIX_BYTES)
@@ -172,7 +186,14 @@ object GirassolRecordCodec {
             require(offset < bytes.size) { "Varint truncado" }
             val next = bytes[offset++].toInt() and 0xff
             result = result or ((next and 0x7f) shl shift)
-            if (next and 0x80 == 0) return result to offset
+            if (next and 0x80 == 0) {
+                require(result in 0..508) { "Delta INT8 excede a faixa codificável" }
+                var canonicalLength = 1
+                var remaining = result
+                while (remaining >= 0x80) { canonicalLength++; remaining = remaining ushr 7 }
+                require(offset - start == canonicalLength) { "Varint INT8 não canônico" }
+                return result to offset
+            }
             shift += 7
         }
         throw IllegalArgumentException("Varint excede 32 bits")
