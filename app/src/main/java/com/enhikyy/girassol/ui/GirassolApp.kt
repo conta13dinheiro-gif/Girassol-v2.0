@@ -497,7 +497,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 Text("Diagnóstico informativo. Encontrar uma biblioteca não comprova driver funcional; este build ainda não ativa seleção dinâmica OpenCL/Vulkan nem KleidiAI.", color=Muted, fontSize=10.sp)
             }
         }
-        item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
+        item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); KeyValue("WakeLock parcial", if(ui.wakeLockHeld && ui.running) "Ativo" else "Liberado"); Text("O estado do WakeLock é lido de PowerManager. Isso não garante execução ininterrupta: Android e fabricantes continuam controlando processos, bateria e temperatura. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
         item { SectionTitle("Voz neural offline"); Spacer(Modifier.height(10.dp)); NeuralSpeechPanel() }
         item { SectionTitle("Shizuku · telemetria de sistema"); Spacer(Modifier.height(10.dp)); ShizukuPanel() }
         item {
