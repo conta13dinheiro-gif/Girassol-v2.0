@@ -82,3 +82,35 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 - O mesmo módulo inclui um projetor online Oja de três componentes, com média incremental, atualização Oja, ortogonalização Gram-Schmidt e descritores limitados a `[0,1]`.
 - Foi adicionado `AuroraMapElitesTest.kt`, cobrindo substituição por candidato melhor, nichos distintos, idempotência, rejeição de evidência inválida, inicialização determinística, ortogonalidade e serialização.
 - **Limite explícito:** este incremento é o núcleo matemático/arquivo. Ainda não está conectado ao ciclo RSI/geração de genomas, não possui persistência em GEA/SQLite, nem implementa o ciclo completo AURORA de exploração, mutação, seleção e avaliação em ambiente. A frente MAP-Elites/AURORA segue parcialmente pendente até essas integrações e validação.
+
+
+## Continuação técnica — 2026-11-20 (incremento atual)
+
+### Integrações concluídas em código nesta rodada
+
+- **RSI / evidência de promoção:** `ReplayMetrics` recebeu campos versionados de Brier e entropia semântica. Shadow-Replay calcula Brier sobre as cinco necessidades previstas versus observadas e H_sem sobre a distribuição de ações. Uma promoção com evidência v1 precisa manter o ganho de fitness acima de 0,03, não regredir Brier em mais de 0,005, preservar H_sem dentro de 0,015 e respeitar o piso absoluto H_sem ≥ 0,35. Eventos antigos sem os novos campos continuam decodificáveis como evidência v0; evidência v0 não pode ser misturada com v1 numa promoção nova. **Ainda falta** migrar o otimizador para mutação exclusiva de CognitivePolicyGenome e regras VPO/GBNF.
+- **Economia de dupla entrada:** cada evento persistido agora materializa os deltas líquidos por conta/recurso em `double_entry_ledger`, pareando débitos e créditos de modo determinístico na mesma transação do evento. Teste instrumentado reconcilia cada conta/recurso com o delta exato do WorldActor em 80 transições. Isso prova os movimentos líquidos por evento; não representa cada transferência intermediária interna separadamente.
+- **Voyager Skill Library:** procedimentos com pelo menos três sucessos e probabilidade BKT ≥ 0,75 são escritos em `voyager_skill_library` com pré-condições, programa declarativo, execução e proveniência vinculada ao evento. A auditoria reconstitui o procedimento e o traço BKT do evento canônico. Há teste instrumentado de persistência/proveniência.
+- **Memória / replay:** o lote de sono agora considera Q TD específico por evento para priorizar a reprodução. Em sono concluído e com margem térmica suficiente, até 4 ou 12 episódios (conforme termalização) passam pelo atualizador LTC nativo; há orçamento global por tick proporcional à população. Teste unitário cobre a influência de Q na ordem determinística. Isso é replay priorizado funcional, mas não uma implementação neurofisiológica completa de Sharp-Wave Ripple nem de A-MEM.
+- **QD / AURORA:** o núcleo contém arquivo MAP-Elites 3D com uma elite por célula, desempate determinístico, inserção imutável e validação de proveniência; projetor Oja online de três componentes com Gram-Schmidt. O GEA persiste candidatos e checkpoints do projetor em `ecological_niche_structures`, com validade temporal e auditoria. Todos os habitantes de um mesmo tick usam a mesma base congelada; a atualização Oja ocorre após a projeção do lote. **Ainda falta** o ciclo autônomo completo de geração/mutação/avaliação/seleção e a limpeza física de registros expirados.
+- **Genética:** rules v9 adiciona locus de simbiose e transmissão Baldwiniana determinística, com viés adaptativo limitado pelo domínio aprendido dos progenitores, mutação limitada e mistura simbiótica somente quando há complementaridade e domínio suficiente. Eventos v1–v8 preservam o algoritmo genético anterior. Testes cobrem determinismo, viés, limites e payload legado.
+- **Espaço:** o solver espacial agora calcula velocidades ORCA recíprocas em passo fixo, limita a 16 vizinhos próximos e mantém o teste de varredura de paredes/correção de sobreposição como barreira final. O teste C++ de aproximação frontal, limite de velocidade, reprodutibilidade e sobreposição foi incluído no script ASan/UBSan.
+- **Áudio binaural:** o Synth aplica espacialização ITD de Woodworth e ILD aos sinais de movimento, com atenuação por distância e filtro de oclusão disponíveis no processador; a trilha Trautonium recebe ducking sidechain dos passos. O teste nativo mede ITD, ILD, distância e atenuação de altas frequências. **Limite atual:** o pipeline do mundo ainda passa distância/oclusão como zero; raycast de paredes e posição 3D real da fonte ainda não alimentam esses parâmetros.
+
+### Evidência de CI e correção
+
+- A execução `44729374401` passou a preparação, compilação Kotlin do módulo core, testes C++ ASan/UBSan, SQLite e checagem das assinaturas JNI, mas falhou ao compilar a integração JNI de produção por inicialização ambígua de `std::vector<orca::Vec2>`. A linha foi corrigida explicitamente para `orca::Vec2{}` no commit `775a186`.
+- A nova execução para o commit `775a186` foi aberta como run `44729997356`; seu estado permanece pendente no último registro. Não declarar a HEAD atual validada nem publicar APK correspondente antes do resultado completo.
+- Os testes instrumentados de ledger/Voyager/AURORA foram adicionados, mas ainda aguardam execução Android no CI. A suíte HRTF também foi adicionada depois da execução que falhou e aguarda validação.
+
+### Lacunas que continuam abertas
+
+- RSI ainda não implementa CognitivePolicyGenome + VPO/GBNF como único espaço de mutação.
+- Memória ainda precisa de A-MEM e de um modelo Sharp-Wave Ripple explícito; replay LTC atual é um mecanismo funcional aproximado e limitado por orçamento.
+- Sociedade continua sendo uma projeção v0.1; instituições Ostrom persistentes, confiança Beta por domínio e dinâmica institucional completa seguem pendentes.
+- Economia ainda carece de COMMUNAL_COMMONS interoperável, campo feromonal com difusão/evaporação O(1), Smart Terrain, ReservationManager com lease TTL e WorkGiver→Job→Toil.
+- MAP-Elites ainda não executa o ciclo autônomo completo de busca evolutiva.
+- Oclusão/atenuação por distância HRTF ainda não consome raycast e posição real do mundo; ducking e cues binaurais estão integrados.
+- GPU compute OpenCL/Vulkan/KleidiAI, pinagem de threads e ADPF continuam sem ativação real. Vulkan no Filament continua dependendo de teste em dispositivo.
+- LoRA real (forward/backward no modelo, LoRA+, AdamW, Fisher/EWC e persistência) continua pendente.
+- Nenhuma medição de 24/7, RAM no Moto G62, thermal throttle, áudio ou renderização física foi feita nesta rodada. Assinatura de distribuição permanente ainda depende de chave protegida.
