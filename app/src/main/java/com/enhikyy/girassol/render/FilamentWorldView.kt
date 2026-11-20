@@ -140,7 +140,7 @@ internal class FilamentWorldView(
         var fallbackReason: String? = null
         val createdEngine = try {
             Engine.create(Engine.Backend.VULKAN)
-        } catch (_: IllegalStateException) {
+        } catch (_: RuntimeException) {
             fallbackReason = "Vulkan indisponível"
             Engine.create(Engine.Backend.OPENGL)
         } catch (_: LinkageError) {
@@ -433,7 +433,7 @@ internal class FilamentWorldView(
         gestures.onTouchEvent(event); return true
     }
     override fun performClick(): Boolean { super.performClick(); return true }
-    private fun fail(message: String) { if(closed) return; close(); main.post { onError(message) } }
+    private fun fail(message: String) { if(closed) return; close(); FilamentBackendStatus.publish("Falha: " + message); main.post { onError(message) } }
     fun close() {
         if(closed) return
         closed=true; FilamentBackendStatus.publish("Renderer encerrado"); unschedule(); lifecycle.removeObserver(this); worker.shutdownNow()
