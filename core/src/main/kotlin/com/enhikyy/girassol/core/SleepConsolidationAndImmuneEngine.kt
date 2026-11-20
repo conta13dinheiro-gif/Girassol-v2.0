@@ -61,6 +61,27 @@ data class SubjectiveOpinion(
             require(norm.isFinite() && norm > 0.0)
             return SubjectiveOpinion(belief / norm, disbelief / norm, uncertainty / norm, baseRate)
         }
+
+        /** Averaging fusion for correlated reports/echoes; repeated transmission is not independent evidence. */
+        internal fun averagingFuseCorrelated(first: SubjectiveOpinion, second: SubjectiveOpinion): SubjectiveOpinion {
+            val kappa = first.uncertainty + second.uncertainty -
+                2.0 * first.uncertainty * second.uncertainty
+            val baseRate = (first.baseRate + second.baseRate) / 2.0
+            if (kappa <= 1e-12) {
+                if (first.uncertainty >= 1.0 - 1e-12 && second.uncertainty >= 1.0 - 1e-12) {
+                    return SubjectiveOpinion(0.0, 0.0, 1.0, baseRate)
+                }
+                val belief = (first.belief + second.belief) / 2.0
+                val disbelief = (first.disbelief + second.disbelief) / 2.0
+                return SubjectiveOpinion(belief, disbelief, (1.0 - belief - disbelief).coerceIn(0.0, 1.0), baseRate)
+            }
+            val belief = (first.belief * second.uncertainty + second.belief * first.uncertainty) / kappa
+            val disbelief = (first.disbelief * second.uncertainty + second.disbelief * first.uncertainty) / kappa
+            val uncertainty = (2.0 * first.uncertainty * second.uncertainty) / kappa
+            val norm = belief + disbelief + uncertainty
+            require(norm.isFinite() && norm > 0.0)
+            return SubjectiveOpinion(belief / norm, disbelief / norm, uncertainty / norm, baseRate)
+        }
     }
 }
 
@@ -113,6 +134,29 @@ object EpistemicImmunityEngine {
             opinion = fused,
             acceptedSourceEventHashes = independent.map { it.sourceEventHash },
             ignoredDuplicateCount = ordered.size - independent.size
+        )
+    }
+
+    /** Fold correlated reports with averaging fusion so social echoes do not inflate certainty. */
+    fun fuseCorrelated(witnesses: List<EpistemicWitness>): EpistemicFusionResult? {
+        if (witnesses.isEmpty()) return null
+        val claimHashes = witnesses.map { it.claimHash }.distinct()
+        require(claimHashes.size == 1) { "A fusion batch must refer to one claim" }
+        val ordered = witnesses.sortedWith(
+            compareBy<EpistemicWitness> { it.sourceEventHash }
+                .thenBy { it.sourceAgentId }
+                .thenBy { it.opinion.projectedProbability() }
+        )
+        val unique = ordered.distinctBy { it.sourceEventHash }
+        var fused = unique.first().opinion
+        unique.drop(1).forEach { witness ->
+            fused = SubjectiveOpinion.averagingFuseCorrelated(fused, witness.opinion)
+        }
+        return EpistemicFusionResult(
+            claimHash = claimHashes.single(),
+            opinion = fused,
+            acceptedSourceEventHashes = unique.map { it.sourceEventHash },
+            ignoredDuplicateCount = ordered.size - unique.size
         )
     }
 }
