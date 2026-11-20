@@ -39,25 +39,34 @@ class GeaMigrationTest {
                     val previous = actor.state
                     val transition = actor.step()
                     store.commit(transition, previous)
-                }
-                val db = store.readableDatabase
-                db.rawQuery(
-                    "SELECT COUNT(*),COALESCE(SUM(amount),0) FROM double_entry_ledger",
-                    null
-                ).use { rows ->
-                    assertTrue(rows.moveToFirst())
-                    assertTrue("Resource movements should be journaled", rows.getLong(0) > 0L)
-                    assertTrue(rows.getLong(1) > 0L)
-                }
-                db.rawQuery(
-                    "SELECT 1 FROM double_entry_ledger WHERE amount<=0 OR debit_account=credit_account LIMIT 1",
-                    null
-                ).use { assertFalse("Every posting must have distinct positive counterparties", it.moveToFirst()) }
-                db.rawQuery(
-                    "SELECT event_id,resource,SUM(amount) FROM double_entry_ledger GROUP BY event_id,resource",
-                    null
-                ).use { rows ->
-                    while (rows.moveToNext()) assertTrue(rows.getLong(2) > 0L)
+
+                    val expected = linkedMapOf<Pair<String, String>, Long>()
+                    val keys = previous.balances.keys + transition.state.balances.keys
+                    keys.forEach { key ->
+                        val separator = key.lastIndexOf('/')
+                        val account = key.substring(0, separator)
+                        val resource = key.substring(separator + 1)
+                        val delta = (transition.state.balances[key] ?: 0).toLong() -
+                            (previous.balances[key] ?: 0).toLong()
+                        if (delta != 0L) expected[account to resource] = delta
+                    }
+                    val actual = linkedMapOf<Pair<String, String>, Long>()
+                    store.readableDatabase.rawQuery(
+                        "SELECT debit_account,credit_account,resource,amount FROM double_entry_ledger WHERE event_id=?",
+                        arrayOf(transition.event.eventId.toString())
+                    ).use { rows ->
+                        while (rows.moveToNext()) {
+                            val debit = rows.getString(0)
+                            val credit = rows.getString(1)
+                            val resource = rows.getString(2)
+                            val amount = rows.getLong(3)
+                            assertTrue(amount > 0L)
+                            assertNotEquals(debit, credit)
+                            actual[debit to resource] = (actual[debit to resource] ?: 0L) - amount
+                            actual[credit to resource] = (actual[credit to resource] ?: 0L) + amount
+                        }
+                    }
+                    assertEquals("Ledger must reproduce exact per-account resource deltas", expected, actual)
                 }
                 assertEquals(80L, store.audit())
             }
