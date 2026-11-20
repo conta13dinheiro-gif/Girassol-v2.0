@@ -27,7 +27,19 @@ android {
             isUniversalApk = false
         }
     }
-    packaging { jniLibs { useLegacyPackaging = false } }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            // Sherpa is an optional voice feature. Keep its Java API at compile
+            // time, but provision the pinned ARM64 native runtime on first use.
+            excludes += setOf(
+                "**/libonnxruntime.so",
+                "**/libsherpa-onnx-c-api.so",
+                "**/libsherpa-onnx-cxx-api.so",
+                "**/libsherpa-onnx-jni.so"
+            )
+        }
+    }
     buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
