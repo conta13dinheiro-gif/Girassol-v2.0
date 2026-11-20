@@ -4,6 +4,23 @@
 #include <cmath>
 
 int main() {
+    using girassol::cognition::SubjectiveOpinion;
+    using girassol::cognition::averageFusion;
+    using girassol::cognition::cumulativeFusion;
+    using girassol::cognition::discountTrust;
+
+    const SubjectiveOpinion trust{0.8f, 0.1f, 0.1f, 0.5f};
+    const SubjectiveOpinion source{0.6f, 0.2f, 0.2f, 0.4f};
+    const auto discounted = discountTrust(trust, source);
+    const auto cumulative = cumulativeFusion(source, discounted);
+    const auto averaged = averageFusion(source, discounted);
+    assert(discounted.valid() && cumulative.valid() && averaged.valid());
+    assert(discounted.belief <= source.belief);
+    assert(cumulative.uncertainty <= source.uncertainty);
+    const SubjectiveOpinion dogmaticA{1.0f, 0.0f, 0.0f, 0.5f};
+    const SubjectiveOpinion dogmaticB{0.0f, 1.0f, 0.0f, 0.5f};
+    assert(cumulativeFusion(dogmaticA, dogmaticB).valid());
+
     girassol::cognition::DeterministicEngineInput input{};
     input.threat = 0.08f;
     input.socialWarmth = 0.82f;
