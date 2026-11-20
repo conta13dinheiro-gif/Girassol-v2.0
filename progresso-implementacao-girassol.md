@@ -74,3 +74,11 @@ O texto acima é o estado inicial fornecido pelo proprietário. A base oficial `
 
 
 <!-- /coderabbit-ai-generated:v1 -->
+
+
+## Incremento adicional — 2026-11-20
+
+- Foi adicionado `AuroraMapElites.kt`: arquivo MAP-Elites 3D determinístico, com uma elite por nicho, métricas de replay validadas, vínculo a evento comprometido, regra estável de desempate, inserção imutável e métricas de cobertura/qualidade.
+- O mesmo módulo inclui um projetor online Oja de três componentes, com média incremental, atualização Oja, ortogonalização Gram-Schmidt e descritores limitados a `[0,1]`.
+- Foi adicionado `AuroraMapElitesTest.kt`, cobrindo substituição por candidato melhor, nichos distintos, idempotência, rejeição de evidência inválida, inicialização determinística, ortogonalidade e serialização.
+- **Limite explícito:** este incremento é o núcleo matemático/arquivo. Ainda não está conectado ao ciclo RSI/geração de genomas, não possui persistência em GEA/SQLite, nem implementa o ciclo completo AURORA de exploração, mutação, seleção e avaliação em ambiente. A frente MAP-Elites/AURORA segue parcialmente pendente até essas integrações e validação.
