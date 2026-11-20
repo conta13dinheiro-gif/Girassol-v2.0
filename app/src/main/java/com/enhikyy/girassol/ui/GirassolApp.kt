@@ -48,6 +48,7 @@ import com.enhikyy.girassol.core.*
 import com.enhikyy.girassol.runtime.BiosphereUi
 import com.enhikyy.girassol.render.NativeProjection
 import com.enhikyy.girassol.render.FilamentWorldView
+import com.enhikyy.girassol.render.FilamentBackendStatus
 import com.enhikyy.girassol.audio.AudioStatus
 import com.enhikyy.girassol.audio.NeuralSpeechEngine
 import com.enhikyy.girassol.cognition.CognitionStatus
@@ -410,6 +411,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
     var hardwareReport by remember { mutableStateOf<com.enhikyy.girassol.hardware.DeviceHardwareReport?>(null) }
+    val filamentBackend by FilamentBackendStatus.state.collectAsStateWithLifecycle()
     LaunchedEffect(context) { hardwareReport = withContext(Dispatchers.IO) { com.enhikyy.girassol.hardware.HardwareAutoTuner.probe(context) } }
     var auditing by remember { mutableStateOf(false) }
     var auditResult by rememberSaveable { mutableStateOf<String?>(null) }
@@ -490,6 +492,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 KeyValue("Arquitetura / ABI", "${report.architecture} · ${report.primaryAbi}")
                 KeyValue("ABIs suportadas", report.supportedAbis.joinToString())
                 KeyValue("GPU / renderer", report.gpuRenderer)
+                KeyValue("Backend Filament ativo", filamentBackend)
                 KeyValue("RAM física / CPUs visíveis", String.format(Locale.ROOT, "%.1f GB · %d", report.totalRamGb, report.logicalCpuCount))
                 KeyValue("Sonda nativa", if(report.nativeProbeAvailable) "Ativa" else "Indisponível · fallback Kotlin")
                 KeyValue("CPU SIMD", listOfNotNull(
