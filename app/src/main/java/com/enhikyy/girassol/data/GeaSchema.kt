@@ -60,6 +60,15 @@ internal object GeaSchema {
                 check(if (revision.sourceTick == 0L) rows.isNull(3) else !rows.isNull(3) && revision.sourceTick == rows.getLong(3))
             }
         }
+        db.rawQuery("SELECT belief,disbelief,uncertainty,base_rate FROM subjective_beliefs", null).use { rows ->
+            while (rows.moveToNext()) {
+                SubjectiveOpinion(rows.getDouble(0), rows.getDouble(1), rows.getDouble(2), rows.getDouble(3))
+            }
+        }
+        db.rawQuery(
+            "SELECT 1 FROM subjective_beliefs b LEFT JOIN staging_knowledge s ON s.id=b.claim_id AND s.acquisition_hash=b.source_id WHERE s.id IS NULL LIMIT 1",
+            null
+        ).use { rows -> check(!rows.moveToFirst()) { "Subjective belief has no staged evidence provenance" } }
         db.rawQuery("SELECT automata,digest FROM tsetlin_automata_blobs", null).use { rows ->
             while (rows.moveToNext()) {
                 val digest = java.security.MessageDigest.getInstance("SHA-256").digest(rows.getBlob(0))
