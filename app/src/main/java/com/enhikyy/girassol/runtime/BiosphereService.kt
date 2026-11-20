@@ -72,6 +72,7 @@ class BiosphereService : Service() {
         wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Girassol:Biosphere")
         getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("biosphere", "Biosfera em execução", NotificationManager.IMPORTANCE_LOW))
         store = WorldStore(this)
+        store.restoreTsetlin()
         research=com.enhikyy.girassol.research.ResearchCoordinator(this,handler) { store }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -174,6 +175,7 @@ class BiosphereService : Service() {
         try {
             val point=checkNotNull(replacement.load())
             replacement.audit()
+            replacement.restoreTsetlin()
             val next=WorldActor(point,WorldActor.CURRENT_RULES_VERSION)
             val actions=replacement.lastActions()
             if(!prefs.edit().putString("world_database",name).commit()) {
