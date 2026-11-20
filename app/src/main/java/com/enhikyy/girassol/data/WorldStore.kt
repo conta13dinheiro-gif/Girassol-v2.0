@@ -143,6 +143,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
         finally { destination.close() }
     }
     fun research() = ResearchTables(writableDatabase)
+    fun restoreTsetlin() = GeaSchema.restoreTsetlin(readableDatabase)
     fun lastActions(): List<ActionRecord> = readableDatabase.rawQuery("SELECT payload FROM events ORDER BY id DESC LIMIT 1",null).use { if(it.moveToFirst()) Canonical.event(it.getString(0)).actions else emptyList() }
     companion object {
         fun activeName(context: Context): String = context.getSharedPreferences("runtime",Context.MODE_PRIVATE).getString("world_database","girassol.db") ?: "girassol.db"
