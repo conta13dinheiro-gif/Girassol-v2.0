@@ -85,6 +85,9 @@ jobs:
         continue-on-error: true
         run: ./gradlew test testDebugUnitTest lintDebug --no-daemon
 
+      - name: Compile Android instrumentation tests
+        run: ./gradlew :app:compileDebugAndroidTestKotlin --no-daemon
+
       - name: Build ARM64 debug and release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
 
