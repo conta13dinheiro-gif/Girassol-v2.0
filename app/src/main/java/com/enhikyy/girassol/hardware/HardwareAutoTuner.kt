@@ -21,11 +21,28 @@ data class DeviceHardwareReport(
     val totalRamGb: Float,
     val logicalCpuCount: Int,
     val openClLibraryFileFound: Boolean,
-    val vulkanLibraryFileFound: Boolean
+    val vulkanLibraryFileFound: Boolean,
+    val nativeCpuFeatures: List<String> = emptyList(),
+    val openClLoaderAvailable: Boolean = false,
+    val vulkanLoaderAvailable: Boolean = false
 )
 
 object HardwareAutoTuner {
+    private external fun nativeProbe(): LongArray
+
     fun probe(context: Context): DeviceHardwareReport {
+        // A missing native entry point must not prevent the read-only Kotlin inventory.
+        val native = runCatching {
+            System.loadLibrary("girassol_projection")
+            nativeProbe()
+        }.getOrNull()
+        val featureBits = native?.getOrNull(2) ?: 0L
+        val nativeFeatures = buildList {
+            if ((featureBits and (1L shl 0)) != 0L) add("NEON")
+            if ((featureBits and (1L shl 1)) != 0L) add("DOTPROD")
+            if ((featureBits and (1L shl 2)) != 0L) add("I8MM")
+            if ((featureBits and (1L shl 3)) != 0L) add("SVE2")
+        }
         val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val memory = ActivityManager.MemoryInfo().also(manager::getMemoryInfo)
         val abis = Build.SUPPORTED_ABIS.toList()
@@ -56,7 +73,7 @@ object HardwareAutoTuner {
             supportedAbis = abis,
             gpuRenderer = renderer,
             totalRamGb = memory.totalMem / (1024f * 1024f * 1024f),
-            logicalCpuCount = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+            logicalCpuCount = (native?.getOrNull(3)?.toInt() ?: Runtime.getRuntime().availableProcessors()).coerceAtLeast(1),
             openClLibraryFileFound = anyFile(
                 "/vendor/lib64/libOpenCL.so",
                 "/system/vendor/lib64/libOpenCL.so",
@@ -69,7 +86,10 @@ object HardwareAutoTuner {
                 "/vendor/lib64/libvulkan.so",
                 "/system/lib/libvulkan.so",
                 "/vendor/lib/libvulkan.so"
-            )
+            ),
+            nativeCpuFeatures = nativeFeatures,
+            openClLoaderAvailable = (featureBits and (1L shl 4)) != 0L,
+            vulkanLoaderAvailable = (featureBits and (1L shl 5)) != 0L
         )
     }
 
