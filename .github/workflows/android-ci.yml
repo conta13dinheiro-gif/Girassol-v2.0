@@ -103,7 +103,7 @@ jobs:
           fi
 
       - name: Build ARM64 Debug and Release APKs
-        run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
+        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:bundleRelease --no-daemon
 
       - name: Stage named APK artifacts
         shell: bash
@@ -121,7 +121,16 @@ jobs:
           echo "APK_DEBUG_BYTES=$(stat -c '%s' dist/Girassol-debug.apk)" >> "$GITHUB_ENV"
           echo "APK_RELEASE_BYTES=$(stat -c '%s' dist/Girassol-release.apk)" >> "$GITHUB_ENV"
           stat -c '%n %s bytes' dist/Girassol-debug.apk dist/Girassol-release.apk
-          sha256sum dist/Girassol-debug.apk dist/Girassol-release.apk
+          DEBUG_BYTES="$(stat -c '%s' dist/Girassol-debug.apk)"
+          RELEASE_BYTES="$(stat -c '%s' dist/Girassol-release.apk)"
+          (( DEBUG_BYTES <= 1900000000 && RELEASE_BYTES <= 1900000000 )) || { echo "APK exceeds 1.90 GB delivery limit" >&2; exit 1; }
+          BUNDLE_AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' -print -quit)"
+          [[ -n "$BUNDLE_AAB" ]] || { echo "Release AAB not found" >&2; exit 1; }
+          cp "$BUNDLE_AAB" dist/Girassol-release.aab
+          AAB_BYTES="$(stat -c '%s' dist/Girassol-release.aab)"
+          (( AAB_BYTES <= 5368709120 )) || { echo "AAB exceeds 5 GB delivery limit" >&2; exit 1; }
+          echo "AAB_BYTES=$AAB_BYTES" >> "$GITHUB_ENV"
+          sha256sum dist/Girassol-debug.apk dist/Girassol-release.apk dist/Girassol-release.aab
 
       - name: Verify Sherpa-ONNX native libraries are embedded in both APKs
         shell: bash
@@ -157,6 +166,14 @@ jobs:
         with:
           name: Girassol-release.apk
           path: dist/Girassol-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Girassol-release.aab
+        uses: actions/upload-artifact@v4
+        with:
+          name: Girassol-release.aab
+          path: dist/Girassol-release.aab
           if-no-files-found: error
           retention-days: 30
 

@@ -67,7 +67,7 @@ object CivicEvolutionEngine {
         val rings=buildMap {
             ids.forEach { id ->
                 val peers=after.ties.filter { it.from==id }.sortedWith(compareByDescending<SocialTie>{it.affinity}.thenBy{it.to})
-                peers.forEachIndexed { index,tie -> put("$id/\u0024{tie.to}",when(index) { in 0..4->"CLOSE_5"; in 5..19->"SYMPATHY_15"; in 20..69->"AFFINITY_50"; else->"NETWORK_150" }) }
+                peers.forEachIndexed { index,tie -> put("$id/${tie.to}",when(index) { in 0..4->"CLOSE_5"; in 5..19->"SYMPATHY_15"; in 20..69->"AFFINITY_50"; else->"NETWORK_150" }) }
             }
         }
         // Heider triad balance: sign product for every available undirected triad.

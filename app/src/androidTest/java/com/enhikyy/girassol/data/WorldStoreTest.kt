@@ -27,6 +27,28 @@ class WorldStoreTest {
         } finally { context.deleteDatabase("girassol.db") }
     }
 
+    @Test fun civicEvolutionPersistsInWalAndGrsSidecar() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.deleteDatabase("girassol.db")
+        try {
+            val actor = WorldActor()
+            val transition = actor.step()
+            WorldStore(context).use { store ->
+                store.commit(transition)
+                assertEquals(transition.state, store.load()!!.state)
+                val payload = store.readableDatabase.rawQuery("SELECT payload FROM cognitive_grs WHERE id=1", null).use {
+                    assertTrue(it.moveToFirst()); it.getBlob(0)
+                }
+                val matrix = GirassolRecordCodec.decode(payload)
+                assertEquals(transition.state.agents.size, matrix.rows)
+                assertEquals(68, matrix.columns)
+                assertEquals(transition.state.civic.triadBalance.toFloat(), matrix[0, 62], 1e-5f)
+                assertEquals(transition.state.civic.psi.toFloat(), matrix[0, 63], 1e-5f)
+                assertTrue(store.audit() >= 1L)
+            }
+        } finally { context.deleteDatabase("girassol.db") }
+    }
+
     @Test fun neuralEnvelopePersistsAndReopensWithoutModel() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         context.deleteDatabase("girassol.db")

@@ -171,13 +171,27 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
             val trace = mind?.nativeEngineTrace ?: List(8) { 0.0 }
             val extended = mind?.nativeExtendedState ?: List(52) { 0.0 }
             require(trace.size == 8 && extended.size == 52)
-            trace + extended
+            val cell = citizen.x.toInt().coerceIn(0,11) + 12 * citizen.z.toInt().coerceIn(0,11)
+            val strongest = state.ties.asSequence().filter { it.from == citizen.id }.maxByOrNull { it.affinity }
+            val ring = strongest?.let { state.civic.rings["${citizen.id}/${it.to}"] }
+            val ringCode = when (ring) { "CLOSE_5" -> 1.0; "SYMPATHY_15" -> 2.0; "AFFINITY_50" -> 3.0; "NETWORK_150" -> 4.0; else -> 0.0 }
+            val civicValues = listOf(
+                state.civic.opinions[citizen.id] ?: 0.0,
+                ringCode,
+                state.civic.triadBalance,
+                state.civic.psi,
+                state.civic.pheromones[cell],
+                state.civic.learning[citizen.id]?.knowledgeProbability ?: 0.0,
+                state.civic.learningTheta2pl[citizen.id] ?: 0.0,
+                state.civic.auroraAxisX
+            )
+            trace + extended + civicValues
         }.map { value ->
             require(value.isFinite())
             value.toFloat()
         }
         val encoded = GirassolRecordCodec.encode(
-            GrsMatrix(state.agents.size, 60, values),
+            GrsMatrix(state.agents.size, 68, values),
             GrsEncoding.FLOAT32
         )
         val idsHash = Canonical.hash(state.agents.joinToString("\u0000") { it.id })
@@ -201,7 +215,7 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                 "Ordem de cidadãos do sidecar GRS divergente"
             }
             val matrix = GirassolRecordCodec.decode(bytes)
-            check(matrix.rows == state.agents.size && matrix.columns in setOf(8, 60)) { "Dimensões do sidecar GRS inválidas" }
+            check(matrix.rows == state.agents.size && matrix.columns in setOf(8, 60, 68)) { "Dimensões do sidecar GRS inválidas" }
             state.agents.forEachIndexed { row, citizen ->
                 val mind = state.minds[citizen.id]
                 val trace = mind?.nativeEngineTrace ?: List(8) { 0.0 }
@@ -211,9 +225,26 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
                         "Trace cognitivo GRS diverge do checkpoint para ${citizen.id}"
                     }
                 }
-                if (matrix.columns == 60) repeat(52) { column ->
+                if (matrix.columns >= 60) repeat(52) { column ->
                     check(abs(matrix[row, column + 8].toDouble() - extended[column].toFloat().toDouble()) <= 1e-5) {
                         "Estado estendido GRS diverge do checkpoint para ${citizen.id}"
+                    }
+                }
+                if (matrix.columns == 68) {
+                    val cell = citizen.x.toInt().coerceIn(0,11) + 12 * citizen.z.toInt().coerceIn(0,11)
+                    val strongest = state.ties.asSequence().filter { it.from == citizen.id }.maxByOrNull { it.affinity }
+                    val ring = strongest?.let { state.civic.rings["${citizen.id}/${it.to}"] }
+                    val ringCode = when (ring) { "CLOSE_5" -> 1.0; "SYMPATHY_15" -> 2.0; "AFFINITY_50" -> 3.0; "NETWORK_150" -> 4.0; else -> 0.0 }
+                    val civicValues = listOf(
+                        state.civic.opinions[citizen.id] ?: 0.0, ringCode, state.civic.triadBalance,
+                        state.civic.psi, state.civic.pheromones[cell],
+                        state.civic.learning[citizen.id]?.knowledgeProbability ?: 0.0,
+                        state.civic.learningTheta2pl[citizen.id] ?: 0.0, state.civic.auroraAxisX
+                    )
+                    civicValues.forEachIndexed { column, value ->
+                        check(abs(matrix[row, column + 60].toDouble() - value.toFloat().toDouble()) <= 1e-5) {
+                            "Estado cívico GRS diverge do checkpoint para ${citizen.id}"
+                        }
                     }
                 }
             }
