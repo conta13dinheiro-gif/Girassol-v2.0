@@ -12,6 +12,10 @@
 -keepclasseswithmembernames class com.enhikyy.girassol.cognition.NativeCognition {
     native <methods>;
 }
+
+-keepclasseswithmembernames class com.enhikyy.girassol.cognition.NativeAutonomy {
+    native <methods>;
+}
 -keep class com.enhikyy.girassol.cognition.NativeMind { *; }
 
 -keep class com.enhikyy.girassol.cognition.NativeMemory { *; }
