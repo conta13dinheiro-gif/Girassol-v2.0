@@ -1,4 +1,5 @@
 #include "spatial.hpp"
+#include "orca.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -187,27 +188,77 @@ std::vector<Motion> Scene::step(const std::vector<Body>& bodies,std::uint64_t se
         paths.push_back(d.path(m.body.p,goal,mix(seed^mix(tick/120)^mix(i))));out.push_back(std::move(m));
     }
     std::vector<std::size_t> cursor(bodies.size(),0);
+    std::vector<orca::Vec2> velocities(out.size(),{});
+    constexpr std::size_t maxOrcaNeighbors=16;
+    constexpr double orcaNeighborRange=speed*2.0+radius*4.0;
     for(int frame=0;frame<substeps;++frame) {
-        for(std::size_t offset=0;offset<out.size();++offset) {
-            const std::size_t i=(offset+static_cast<std::size_t>(tick%out.size()))%out.size();auto& m=out[i];auto& p=m.body.p;
-            while(cursor[i]<paths[i].size() && std::hypot(paths[i][cursor[i]].x-p.x,paths[i][cursor[i]].z-p.z)<.025) ++cursor[i];
-            const auto before=p;auto next=p;
-            if(cursor[i]<paths[i].size()) {
-                const auto goal=paths[i][cursor[i]];double dx=goal.x-p.x,dz=goal.z-p.z;
-                const double distance=std::hypot(dx,dz);if(distance>eps) { const double step=std::min(speed*fixed_dt,distance);next.x+=dx/distance*step;next.z+=dz/distance*step; }
-                // Deterministic reciprocal separation steering. Every candidate is swept against solids below.
-                for(std::size_t j=0;j<out.size();++j) if(j!=i) {
-                    dx=p.x-out[j].body.p.x;dz=p.z-out[j].body.p.z;const double dist=std::hypot(dx,dz);
-                    if(dist>eps && dist<radius*2.5) { const double strength=(radius*2.5-dist)*.08;next.x+=dx/dist*strength;next.z+=dz/dist*strength; }
-                }
-                const double delta=std::hypot(next.x-p.x,next.z-p.z);
-                if(delta>speed*fixed_dt) { next.x=p.x+(next.x-p.x)*speed*fixed_dt/delta;next.z=p.z+(next.z-p.z)*speed*fixed_dt/delta; }
-                if(!d.segment(p,next)) { next=p; } // Never tunnel through a thin wall.
-                next=d.push(next);
-                bool occupied=false;
-                for(std::size_t j=0;j<out.size();++j) if(j!=i && std::hypot(next.x-out[j].body.p.x,next.z-out[j].body.p.z)<radius*2-eps) { occupied=true;break; }
-                if(!occupied) { p.x=next.x;p.z=next.z; }
+        // Snapshot the crowd before planning any agent for this fixed substep.
+        std::vector<orca::Vec2> positions(out.size());
+        std::vector<orca::Vec2> preferred(out.size());
+        std::vector<orca::Vec2> nextVelocities(out.size());
+        for(std::size_t i=0;i<out.size();++i) {
+            const auto& p=out[i].body.p;
+            positions[i]={p.x,p.z};
+            while(cursor[i]<paths[i].size() &&
+                std::hypot(paths[i][cursor[i]].x-p.x,paths[i][cursor[i]].z-p.z)<.025) {
+                ++cursor[i];
             }
+            if(cursor[i]<paths[i].size()) {
+                const auto& goal=paths[i][cursor[i]];
+                const double dx=goal.x-p.x,dz=goal.z-p.z;
+                const double distance=std::hypot(dx,dz);
+                if(distance>eps) preferred[i]={dx/distance*speed,dz/distance*speed};
+            }
+        }
+
+        // Bound pairwise work to nearby agents; nearest-neighbor ordering is stable.
+        for(std::size_t i=0;i<out.size();++i) {
+            std::vector<std::pair<double,std::size_t>> nearest;
+            nearest.reserve(std::min(out.size(),maxOrcaNeighbors+1));
+            for(std::size_t j=0;j<out.size();++j) {
+                if(i==j) continue;
+                const double dx=positions[j].x-positions[i].x;
+                const double dz=positions[j].y-positions[i].y;
+                const double distanceSquared=dx*dx+dz*dz;
+                if(distanceSquared<=orcaNeighborRange*orcaNeighborRange) nearest.emplace_back(distanceSquared,j);
+            }
+            std::sort(nearest.begin(),nearest.end(),[](const auto& a,const auto& b) {
+                return a.first==b.first ? a.second<b.second : a.first<b.first;
+            });
+            if(nearest.size()>maxOrcaNeighbors) nearest.resize(maxOrcaNeighbors);
+            std::vector<orca::Neighbor> neighbors;
+            neighbors.reserve(nearest.size());
+            for(const auto& item:nearest) {
+                const auto j=item.second;
+                neighbors.push_back({positions[j],velocities[j]});
+            }
+            nextVelocities[i]=orca::computeVelocity(
+                positions[i],velocities[i],preferred[i],neighbors,radius,speed,2.0,fixed_dt
+            );
+        }
+
+        for(std::size_t offset=0;offset<out.size();++offset) {
+            const std::size_t i=(offset+static_cast<std::size_t>(tick%out.size()))%out.size();
+            auto& m=out[i];auto& p=m.body.p;
+            const auto before=p;
+            auto next=p;
+            next.x+=nextVelocities[i].x*fixed_dt;
+            next.z+=nextVelocities[i].y*fixed_dt;
+
+            // ORCA handles reciprocal agent constraints; the scene sweep remains authoritative for walls.
+            if(!d.segment(p,next)) next=p;
+            next=d.push(next);
+            bool occupied=false;
+            for(std::size_t j=0;j<out.size();++j) if(j!=i &&
+                std::hypot(next.x-out[j].body.p.x,next.z-out[j].body.p.z)<radius*2-eps) {
+                occupied=true;break;
+            }
+            if(!occupied) { p.x=next.x;p.z=next.z; }
+            const double actualX=(p.x-before.x)/fixed_dt;
+            const double actualZ=(p.z-before.z)/fixed_dt;
+            velocities[i]=(std::hypot(p.x-before.x,p.z-before.z)>eps)
+                ? orca::Vec2{actualX,actualZ} : orca::Vec2{};
+
             m.ground=surface(p.x,p.z);m.body.vy-=9.81*fixed_dt;p.y+=m.body.vy*fixed_dt;
             if(p.y<=m.ground) { p.y=m.ground;m.body.vy=0; }
             const double traveled=std::hypot(p.x-before.x,p.z-before.z);m.distance+=traveled;
