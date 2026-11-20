@@ -57,6 +57,40 @@ class GirassolRecordCodecTest {
         }
     }
 
+    @Test fun decoderRejectsOversizedMatricesBeforeAllocatingValues() {
+        val bytes = craftedGrs(GrsEncoding.TERNARY_2BIT, 1_048_577, 1, 1f, byteArrayOf())
+        try {
+            GirassolRecordCodec.decode(bytes)
+            fail("Dimensões acima do limite não podem alocar uma matriz")
+        } catch (_: IllegalArgumentException) {
+            // Expected.
+        }
+    }
+
+    @Test fun decoderRejectsNonCanonicalDeltaVarints() {
+        val bytes = craftedGrs(GrsEncoding.INT8_DELTA_VARINT, 1, 1, 1f, byteArrayOf(0x80.toByte(), 0x00))
+        try {
+            GirassolRecordCodec.decode(bytes)
+            fail("Varint redundante não deve ser aceito")
+        } catch (_: IllegalArgumentException) {
+            // Expected.
+        }
+    }
+
+    private fun craftedGrs(encoding: GrsEncoding, rows: Int, columns: Int, scale: Float, payload: ByteArray): ByteArray {
+        val prefix = java.nio.ByteBuffer.allocate(22).order(java.nio.ByteOrder.LITTLE_ENDIAN).apply {
+            put(byteArrayOf(71, 82, 83, 49))
+            put(1)
+            put(encoding.ordinal.toByte())
+            putInt(rows)
+            putInt(columns)
+            putFloat(scale)
+            putInt(payload.size)
+        }.array()
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(prefix + payload)
+        return prefix + digest + payload
+    }
+
     @Test fun emptyAndNonFinitePayloadsAreRejected() {
         try {
             GrsMatrix(0, 1, emptyList())
