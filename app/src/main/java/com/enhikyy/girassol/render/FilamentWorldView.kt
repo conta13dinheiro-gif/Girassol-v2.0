@@ -300,8 +300,8 @@ internal class FilamentWorldView(
                 bubble.visibility = GONE
             } else {
                 bubble.measure(
-                    MeasureSpec.makeMeasureSpec(dp(192), MeasureSpec.AT_MOST),
-                    MeasureSpec.makeMeasureSpec(dp(74), MeasureSpec.AT_MOST)
+                    View.MeasureSpec.makeMeasureSpec(dp(192), MeasureSpec.AT_MOST),
+                    View.MeasureSpec.makeMeasureSpec(dp(74), MeasureSpec.AT_MOST)
                 )
                 val bubbleWidth = bubble.measuredWidth.coerceAtLeast(dp(36))
                 val bubbleHeight = bubble.measuredHeight.coerceAtLeast(dp(24))
