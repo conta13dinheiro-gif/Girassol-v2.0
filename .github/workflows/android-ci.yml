@@ -81,6 +81,19 @@ jobs:
       - name: Build ARM64 debug and release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
 
+      - name: Run Android instrumentation tests on a 4 GiB emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 4096M
+          heap-size: 512M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
+
       - name: Stage distributable APKs
         if: always()
         shell: bash
