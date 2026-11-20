@@ -77,10 +77,6 @@ internal object NativeMind {
             }
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
             bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
-            // Slow-wave replay is triggered only by a committed sleep outcome; it is deterministic and bounded.
-            if (learn && citizen.activity==Activity.SLEEP && outcome=="OK") {
-                bank=HippocampalSleepConsolidator.consolidate(bank,world.tick).bank
-            }
             val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
             check(next.valid(world.tick))
             minds[citizen.id]=next
