@@ -10,7 +10,15 @@ import com.enhikyy.girassol.core.*
 class WorldStore(context: Context, name: String = activeName(context)) : SQLiteOpenHelper(context, name, null, 4) {
     private val app=context.applicationContext
     init { require(name.matches(Regex("girassol(?:-branch-[a-f0-9-]{36})?\\.db"))); setWriteAheadLoggingEnabled(true) }
-    override fun onConfigure(db: SQLiteDatabase) { super.onConfigure(db); db.execSQL("PRAGMA synchronous=FULL") }
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.execSQL("PRAGMA synchronous=FULL")
+        // Keep the per-connection page cache small and checkpoint WAL frequently.
+        // WAL files are still durable; these are bounds, not data-retention policies.
+        db.execSQL("PRAGMA cache_size=-2048")
+        db.execSQL("PRAGMA wal_autocheckpoint=256")
+        db.execSQL("PRAGMA journal_size_limit=4194304")
+    }
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE checkpoint (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, digest TEXT NOT NULL, event_id INTEGER NOT NULL, event_hash TEXT NOT NULL)")
         db.execSQL("CREATE TABLE events (id INTEGER PRIMARY KEY, tick INTEGER NOT NULL UNIQUE, payload TEXT NOT NULL)")
