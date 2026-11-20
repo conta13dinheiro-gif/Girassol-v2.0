@@ -55,6 +55,11 @@ internal object NativeMind {
             val novelty=if(distances.isEmpty()) 1.0 else (distances.take(5).average()*3).coerceIn(0.0,1.0)
             val n=citizen.needs
             val features=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.social,1-n.curiosity)+old.personality+listOf(citizen.skill.mastery,novelty)
+            val reflexFeatures=ByteArray(16)
+            for(index in 0 until 5) reflexFeatures[index]=if(features[index]>=.5) 1 else 0
+            for(index in 0 until 3) reflexFeatures[5+index]=if(old.personality[index]>=.5) 1 else 0
+            reflexFeatures[8+citizen.activity.ordinal]=1
+            val reflexVote=TsetlinReflexEngine.evaluate(citizen.id,reflexFeatures,outcome)
             val data=checkNotNull(networkBuffer.get()).apply { clear() }
             old.parameters.forEach(data::putDouble); old.hidden.forEach(data::putDouble); features.forEach(data::putDouble)
             data.putDouble(if(learn) reward else 0.0).putDouble(novelty).putDouble(citizen.activity.ordinal.toDouble()).putDouble(if(learn) 1.0 else 0.0)
@@ -75,6 +80,7 @@ internal object NativeMind {
             check(next.valid(world.tick))
             minds[citizen.id]=next
             val scores=values(272,8).toMutableList()
+            scores[citizen.activity.ordinal]+=reflexVote*0.015
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
             val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
             Activity.entries.forEachIndexed { i,activity->
