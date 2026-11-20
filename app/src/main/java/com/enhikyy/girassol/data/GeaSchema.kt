@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.enhikyy.girassol.core.*
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -32,7 +33,8 @@ internal object GeaSchema {
             })
         }
         for ((agent, mind) in transition.state.minds) {
-            val old = previous?.minds?.get(agent)?.memory?.learning.orEmpty().associateBy { it.action }
+            val oldMemory = previous?.minds?.get(agent)?.memory
+            val old = oldMemory?.learning.orEmpty().associateBy { it.action }
             for (trace in mind.memory.learning) {
                 if (old[trace.action] == trace) continue
                 check(trace.valid(event.tick))
@@ -41,6 +43,36 @@ internal object GeaSchema {
                     put("knowledge", trace.knowledgeProbability); put("difficulty", trace.difficulty)
                     put("stability", trace.stabilityTicks); put("theta", trace.theta)
                     put("reviews", trace.reviews); put("last_review_tick", trace.lastReviewTick)
+                })
+            }
+
+            val oldProcedures = oldMemory?.procedures.orEmpty().associateBy { it.action }
+            for (procedure in mind.memory.procedures) {
+                if (oldProcedures[procedure.action] == procedure) continue
+                val trace = mind.memory.learning.firstOrNull { it.action == procedure.action } ?: continue
+                if (procedure.successes < 3 || trace.knowledgeProbability < 0.75) continue
+                val preconditions = when (procedure.action) {
+                    Activity.WATER -> listOf("hydration<0.42", "market/water>=1")
+                    Activity.COFFEE -> listOf("market/coffee>=1")
+                    Activity.EAT -> listOf("personal_coins>=1", "market/food>=1")
+                    Activity.SLEEP -> listOf("energy<0.38")
+                    Activity.TALK -> listOf("peer_distance<=2.5")
+                    Activity.WRITE -> listOf("market/paper>=1")
+                    Activity.STUDY -> listOf("library_access=true")
+                    Activity.BUILD -> listOf("market/timber>=4", "build_capacity_available=true")
+                }
+                val program = Json.encodeToString(mapOf(
+                    "version" to "1",
+                    "operation" to "perform_activity",
+                    "activity" to procedure.action.name,
+                    "room" to procedure.action.room
+                ))
+                db.insertOrThrow("voyager_skill_library", null, ContentValues().apply {
+                    put("event_id", event.eventId); put("agent_id", agent)
+                    put("skill_id", procedure.action.name); put("executions", procedure.successes)
+                    put("knowledge", trace.knowledgeProbability)
+                    put("preconditions", Json.encodeToString(preconditions))
+                    put("program", program)
                 })
             }
         }
@@ -178,6 +210,30 @@ internal object GeaSchema {
             "SELECT 1 FROM subjective_beliefs b LEFT JOIN staging_knowledge s ON s.id=b.claim_id AND s.acquisition_hash=b.source_id WHERE s.id IS NULL LIMIT 1",
             null
         ).use { rows -> check(!rows.moveToFirst()) { "Subjective belief has no staged evidence provenance" } }
+        db.rawQuery(
+            "SELECT v.agent_id,v.skill_id,v.executions,v.knowledge,v.preconditions,v.program,e.payload " +
+                "FROM voyager_skill_library v JOIN events e ON e.id=v.event_id",
+            null
+        ).use { rows ->
+            while (rows.moveToNext()) {
+                val action = Activity.valueOf(rows.getString(1))
+                val conditions = Json.decodeFromString<List<String>>(rows.getString(4))
+                val program = Json.decodeFromString<Map<String, String>>(rows.getString(5))
+                check(rows.getInt(2) >= 3 && rows.getDouble(3) in 0.75..1.0)
+                check(conditions.isNotEmpty() && conditions.all { it.isNotBlank() })
+                check(program["version"] == "1" && program["operation"] == "perform_activity")
+                check(program["activity"] == action.name && program["room"] == action.room)
+                val event = Canonical.event(rows.getString(6))
+                val mind = event.cognition?.minds?.get(rows.getString(0))
+                    ?: error("Voyager skill has no canonical cognitive evidence")
+                val procedure = mind.memory.procedures.firstOrNull { it.action == action }
+                    ?: error("Voyager skill is absent from canonical memory")
+                val trace = mind.memory.learning.firstOrNull { it.action == action }
+                    ?: error("Voyager skill has no BKT evidence")
+                check(procedure.successes == rows.getInt(2))
+                check(trace.knowledgeProbability == rows.getDouble(3) && trace.knowledgeProbability >= 0.75)
+            }
+        }
         db.rawQuery("SELECT format_version,automata,digest FROM tsetlin_automata_blobs", null).use { rows ->
             while (rows.moveToNext()) {
                 val blob = rows.getBlob(1)
