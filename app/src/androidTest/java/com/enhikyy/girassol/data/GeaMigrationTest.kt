@@ -127,6 +127,20 @@ class GeaMigrationTest {
                     assertEquals(0.80, rows.getDouble(3), 1e-9)
                     assertFalse(rows.moveToNext())
                 }
+                store.readableDatabase.rawQuery(
+                    "SELECT COUNT(*) FROM ecological_niche_structures WHERE event_id=? AND structure_id LIKE 'aurora-cell-%'",
+                    arrayOf(transition.event.eventId.toString())
+                ).use { rows ->
+                    assertTrue(rows.moveToFirst())
+                    assertTrue("At least one behavioral niche should be archived", rows.getLong(0) > 0L)
+                }
+                store.readableDatabase.rawQuery(
+                    "SELECT COUNT(*) FROM ecological_niche_structures WHERE event_id=? AND structure_id='aurora-projector'",
+                    arrayOf(transition.event.eventId.toString())
+                ).use { rows ->
+                    assertTrue(rows.moveToFirst())
+                    assertEquals(1L, rows.getLong(0))
+                }
                 assertEquals(4L, store.audit())
             }
         } finally {
