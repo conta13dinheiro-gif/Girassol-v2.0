@@ -1,4 +1,4 @@
-name: Girassol — compilação manual Android 13+
+name: Girassol — compilação manual Android 13+ (APK ARM64 verificado)
 on:
   workflow_dispatch:
 permissions:
@@ -40,11 +40,11 @@ jobs:
           name: girassol-arm64-debug
           path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
           if-no-files-found: error
-      - name: APK Release ARM64 sem assinatura
+      - name: APK Release ARM64 assinado para desenvolvimento
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: girassol-arm64-release-unsigned
-          path: app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
+          path: app/build/outputs/apk/release/app-arm64-v8a-release.apk
           if-no-files-found: error
       - name: Materiais compilados
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
