@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
@@ -123,7 +124,7 @@ fun GirassolTheme(
             outline = palette.border
         ),
         typography = typography,
-        content = content
+        content = { CompositionLocalProvider(LocalTextStyle provides typography.bodyMedium, content = content) }
     )
     }
 }
