@@ -6,6 +6,12 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.enhikyy.girassol.core.*
 import java.security.MessageDigest
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.UUID
 import kotlin.math.abs
 
 /** Checkpoint + event are one transaction. An invalid save is never silently replaced. */
@@ -293,10 +299,74 @@ class WorldStore(context: Context, name: String = activeName(context)) : SQLiteO
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
+    /** Stable SQLite checkpoint exported as a versioned, checksummed .grs migration file. */
+    fun exportGrs(destination: File) {
+        val db = writableDatabase
+        db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { cursor ->
+            check(cursor.moveToFirst() && cursor.getInt(0) == 0) { "SQLite WAL ainda está ocupado; tente novamente" }
+        }
+        val source = app.getDatabasePath(checkNotNull(databaseName))
+        check(source.isFile && source.length() in 1L..MAX_GRS_BYTES) { "Snapshot SQLite ausente ou acima de 256 MiB" }
+        val payload = source.readBytes()
+        DataOutputStream(FileOutputStream(destination)).use { out ->
+            out.writeUTF(GRS_MAGIC); out.writeInt(GRS_VERSION); out.writeInt(payload.size)
+            out.writeUTF(sha256(payload)); out.write(payload); out.flush()
+        }
+    }
+
     fun research() = ResearchTables(writableDatabase)
     fun lastActions(): List<ActionRecord> = readableDatabase.rawQuery("SELECT payload FROM events ORDER BY id DESC LIMIT 1",null).use { if(it.moveToFirst()) Canonical.event(it.getString(0)).actions else emptyList() }
     companion object {
+        private const val GRS_MAGIC = "GIRASSOL-GRS"
+        private const val GRS_VERSION = 1
+        private const val MAX_GRS_BYTES = 256L * 1024L * 1024L
+        private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+            .digest(bytes).joinToString("") { "%02x".format(it) }
+
         fun activeName(context: Context): String = context.getSharedPreferences("runtime",Context.MODE_PRIVATE).getString("world_database","girassol.db") ?: "girassol.db"
+
+        /** Validates the envelope, SQLite integrity and event journal before activating a new citizen timeline. */
+        fun importGrs(context: Context, source: File): String {
+            val payload = DataInputStream(FileInputStream(source)).use { input ->
+                require(input.readUTF() == GRS_MAGIC) { "Arquivo .grs inválido" }
+                require(input.readInt() == GRS_VERSION) { "Versão .grs incompatível" }
+                val size = input.readInt()
+                require(size in 1..MAX_GRS_BYTES.toInt()) { "Snapshot acima do limite permitido" }
+                val expected = input.readUTF()
+                val bytes = ByteArray(size)
+                input.readFully(bytes)
+                require(input.read() == -1) { "Dados excedentes no arquivo .grs" }
+                require(sha256(bytes) == expected) { "Hash SHA-256 do snapshot não confere" }
+                bytes
+            }
+            val name = "girassol-branch-" + UUID.randomUUID().toString() + ".db"
+            val target = context.getDatabasePath(name)
+            val staging = File(target.parentFile, name + ".incoming")
+            try {
+                FileOutputStream(staging).use { it.write(payload); it.fd.sync() }
+                val raw = SQLiteDatabase.openDatabase(staging.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+                try {
+                    raw.rawQuery("PRAGMA integrity_check", null).use { c ->
+                        require(c.moveToFirst() && c.getString(0) == "ok") { "Banco recebido falhou no integrity_check" }
+                    }
+                    raw.rawQuery("PRAGMA user_version", null).use { c ->
+                        require(c.moveToFirst() && c.getInt(0) == 6) { "Versão de banco incompatível" }
+                    }
+                } finally { raw.close() }
+                check(staging.renameTo(target)) { "Não foi possível instalar o snapshot" }
+                WorldStore(context, name).use { imported ->
+                    require(imported.load() != null) { "Snapshot sem checkpoint" }
+                    imported.audit()
+                }
+                context.getSharedPreferences("runtime", Context.MODE_PRIVATE).edit().putString("world_database", name).commit()
+                com.enhikyy.girassol.runtime.BiosphereService.switchWorld(context, name)
+                name
+            } catch (error: Throwable) {
+                staging.delete(); target.delete()
+                File(target.path + "-wal").delete(); File(target.path + "-shm").delete()
+                throw error
+            }
+        }
     }
 
     /** One stable SQLite transaction; no rows are removed or rewritten. Call off the UI thread. */

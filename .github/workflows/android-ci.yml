@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: girassol-android-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-publish:
@@ -227,9 +227,13 @@ jobs:
       - name: Grant Gradle permission
         run: chmod +x gradlew
 
-      - name: Run Android instrumentation tests on a 4 GiB emulator
+      - name: Stop Gradle daemons before emulator allocation
+        run: ./gradlew --stop
+
+      - name: Run Android instrumentation tests on API 35 (4 GiB logical profile)
         env:
           ANDROID_I_WANT_MY_TCG: "yes"
+          GIRASSOL_LOGICAL_RAM_PROFILE_MB: "4096"
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -241,7 +245,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-linux-hw-accel: true
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -no-metrics -no-snapshot -wipe-data -gpu swiftshader_indirect
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio -memory 2048 -no-boot-anim -no-metrics -wipe-data
           script: |
             set -Eeuo pipefail
             dump_emulator_crash_logcat() {
@@ -254,9 +258,10 @@ jobs:
             trap dump_emulator_crash_logcat ERR
             adb wait-for-device
             adb logcat -c || true
-            adb shell settings put global window_animation_scale 0
-            adb shell settings put global transition_animation_scale 0
-            adb shell settings put global animator_duration_scale 0
+            for setting in window_animation_scale transition_animation_scale animator_duration_scale; do
+              adb wait-for-device
+              adb shell settings put global "$setting" 0 || sleep 3
+            done
             ./gradlew :app:connectedDebugAndroidTest -Pgirassol.testX86=true --no-daemon
 
       - name: Capture emulator crash logcat

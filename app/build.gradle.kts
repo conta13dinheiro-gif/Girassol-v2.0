@@ -89,7 +89,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("com.google.android.filament:filament-android:1.56.0")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    implementation("org.apache.parquet:parquet-hadoop:1.14.4")
+    implementation("org.apache.hadoop:hadoop-common:3.3.6")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }

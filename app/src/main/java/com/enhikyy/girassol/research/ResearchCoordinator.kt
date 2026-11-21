@@ -16,6 +16,15 @@ import java.util.concurrent.*
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
+import java.io.File
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.text.PDFTextStripper
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.example.data.Group
+import org.apache.parquet.hadoop.ParquetReader
+import org.apache.parquet.hadoop.example.GroupReadSupport
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -313,13 +322,46 @@ internal class ResearchCoordinator(context: Context,private val handler: Handler
             }
         }
         val data=bytes.toByteArray()
-        val extension=name.substringAfterLast('.', "").lowercase()
-        val text=when(extension) {
-            "txt","md","markdown","csv","json" -> data.toString(Charsets.UTF_8)
-            "epub" -> extractEpub(data)
-            else -> throw IllegalArgumentException("Formato ainda não suportado: .$extension. Use TXT, MD, CSV, JSON ou EPUB.")
+        val format = OfflineDocumentFormat.fromName(name)
+        val text = when(format) {
+            OfflineDocumentFormat.TXT -> data.toString(Charsets.UTF_8)
+            OfflineDocumentFormat.EPUB -> extractEpub(data)
+            OfflineDocumentFormat.PDF -> extractPdf(data)
+            OfflineDocumentFormat.PARQUET -> extractParquet(data)
         }
         return LocalDocument(name,data,text)
+    }
+
+    private fun extractPdf(bytes: ByteArray): String {
+        PDFBoxResourceLoader.init(app)
+        PDDocument.load(bytes).use { document ->
+            require(!document.isEncrypted) { "PDF protegido por senha não pode ser importado" }
+            return PDFTextStripper().getText(document).take(2 * 1024 * 1024)
+        }
+    }
+
+    private fun extractParquet(bytes: ByteArray): String {
+        val temporary = File.createTempFile("girassol-parquet-", ".parquet", app.cacheDir)
+        try {
+            temporary.writeBytes(bytes)
+            val configuration = Configuration(false).apply {
+                set("fs.defaultFS", "file:///")
+                set("fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem")
+            }
+            val output = StringBuilder()
+            ParquetReader.builder<Group>(GroupReadSupport(), Path(temporary.absolutePath))
+                .withConf(configuration).build().use { reader ->
+                    var rows = 0
+                    while (true) {
+                        val record = reader.read() ?: break
+                        output.append(record.toString()).append('\\n')
+                        rows++
+                        require(rows <= 100_000) { "Parquet excede 100 mil linhas" }
+                        require(output.length <= 2 * 1024 * 1024) { "Texto Parquet excede 2 MiB" }
+                    }
+                }
+            return output.toString()
+        } finally { temporary.delete() }
     }
 
     private fun extractEpub(bytes: ByteArray): String {

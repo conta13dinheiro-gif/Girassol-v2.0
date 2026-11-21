@@ -67,7 +67,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     sound: AudioStatus, onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
     onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit,
-    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit) {
+    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit,
+    onImportDocument: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -228,7 +229,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                                     when(historySection) {
                                         0 -> Timeline(ui.world ?: world, Modifier.weight(1f)) { historical = it; selectedId = null; tab = 0 }
                                         1 -> Culture(world, Modifier.weight(1f))
-                                        else -> SystemPage(ui, Modifier.weight(1f), sound, onSound, onVolume, cognition, onImportModel, onRemoveModel, onInfer, onCancelInference, onAutomaticInference, onImportAdapter, onRemoveAdapter, onImportReviewerModel, onRemoveReviewerModel)
+                                        else -> SystemPage(ui, Modifier.weight(1f), sound, onSound, onVolume, cognition, onImportModel, onRemoveModel, onInfer, onCancelInference, onAutomaticInference, onImportAdapter, onRemoveAdapter, onImportReviewerModel, onRemoveReviewerModel, onImportDocument)
                                     }
                                 }
                             }
@@ -492,7 +493,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
     onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit,
-    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit) {
+    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit,
+    onImportDocument: () -> Unit) {
     val w=ui.world!!; val t=w.telemetry()
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
@@ -502,6 +504,12 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var auditResult by rememberSaveable { mutableStateOf<String?>(null) }
     LazyColumn(modifier.fillMaxSize(), contentPadding=PaddingValues(22.dp), verticalArrangement=Arrangement.spacedBy(22.dp)) {
         item { PageHeading("TRANSPARÊNCIA DO ECOSSISTEMA", "Por dentro da biosfera", "Estado real da simulação, integridade e recursos do dispositivo.") }
+        item { MeshSyncPanel(context) }
+        item {
+            SectionTitle("Biblioteca offline · TXT / EPUB / PDF / Parquet")
+            Text("Importe documentos locais para a memória de pesquisa dos cidadãos.", color=Muted, fontSize=11.sp)
+            OutlinedButton(onClick=onImportDocument) { Text("Importar documento") }
+        }
         item {
             SectionTitle("Cognição local · GGUF")
             Text(cognition.model ?: "Nenhum modelo instalado", color=Gold, fontSize=12.sp)
@@ -607,6 +615,46 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         }
     }
 }
+@Composable private fun MeshSyncPanel(context: android.content.Context) {
+    val sync = remember(context) { com.enhikyy.girassol.runtime.MeshSyncLan(context) }
+    val peers by sync.peers.collectAsStateWithLifecycle()
+    val status by sync.status.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var passphrase by rememberSaveable { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    DisposableEffect(sync) { onDispose { sync.close() } }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle("MeshSync LAN · migração autenticada")
+        Text("Descobre aparelhos na mesma rede por NSD/UDP. Compartilha snapshots .grs com HMAC-SHA256; a importação valida o SQLite antes de ativar a nova linha de cidadãos.", color=Muted, fontSize=11.sp)
+        OutlinedTextField(value=passphrase,onValueChange={ passphrase=it },label={ Text("Chave compartilhada (mín. 12 bytes)") },
+            singleLine=true,modifier=Modifier.fillMaxWidth())
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Button(enabled=passphrase.toByteArray().size>=12 && !working,onClick={
+                runCatching { sync.start(passphrase) }.onFailure { /* status is shown below */ }
+            }) { Text("Ativar descoberta") }
+            OutlinedButton(onClick={ sync.stop() }) { Text("Desconectar") }
+        }
+        Text(status,color=Gold,fontSize=11.sp)
+        if(peers.isEmpty()) Text("Nenhum aparelho pareado encontrado ainda.",color=Muted,fontSize=11.sp)
+        peers.forEach { peer ->
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(peer.id,fontSize=12.sp,color=Ink)
+                    Text("${peer.host}:${peer.port}",fontSize=10.sp,color=Muted)
+                }
+                OutlinedButton(enabled=!working,onClick={
+                    working=true
+                    scope.launch {
+                        try { withContext(Dispatchers.IO) { sync.sendSnapshot(peer) } }
+                        catch (error: Exception) { /* status surface below reflects transport state */ }
+                        finally { working=false }
+                    }
+                }) { Text(if(working) "Enviando…" else "Migrar") }
+            }
+        }
+    }
+}
+
 @Composable private fun SoundControl(sound: AudioStatus, onSound: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(if (sound.enabled) Icons.AutoMirrored.Outlined.VolumeUp else Icons.AutoMirrored.Outlined.VolumeOff, null, tint = Gold, modifier = Modifier.size(23.dp))
