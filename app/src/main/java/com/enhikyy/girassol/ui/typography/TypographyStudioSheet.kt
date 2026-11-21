@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,7 +69,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Typography Studio", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFF6F1E8))
-                    Text("Catálogo curado · preferências locais", color = Color(0xFFA8B3BF), fontSize = 11.sp)
+                    Text("${GirassolFontRegistry.catalog.size} famílias · 32 offline · preferências locais", color = Color(0xFFA8B3BF), fontSize = 11.sp)
                 }
                 TextButton(onClick = onDismiss) { Text("Fechar") }
             }
@@ -83,7 +82,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
                 GirassolFontRegistry.presets.take(3).forEach { preset -> AssistChip(onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.applyPreset(preset)) }, label = { Text(preset.label, fontSize = 10.sp) }) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                GirassolFontRegistry.presets.drop(3).forEach { preset -> AssistChip(onClick = { onSettingsChange(settings.applyPreset(preset)) }, label = { Text(preset.label, fontSize = 10.sp) }) }
+                GirassolFontRegistry.presets.drop(3).forEach { preset -> AssistChip(onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.applyPreset(preset)) }, label = { Text(preset.label, fontSize = 10.sp) }) }
             }
             Text("TEMAS OLED · 15", color = Color(0xFFE89B48), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 7.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
