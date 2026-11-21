@@ -2,12 +2,15 @@ package com.enhikyy.girassol.render
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.opengl.Matrix
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.*
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -61,6 +64,8 @@ internal class FilamentWorldView(
     private var environmentPending=false
     private var environmentBucket=Long.MIN_VALUE
     private val actors=linkedMapOf<String,ActorVisual>()
+    private val speechBubbles=linkedMapOf<String,TextView>()
+    private var lastBubbleProjection=0L
     private var moving=false
     private var thermal=0
     private var resumed=false
@@ -215,6 +220,7 @@ internal class FilamentWorldView(
         contacts?.retain(ids.toSet())
         actors.keys.filter { it !in ids }.forEach { actors.remove(it)?.mesh?.let(::destroyMesh) }
         val now=SystemClock.uptimeMillis()
+        syncSpeechBubbles(world)
         if(world.tick!=lastTick) {
             if(publishedAt>0 && world.tick>lastTick) tickDuration=((now-publishedAt).toDouble()/(world.tick-lastTick)).coerceIn(80.0,2000.0)
             publishedAt=now
@@ -241,6 +247,78 @@ internal class FilamentWorldView(
         requestEnvironment(world.tick,world.seed)
         schedule()
     }
+    private fun syncSpeechBubbles(world: WorldState) {
+        val recent = world.dialogues.takeLast(24)
+        val latestBySpeaker = recent.filter { it.tick >= world.tick - 12 }
+            .associateBy { it.speaker }
+        val visibleIds = latestBySpeaker.keys
+        speechBubbles.keys.filter { it !in visibleIds || actors[it] == null }.forEach { id ->
+            speechBubbles.remove(id)?.let(::removeView)
+        }
+        latestBySpeaker.forEach { (id, dialogue) ->
+            val bubble = speechBubbles.getOrPut(id) {
+                TextView(context).apply {
+                    textSize = 10f
+                    setTextColor(Color.rgb(242, 239, 226))
+                    maxWidth = dp(184)
+                    maxLines = 3
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setPadding(dp(9), dp(6), dp(9), dp(6))
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = dp(11).toFloat()
+                        setColor(Color.argb(224, 12, 18, 16))
+                        setStroke(dp(1), Color.argb(150, 213, 177, 100))
+                    }
+                    elevation = dp(4).toFloat()
+                    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+                    contentDescription = "Fala do habitante"
+                    isClickable = false
+                    isFocusable = false
+                }.also { addView(it, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)) }
+            }
+            val citizen = world.agents.firstOrNull { it.id == id }
+            bubble.text = dialogue.portuguese.take(112)
+            bubble.contentDescription = citizen?.let { "Fala de ${it.name}: ${dialogue.portuguese}" } ?: "Fala do habitante"
+        }
+    }
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
+
+    /** Project a world-space head point through the same orbit rig that drives Filament. */
+    private fun projectHead(x: Double, y: Double, z: Double): Pair<Int, Int>? {
+        val projected = rig.project(x, y, z, width, height) ?: return null
+        return projected.first.roundToInt() to projected.second.roundToInt()
+    }
+
+    private fun layoutSpeechBubbles(now: Long) {
+        if (now - lastBubbleProjection < 90L) return
+        lastBubbleProjection = now
+        speechBubbles.forEach { (id, bubble) ->
+            val actor = actors[id]
+            val point = actor?.let { projectHead(it.x, it.y + 1.92, it.z) }
+            if (point == null) {
+                bubble.visibility = GONE
+            } else {
+                bubble.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(dp(192), MeasureSpec.AT_MOST),
+                    android.view.View.MeasureSpec.makeMeasureSpec(dp(74), MeasureSpec.AT_MOST)
+                )
+                val bubbleWidth = bubble.measuredWidth.coerceAtLeast(dp(36))
+                val bubbleHeight = bubble.measuredHeight.coerceAtLeast(dp(24))
+                val left = (point.first - bubbleWidth / 2).coerceIn(0, max(0, width - bubbleWidth))
+                val top = (point.second - bubbleHeight - dp(12)).coerceIn(dp(8), max(dp(8), height - bubbleHeight))
+                val params = bubble.layoutParams as LayoutParams
+                params.gravity = Gravity.TOP or Gravity.START
+                params.leftMargin = left
+                params.topMargin = top
+                params.width = bubbleWidth
+                params.height = bubbleHeight
+                bubble.layoutParams = params
+                bubble.visibility = VISIBLE
+            }
+        }
+    }
+
     private fun requestEnvironment(tick: Long,worldSeed: Long) {
         val bucket=tick/12
         if(environmentPending || environmentBucket==bucket) return
@@ -304,6 +382,9 @@ internal class FilamentWorldView(
         glass?.setParameter("time",0f); glass?.setParameter("night",0f)
         instance.setParameter("time",0f); instance.setParameter("night",0f); instance.setParameter("gait",0f)
         instance.setParameter("activity",0f); instance.setParameter("phase",0f);instance.setParameter("lean",0f)
+        instance.setParameter("institutionalMix",.56f)
+        instance.setParameter("lumonTint",.78f,.91f,.84f,1.0f)
+        instance.setParameter("tropicalTint",1.12f,.83f,.62f,1.0f)
         vb.setBufferAt(e,0,data.vertices); ib.setBuffer(e,data.indices)
         val lo=FloatArray(3) { Float.POSITIVE_INFINITY }; val hi=FloatArray(3) { Float.NEGATIVE_INFINITY }
         repeat(data.vertexCount) { i-> repeat(3) { axis->val x=data.vertices.getFloat(i*32+axis*4); lo[axis]=min(lo[axis],x); hi[axis]=max(hi[axis],x) } }
@@ -382,6 +463,7 @@ internal class FilamentWorldView(
             } }
             follow?.let { id-> actors[id]?.let { rig.focus(it.x,it.z,.65) } }
             rig.advance(dt); updateCamera()
+            layoutSpeechBubbles(now)
             val r=renderer?:return@guarded
             if(r.beginFrame(chain,frameTimeNanos)) { film?.update(visualTime,thermal<3); r.render(checkNotNull(view)); film?.let { r.render(it.view) }; r.endFrame(); renderedFrames++ }
         }
@@ -413,7 +495,7 @@ internal class FilamentWorldView(
         closed=true; unschedule(); lifecycle.removeObserver(this); worker.shutdownNow()
         helper.detach()
         val e=engine?:return
-        meshes.toList().forEach(::destroyMesh); actors.clear(); city.clear(); roomEntities.clear()
+        meshes.toList().forEach(::destroyMesh); actors.clear(); speechBubbles.values.toList().forEach(::removeView); speechBubbles.clear(); city.clear(); roomEntities.clear()
         entities.forEach { e.destroyCameraComponent(it); e.destroyEntity(it); EntityManager.get().destroy(it) }; entities.clear()
         view?.renderTarget=null
         contacts?.close();contacts=null

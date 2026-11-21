@@ -4,7 +4,8 @@
 
 namespace girassol::audio {
 struct Parameters {
-    float volume=0, left_steps=0, right_steps=0, mastery=0, social=0, weather=0, tension=0, milestone=0;
+    float volume=0, left_steps=0, right_steps=0, mastery=0, social=0, weather=0, tension=0, milestone=0, pitch=1, synchrony=0;
+    std::array<float,8> ratios{1.0f,1.067f,1.125f,1.2f,1.333f,1.5f,1.6f,1.8f};
 };
 // Owned solely by the audio callback. No allocations, locks, logging or Android calls in render.
 class Synth {
@@ -19,6 +20,11 @@ private:
     std::array<double,3> undertones_{};
     std::array<float,2048> string_{};
     std::uint32_t write_=0;
+    // Bounded parametric HRTF approximation: interaural time/level differences and far-ear filtering.
+    // No measured HRIR dataset is bundled; these cues are intentionally conservative.
+    std::array<float,128> hrtfLeftDelay_{}, hrtfRightDelay_{};
+    std::size_t hrtfWrite_=0;
+    float hrtfLeftLowpass_=0, hrtfRightLowpass_=0;
     float weather_=0, tension_=0, bow_=0, celebration_=0, last_milestone_=0;
     float random() noexcept;
 };

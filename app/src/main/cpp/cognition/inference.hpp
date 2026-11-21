@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 namespace girassol::cognition {
-enum class Task { Activity, KnowledgeReview, Embedding };
+enum class Task { Activity, KnowledgeReview, Embedding, InnerSpeech };
 // CPU-only, one request at a time. Resources are freed after every request.
 std::string infer(const std::string& path, const std::string& prompt, std::int64_t request,
                   int timeout_ms = 30000, const std::string& adapter = "", Task task = Task::Activity);

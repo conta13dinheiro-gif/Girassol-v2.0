@@ -8,7 +8,7 @@ import kotlin.math.ln
 
 /** Public Hub and Dataset Viewer only; datasets are data and never executed as code. */
 class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
-    private val hub: HttpUrl="https://huggingface.co/".toHttpUrl(),
+    private val hub: HttpUrl="https://huggingface.co/api/datasets/".toHttpUrl(),
     private val viewer: HttpUrl="https://datasets-server.huggingface.co/".toHttpUrl(),
     private val compact: ((DatasetRepo,DatasetSplit,DatasetResearchIntent,Long)->DatasetBatch)?=null) {
     private val json=Json { ignoreUnknownKeys=true }
@@ -23,13 +23,18 @@ class HuggingFaceDatasetSeeker(private val http: ResilientHttp,
         return id.split('/')
     }
     fun search(intent: DatasetResearchIntent): List<String> {
-        fun query(term: String): List<String> = parse(http.get(url(hub,listOf("api","datasets"),mapOf("search" to term,"sort" to "downloads","direction" to "-1","limit" to "20"))))
-            .jsonArray.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
+        fun query(term: String): List<String> = parse(http.get(hub.newBuilder()
+            .addQueryParameter("search",term)
+            .addQueryParameter("sort","downloads")
+            .addQueryParameter("direction","-1")
+            .addQueryParameter("limit","20")
+            .build())).jsonArray.mapNotNull { it.jsonObject["id"]?.jsonPrimitive?.contentOrNull }
         val precise=listOf(intent.queryEn,intent.queryPt).flatMap(::query).distinct()
         return if(precise.isNotEmpty()) precise else listOf(intent.queryEn.substringBefore(' '),intent.queryPt.substringBefore(' ')).distinct().flatMap(::query).distinct()
     }
     fun inspect(id: String): DatasetRepo? {
-        val obj=parse(http.get(url(hub,listOf("api","datasets")+repoParts(id)))).jsonObject
+        val endpoint=hub.newBuilder().apply { repoParts(id).forEach(::addPathSegment) }.build()
+        val obj=parse(http.get(endpoint)).jsonObject
         if(obj["private"]?.jsonPrimitive?.booleanOrNull==true || obj["disabled"]?.jsonPrimitive?.booleanOrNull==true) return null
         val gated=obj["gated"]?.jsonPrimitive?.contentOrNull
         if(gated!=null && gated!="false") return null

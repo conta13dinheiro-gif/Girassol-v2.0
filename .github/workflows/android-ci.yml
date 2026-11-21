@@ -1,20 +1,25 @@
-
 name: Girassol Android CI
 
 on:
   push:
-    branches: ["**"]
+    branches:
+      - "**"
   pull_request:
+    types: [opened, reopened]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  build:
-    name: Build and test Android
-    runs-on: ubuntu-latest
+concurrency:
+  group: girassol-android-${{ github.ref }}
+  cancel-in-progress: false
 
+jobs:
+  build-and-publish:
+    name: Native tests, unit tests, lint and APK publication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,14 +29,38 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          accept-android-sdk-licenses: true
 
-      - name: Install Android SDK packages
+      - name: Install Android SDK, NDK and CMake
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.0.12077973" \
+            "cmake;3.22.1"
+
+      - name: Prepare pinned Filament 1.56.0 material compiler
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 https://github.com/google/filament/releases/download/v1.56.0/filament-v1.56.0-linux.tgz -o "$RUNNER_TEMP/filament.tgz"
+          echo '393dcc066987345282f4b5c3f525ab053d9c21087141cdc8015f403cddf455f0  '"$RUNNER_TEMP/filament.tgz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/filament"
+          tar -xzf "$RUNNER_TEMP/filament.tgz" --strip-components=1 -C "$RUNNER_TEMP/filament"
+          echo "FILAMENT_TOOLS_DIR=$RUNNER_TEMP/filament" >> "$GITHUB_ENV"
+
+      - name: Compile Filament materials and shaders
+        run: scripts/compile-materials.sh
+
+      - name: Fetch pinned Sherpa-ONNX Android runtime
+        run: bash scripts/fetch-sherpa-onnx-aar.sh
 
       - name: Grant Gradle permission
         run: chmod +x gradlew
@@ -39,24 +68,204 @@ jobs:
       - name: Validate Gradle
         run: ./gradlew --version
 
-      - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+      - name: Run native C++ tests with ASan and UBSan
+        run: scripts/test-native.sh
 
-      - name: Run lint
-        run: ./gradlew lintDebug
+      - name: Run unit tests and lint
+        run: ./gradlew test testDebugUnitTest lintDebug --no-daemon
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Prepare persistent Release signing key when configured
+        shell: bash
+        env:
+          GIRASSOL_KEYSTORE_BASE64: ${{ secrets.GIRASSOL_KEYSTORE_BASE64 }}
+          GIRASSOL_KEYSTORE_PASSWORD: ${{ secrets.GIRASSOL_KEYSTORE_PASSWORD }}
+          GIRASSOL_KEY_ALIAS: ${{ secrets.GIRASSOL_KEY_ALIAS }}
+          GIRASSOL_KEY_PASSWORD: ${{ secrets.GIRASSOL_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${GIRASSOL_KEYSTORE_BASE64:-}" ]]; then
+            STORE_PATH="$RUNNER_TEMP/girassol-release.jks"
+            printf '%s' "$GIRASSOL_KEYSTORE_BASE64" | base64 --decode > "$STORE_PATH"
+            : "${GIRASSOL_KEYSTORE_PASSWORD:?GIRASSOL_KEYSTORE_PASSWORD is required with GIRASSOL_KEYSTORE_BASE64}"
+            : "${GIRASSOL_KEY_ALIAS:?GIRASSOL_KEY_ALIAS is required with GIRASSOL_KEYSTORE_BASE64}"
+            : "${GIRASSOL_KEY_PASSWORD:?GIRASSOL_KEY_PASSWORD is required with GIRASSOL_KEYSTORE_BASE64}"
+            keytool -list -keystore "$STORE_PATH" -storepass "$GIRASSOL_KEYSTORE_PASSWORD" -alias "$GIRASSOL_KEY_ALIAS" >/dev/null
+            {
+              echo "GIRASSOL_KEYSTORE_PATH=$STORE_PATH"
+              echo "GIRASSOL_KEYSTORE_PASSWORD=$GIRASSOL_KEYSTORE_PASSWORD"
+              echo "GIRASSOL_KEY_ALIAS=$GIRASSOL_KEY_ALIAS"
+              echo "GIRASSOL_KEY_PASSWORD=$GIRASSOL_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            chmod 600 "$STORE_PATH"
+          else
+            echo "GIRASSOL_KEYSTORE_BASE64 absent: Gradle uses its local Debug keystore as a development-only Release fallback."
+            echo "This runner key is ephemeral; do not use this APK for updates over an existing installation or production distribution."
+          fi
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease
+      - name: Build ARM64 Debug and Release APKs
+        run: ./gradlew :app:assembleDebug :app:assembleRelease :app:bundleRelease --no-daemon
 
-      - name: Upload APKs
-        if: always()
+      - name: Stage named APK artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          DEBUG_APK="$(find app/build/outputs/apk/debug -type f -name '*arm64-v8a*.apk' -print -quit)"
+          RELEASE_APK="$(find app/build/outputs/apk/release -type f -name '*arm64-v8a*.apk' -print -quit)"
+          [[ -n "$DEBUG_APK" && -n "$RELEASE_APK" ]] || { echo "Expected ARM64 split APKs were not produced"; exit 1; }
+          [[ -n "$DEBUG_APK" && -n "$RELEASE_APK" ]]
+          cp "$DEBUG_APK" dist/Girassol-debug.apk
+          cp "$RELEASE_APK" dist/Girassol-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Girassol-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Girassol-release.apk
+          echo "APK_DEBUG_BYTES=$(stat -c '%s' dist/Girassol-debug.apk)" >> "$GITHUB_ENV"
+          echo "APK_RELEASE_BYTES=$(stat -c '%s' dist/Girassol-release.apk)" >> "$GITHUB_ENV"
+          stat -c '%n %s bytes' dist/Girassol-debug.apk dist/Girassol-release.apk
+          DEBUG_BYTES="$(stat -c '%s' dist/Girassol-debug.apk)"
+          RELEASE_BYTES="$(stat -c '%s' dist/Girassol-release.apk)"
+          (( DEBUG_BYTES <= 1900000000 && RELEASE_BYTES <= 1900000000 )) || { echo "APK exceeds 1.90 GB delivery limit" >&2; exit 1; }
+          BUNDLE_AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' -print -quit)"
+          [[ -n "$BUNDLE_AAB" ]] || { echo "Release AAB not found" >&2; exit 1; }
+          cp "$BUNDLE_AAB" dist/Girassol-release.aab
+          AAB_BYTES="$(stat -c '%s' dist/Girassol-release.aab)"
+          (( AAB_BYTES <= 5368709120 )) || { echo "AAB exceeds 5 GB delivery limit" >&2; exit 1; }
+          echo "AAB_BYTES=$AAB_BYTES" >> "$GITHUB_ENV"
+          sha256sum dist/Girassol-debug.apk dist/Girassol-release.apk dist/Girassol-release.aab
+
+      - name: Verify Sherpa-ONNX native libraries are embedded in both APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            libonnxruntime.so
+            libsherpa-onnx-jni.so
+            libsherpa-onnx-c-api.so
+            libsherpa-onnx-cxx-api.so
+          )
+          for apk in dist/Girassol-debug.apk dist/Girassol-release.apk; do
+            entries="$(unzip -Z1 "$apk")"
+            for library in "${required[@]}"; do
+              grep -Fxq "lib/arm64-v8a/$library" <<< "$entries" || {
+                echo "Missing embedded Sherpa library: $library in $apk" >&2
+                exit 1
+              }
+            done
+            echo "Verified all Sherpa-ONNX ARM64 libraries in $apk"
+          done
+
+      - name: Publish Girassol-debug.apk
         uses: actions/upload-artifact@v4
         with:
-          name: Girassol-APK
-          path: |
-            app/build/outputs/apk/**/*.apk
-          if-no-files-found: warn
-          retention-days: 14
+          name: Girassol-debug.apk
+          path: dist/Girassol-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Girassol-release.apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: Girassol-release.apk
+          path: dist/Girassol-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Girassol-release.aab
+        uses: actions/upload-artifact@v4
+        with:
+          name: Girassol-release.aab
+          path: dist/Girassol-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+  instrumentation:
+    name: Instrumented tests on Android API 35 / 4 GiB emulator
+    needs: build-and-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          accept-android-sdk-licenses: true
+
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "ndk;27.0.12077973" \
+            "cmake;3.22.1"
+
+      - name: Prepare pinned Filament 1.56.0 material compiler
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 https://github.com/google/filament/releases/download/v1.56.0/filament-v1.56.0-linux.tgz -o "$RUNNER_TEMP/filament.tgz"
+          echo '393dcc066987345282f4b5c3f525ab053d9c21087141cdc8015f403cddf455f0  '"$RUNNER_TEMP/filament.tgz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/filament"
+          tar -xzf "$RUNNER_TEMP/filament.tgz" --strip-components=1 -C "$RUNNER_TEMP/filament"
+          echo "FILAMENT_TOOLS_DIR=$RUNNER_TEMP/filament" >> "$GITHUB_ENV"
+
+      - name: Compile Filament materials and shaders
+        run: scripts/compile-materials.sh
+
+      - name: Fetch pinned Sherpa-ONNX Android runtime
+        run: bash scripts/fetch-sherpa-onnx-aar.sh
+
+      - name: Grant Gradle permission
+        run: chmod +x gradlew
+
+      - name: Stop Gradle daemons before emulator allocation
+        run: ./gradlew --stop
+
+      - name: Run Android instrumentation tests on API 35 (4 GiB logical profile)
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
+          GIRASSOL_LOGICAL_RAM_PROFILE_MB: "4096"
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-boot-timeout: 900
+          disable-linux-hw-accel: true
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio -memory 2048 -no-boot-anim -no-metrics -wipe-data
+          script: |
+            set -Eeuo pipefail
+            dump_emulator_crash_logcat() {
+              echo "===== emulator crash logcat (AndroidRuntime / DEBUG / libc) =====" >&2
+              adb logcat -d -s AndroidRuntime:E DEBUG:F libc:F >&2 || true
+              echo "===== emulator state =====" >&2
+              adb shell getprop sys.boot_completed >&2 || true
+              adb shell getprop ro.build.version.sdk >&2 || true
+            }
+            trap dump_emulator_crash_logcat ERR
+            adb wait-for-device
+            adb logcat -c || true
+            for setting in window_animation_scale transition_animation_scale animator_duration_scale; do
+              adb wait-for-device
+              adb shell settings put global "$setting" 0 || sleep 3
+            done
+            ./gradlew :app:connectedDebugAndroidTest -Pgirassol.testX86=true --no-daemon
+
+      - name: Capture emulator crash logcat
+        if: failure()
+        shell: bash
+        run: |
+          adb logcat -d -s AndroidRuntime:E DEBUG:F libc:F || true

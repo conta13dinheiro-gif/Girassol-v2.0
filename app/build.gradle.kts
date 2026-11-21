@@ -1,12 +1,17 @@
 import java.security.MessageDigest
 
 plugins { id("com.android.application"); kotlin("android"); kotlin("plugin.compose") }
+
+val girassolTestX86 = providers.gradleProperty("girassol.testX86").orNull == "true"
+val girassolTargetAbis = if (girassolTestX86) listOf("x86_64") else listOf("arm64-v8a")
 android {
     namespace = "com.enhikyy.girassol"
     compileSdk = 35
     ndkVersion = "27.0.12077973"
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     defaultConfig {
+        // ABI selection is owned exclusively by splits. Android Gradle Plugin
+        // rejects overlapping ndk.abiFilters and splits.abi filters.
         applicationId = "com.enhikyy.girassol"
         minSdk = 33
         targetSdk = 35
@@ -18,20 +23,64 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = true
+            include(*girassolTargetAbis.toTypedArray())
+            isUniversalApk = false
         }
     }
-    buildFeatures { compose = true }
+    packaging {
+        jniLibs {
+            // Store native libraries uncompressed and load them directly from the APK.
+            useLegacyPackaging = false
+        }
+    }
+    androidResources {
+        // Model and media assets can be memory-mapped/read without heap-sized copies.
+        noCompress += listOf("gguf", "onnx", "bin", "filamat", "wav", "ktx2")
+    }
+    buildFeatures { compose = true; aidl = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    buildTypes { release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
+    val releaseSigningEnvironment = listOf(
+        "GIRASSOL_KEYSTORE_PATH",
+        "GIRASSOL_KEYSTORE_PASSWORD",
+        "GIRASSOL_KEY_ALIAS",
+        "GIRASSOL_KEY_PASSWORD"
+    ).associateWith { System.getenv(it) }
+    val configuredReleaseValues = releaseSigningEnvironment.values.count { !it.isNullOrBlank() }
+    signingConfigs {
+        create("release") {
+            if (configuredReleaseValues == 0) {
+                // Local development only: preserve a buildable variant when no release
+                // signing environment has been supplied at all.
+                initWith(getByName("debug"))
+            } else {
+                require(configuredReleaseValues == releaseSigningEnvironment.size) {
+                    "Release signing requires all four GIRASSOL_KEYSTORE_* / GIRASSOL_KEY_* environment variables."
+                }
+                storeFile = file(requireNotNull(releaseSigningEnvironment["GIRASSOL_KEYSTORE_PATH"]))
+                storePassword = requireNotNull(releaseSigningEnvironment["GIRASSOL_KEYSTORE_PASSWORD"])
+                keyAlias = requireNotNull(releaseSigningEnvironment["GIRASSOL_KEY_ALIAS"])
+                keyPassword = requireNotNull(releaseSigningEnvironment["GIRASSOL_KEY_PASSWORD"])
+            }
+        }
+    }
+    buildTypes {
+        debug { signingConfig = signingConfigs.getByName("debug") }
+        release {
+            isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
 }
 dependencies {
     implementation(project(":core"))
     implementation(project(":research"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation(platform("androidx.compose:compose-bom:2025.02.00"))
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3")
@@ -40,7 +89,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("com.google.android.filament:filament-android:1.56.0")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+    implementation("org.apache.parquet:parquet-hadoop:1.14.4")
+    implementation("org.apache.hadoop:hadoop-common:3.3.6")
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
@@ -73,4 +126,10 @@ val verifyFilamentMaterial by tasks.registering {
         }
     }
 }
-tasks.named("preBuild") { dependsOn(verifyFilamentMaterial) }
+val fetchSherpaOnnxAar by tasks.registering(Exec::class) {
+    val aar = file("libs/sherpa-onnx-2.0.1.aar")
+    outputs.file(aar)
+    onlyIf { !aar.isFile }
+    commandLine("bash", rootProject.file("scripts/fetch-sherpa-onnx-aar.sh").absolutePath)
+}
+tasks.named("preBuild") { dependsOn(verifyFilamentMaterial, fetchSherpaOnnxAar) }

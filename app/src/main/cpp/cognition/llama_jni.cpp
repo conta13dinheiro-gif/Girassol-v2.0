@@ -7,7 +7,7 @@
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_com_enhikyy_girassol_cognition_NativeCognition_nativeInfer(JNIEnv* env, jobject, jstring path, jbyteArray prompt, jlong request, jstring adapter, jint mode) {
     try {
-        if(mode<0 || mode>2) throw std::runtime_error("Tarefa JNI inválida");
+        if(mode<0 || mode>3) throw std::runtime_error("Tarefa JNI inválida");
         if (!path || !prompt || env->GetArrayLength(prompt) > 4096 || env->GetStringUTFLength(path) > 4096)
             throw std::runtime_error("Parâmetros JNI inválidos");
         const char* utf = env->GetStringUTFChars(path, nullptr);

@@ -8,7 +8,10 @@ material {
         { type : float, name : gait },
         { type : float, name : activity },
         { type : float, name : phase },
-        { type : float, name : lean }
+        { type : float, name : lean },
+        { type : float, name : institutionalMix },
+        { type : float4, name : lumonTint },
+        { type : float4, name : tropicalTint }
     ]
 }
 vertex {
@@ -70,7 +73,17 @@ fragment {
         material.normal = normalize(float3(wave*bump, (grain(p.zyx*79.0)-0.5)*bump, 1.0));
         prepareMaterial(material);
         // Vertex palette is authored in sRGB; surface computations take linear values.
-        material.baseColor = float4(pow(getColor().rgb, float3(2.2)) * textureValue, 1.0);
+        float3 authored = pow(getColor().rgb, float3(2.2)) * textureValue;
+        // Hybrid scene language: Lumon-like cool institutional surfaces meet tropical
+        // modernist timber, warm stone and planted facades without replacing mesh identity.
+        float3 lumon = authored * materialParams.lumonTint.rgb;
+        float3 tropical = authored * materialParams.tropicalTint.rgb;
+        float architectural = (tag == 2.0 || tag == 3.0 || tag == 4.0 || tag == 5.0 || tag == 6.0) ? 1.0 : 0.0;
+        float foliage = tag == 7.0 ? 1.0 : 0.0;
+        float3 hybrid = mix(lumon, tropical, materialParams.institutionalMix);
+        authored = mix(authored, hybrid, architectural * 0.34);
+        authored = mix(authored, authored * mix(float3(0.82,1.0,0.86),materialParams.tropicalTint.rgb,0.38), foliage);
+        material.baseColor = float4(authored, 1.0);
         material.roughness = roughness;
         material.metallic = metallic;
         material.reflectance = tag == 5.0 || tag == 6.0 ? 0.55 : 0.4;

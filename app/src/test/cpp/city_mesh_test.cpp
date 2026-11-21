@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <vector>
 
 using namespace girassol;
 static void check(const Mesh& mesh) {
@@ -44,7 +45,6 @@ int main() {
     assert(a.vertices.size()==landscape.vertices.size()+building.vertices.size());
     assert(!city_mesh(nullptr,0,1,0,b));
     assert(!city_mesh(rooms,sizeof(rooms)-1,7,0,b));
-    assert(!city_mesh(rooms,sizeof(rooms),65,0,b));
     rooms[0].x=std::numeric_limits<float>::quiet_NaN(); assert(!city_mesh(rooms,sizeof(rooms),7,0,b));
     rooms[0]=original; rooms[0].width=0; assert(!city_mesh(rooms,sizeof(rooms),7,0,b));
     rooms[0]=original; rooms[0].kind=7; assert(!city_mesh(rooms,sizeof(rooms),7,0,b));
@@ -57,8 +57,14 @@ int main() {
     assert(copy_mesh(a,vb.data(),vb.size(),ib.data(),ib.size()));
     assert(std::memcmp(vb.data(),a.vertices.data(),vb.size())==0);
     assert(std::memcmp(ib.data(),a.indices.data(),ib.size())==0);
-    // Maximum supported input is still bounded in memory.
-    RoomSpec maximum[64]; for (auto& r : maximum) r=original;
-    assert(city_mesh(maximum,sizeof(maximum),64,42,b)); check(b);
-    assert(b.vertices.size()<250000 && b.indices.size()<500000);
+    // City meshes grow with the actual room list rather than an arbitrary 64-room cap.
+    std::vector<RoomSpec> expanded;
+    expanded.reserve(256);
+    for (int i=0;i<256;++i) {
+        const float x=15.0f+static_cast<float>(i%16)*2.0f;
+        const float z=15.0f+static_cast<float>(i/16)*2.0f;
+        expanded.push_back({x,z,1.7f,1.5f,6,1});
+    }
+    assert(city_mesh(expanded.data(),expanded.size()*sizeof(RoomSpec),expanded.size(),42,b)); check(b);
+    assert(b.vertices.size()>a.vertices.size());
 }

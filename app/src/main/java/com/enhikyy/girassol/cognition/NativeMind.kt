@@ -25,11 +25,27 @@ internal object NativeMind {
         return old.copy(parameters=List(248) { data.getDouble(it*8) },hidden=List(8) { data.getDouble((248+it)*8) },exposure=exposure,learnedTick=tick)
             .also { check(it.valid(tick)) }
     }
-    fun evaluate(world: WorldState,lastActions: List<ActionRecord> = emptyList(),policy: List<Double> = world.evolution?.weights ?: List(8) { 0.0 }): CognitiveFrame {
+    fun evaluate(
+        world: WorldState,
+        lastActions: List<ActionRecord> = emptyList(),
+        policy: List<Double> = world.evolution?.weights ?: List(8) { 0.0 },
+        thermalTier: ThermalTier = ThermalTier.NONE_OR_LIGHT
+    ): CognitiveFrame {
         require(policy.size==8 && policy.all { it.isFinite() && it in -2.0..2.0 })
+        val prepared=world.agents.associate { citizen ->
+            val mind=world.minds[citizen.id] ?: run {
+                val family=world.genealogy.lastOrNull { it.child==citizen.id }
+                val first=family?.let { world.minds[it.parentOne] }
+                val second=family?.let { world.minds[it.parentTwo] }
+                if(first!=null && second!=null) MindState.inherit(world,citizen,family.parentOne,family.parentTwo,first,second)
+                else MindState.initial(world,citizen)
+            }
+            citizen.id to mind
+        }
+        val autonomy=NativeAutonomy.evaluate(world,lastActions,prepared)
         val minds=linkedMapOf<String,MindState>(); val decisions=linkedMapOf<String,Activity>()
         world.agents.forEach { citizen->
-            val old=world.minds[citizen.id] ?: MindState.initial(world,citizen)
+            val old=prepared.getValue(citizen.id).copy(psyche=autonomy.psyches.getValue(citizen.id))
             val memory=citizen.memories.lastOrNull()?.takeIf { it.tick==world.tick && it.tick>old.learnedTick }
             val outcome=lastActions.firstOrNull { it.agentId==citizen.id }?.outcome
             val learn=world.tick>old.learnedTick && (memory!=null || outcome=="PRECONDITION_FAILED" || outcome=="RESERVED")
@@ -54,10 +70,22 @@ internal object NativeMind {
                 if(teacher!=null) world.minds[teacher.id]?.let { bank=bank.learnFrom(teacher.id,it.memory,world.tick) }
             }
             val recalled=NativeMemory.recall(bank,citizen,world.tick)
-            val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive)
+            bank=bank.recordRecall(recalled.map { it.episode.eventId },world.tick)
+            val next=old.copy(memory=bank,parameters=values(0,248),hidden=values(248,8),exposure=exposure,learnedTick=if(learn) world.tick else old.learnedTick,novelty=novelty,behaviors=archive,
+                nativeEngineTrace=autonomy.nativeEngineStates.getValue(citizen.id),
+                nativeExtendedState=autonomy.nativeExtendedStates.getValue(citizen.id))
             check(next.valid(world.tick))
             minds[citizen.id]=next
             val scores=values(272,8).toMutableList()
+            val engine=autonomy.engineSignals.getValue(citizen.id)
+            val reflexConfidence=engine[0].coerceIn(0.0,1.0)
+            val tttCuriosity=engine[1].coerceIn(0.0,1.0)
+            val episodicQ=engine[2].coerceIn(-1.0,1.0)
+            val subjectiveProbability=engine[3].coerceIn(0.0,1.0)
+            val variationalFreeEnergy=engine[4].coerceIn(0.0,1.0)
+            val expectedFreeEnergy=engine[5].coerceIn(0.0,1.0)
+            val brierScore=engine[6].coerceIn(0.0,1.0)
+            val rsiPromotionGate=engine[7].coerceIn(0.0,1.0)
             val needs=listOf(1-n.hydration,1-n.energy,1-n.glucose,1-n.energy,1-n.social,1-n.curiosity,1-n.curiosity,1-n.curiosity)
             val exploration=Canonical.stream(world.seed,citizen.id,world.tick,"intrinsic-exploration-v1")
             Activity.entries.forEachIndexed { i,activity->
@@ -68,17 +96,46 @@ internal object NativeMind {
                     else experience.sumOf { it.episode.reward*it.score }/experience.sumOf { it.score.toDouble() }.coerceAtLeast(.001)
                 val technique=bank.procedures.firstOrNull { it.action==activity }?.expectedReward ?: 0.0
                 // Seeded Gumbel exploration scales with curiosity and lack of novelty; outputs are journaled.
-                val temperature=.04+.20*old.personality[0]*(1-novelty)
+                val thermalCost = AllostaticThermalCoupling.computeNeuralDeliberationCost(thermalTier, 1.0, n.energy)
+                val policyScale = 1.0 / (1.0 + thermalCost)
+                val temperature=(.04+.20*old.personality[0]*(1-novelty))*(1.0-.45*reflexConfidence)*policyScale
                 val u=exploration.nextDouble().coerceIn(1e-12,1-1e-12)
                 scores[i]+=-ln(-ln(u))*temperature
-                scores[i]+=policy[i]+expected*.4+technique*.15+needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-hypot(room.x-citizen.x,room.z-citizen.z)*.025
+                val psyche=old.psyche
+                val ignition=(psyche.ignitionIndex-.65).coerceAtLeast(0.0)
+                val antiCollapseBonus = SemanticCollapseGuard.noveltyEpistemicBonus(activity.name, world.actionCounts)
+                scores[i]+=autonomy.candidateBiases.getValue(citizen.id)[i]+
+                    policy[i]*policyScale+antiCollapseBonus+expected*.4+technique*.15+
+                    tttCuriosity*.08+episodicQ*.10+(subjectiveProbability-.5)*(if(activity==Activity.TALK) .12 else 0.0)-
+                    variationalFreeEnergy*.06-expectedFreeEnergy*.04-brierScore*.05+rsiPromotionGate*.015+
+                    bank.learningFor(activity).practiceBonus(world.tick)+bank.workingMemoryBonus(activity,world.tick)+
+                    needs[i]*1.7+.4/sqrt(exposure[i]+1.0)-
+                    hypot(room.x-citizen.x,room.z-citizen.z)*.025
+                scores[i]+=when(activity) {
+                    Activity.STUDY -> psyche.dopamine*.12+ignition*.45
+                    Activity.TALK -> psyche.oxytocin*.12+maxOf(0.0,psyche.pleasure)*.04
+                    Activity.SLEEP -> psyche.cortisol*.06
+                    Activity.BUILD -> -psyche.cortisol*.05
+                    else -> 0.0
+                }
                 if(activity==Activity.SLEEP && n.energy>.8) scores[i]-=1
-                if(activity==Activity.BUILD && (world.rooms.size>=10 || (world.balances["market/timber"] ?: 0)<4)) scores[i]-=3
+                if(activity==Activity.BUILD && ((world.balances["market/timber"] ?: 0)<4)) scores[i]-=3
                 if(activity==Activity.WRITE && (world.balances["market/paper"] ?: 0)==0) scores[i]-=3
                 if(activity==Activity.EAT && (world.balances["${citizen.id}/coins"] ?: 0)==0) scores[i]-=3
             }
-            decisions[citizen.id]=Activity.entries[scores.indices.maxBy { scores[it] }]
+            val decision=Activity.entries[scores.indices.maxBy { scores[it] }]
+            decisions[citizen.id]=decision
+            val expectedSensors=NativeAutonomy.predictNext(
+                world,citizen,decision,autonomy.actualSensory.getValue(citizen.id)
+            )
+            minds[citizen.id]=minds.getValue(citizen.id).copy(
+                psyche=minds.getValue(citizen.id).psyche.copy(expectedSensory=expectedSensors,initialized=true)
+            )
         }
-        return CognitiveFrame(world.tick,Canonical.hash(Canonical.state(world)),minds,decisions)
+        return CognitiveFrame(
+            world.tick,Canonical.hash(Canonical.state(world)),minds,decisions,
+            socialSynchrony=autonomy.orderParameter,
+            rsiPromotionGate=autonomy.engineSignals.values.map { it[7] }.average() >= 0.75
+        )
     }
 }

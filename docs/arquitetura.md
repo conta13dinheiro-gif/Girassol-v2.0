@@ -42,7 +42,7 @@ flowchart TD
 
 - **Autoridade e tempo:** WorldActor continua Kotlin/JVM, independente do renderer/áudio e do relógio físico. Componentes C++ propõem decisões e produzem apresentação. A adoção da transição ocorre depois de sua transação durável; falha de gravação não avança o ator adotado.
 - **Economia:** seção29 de Completo exige conservação estrita. Consumo transfere para ambiente/arquivo/estruturas; reciclagem devolve às contas de mercado e salários usam moedas existentes. Não há criação de matéria ou moeda após a gênese.
-- **Diário:** eventos1/2 e fixtures200eventos permanecem inalterados. Evento3 acrescenta proposta GGUF. Evento5 acrescenta SpatialFrame: semente, intenções e trajetórias de30subpassos físicos por ciclo. Replays antigos preservam as regras anteriores; os novos não executam novamente o solver. Evento4 recebe CognitiveFrame com identidade do snapshot de origem, parâmetros LTC, Big Five, memória e decisões. Campos novos vazios/nulos são omitidos para preservar hashes antigos. Frames são copiados defensivamente, inclusive vetores internos. O replay recompõe e compara eventos em ator temporário antes de adotá-los; não exige backend nativo.
+- **Diário:** eventos1/2 e fixtures200eventos permanecem inalterados. Evento3 acrescenta proposta GGUF. Evento4 recebe CognitiveFrame com identidade do snapshot de origem, parâmetros LTC, Big Five, memória e decisões. Evento5 mantém o contrato espacial legado. Evento6 usa o mesmo envelope espacial para registrar ticks sob regras v6, que adicionam GOAP determinístico, construção em espiral e genealogia. Campos novos vazios/nulos são omitidos para preservar hashes antigos. Frames são copiados defensivamente, inclusive vetores internos. O replay recompõe e compara eventos em ator temporário antes de adotá-los; não exige backend nativo.
 - **Persistência:** SQLite schema2 acrescenta a tabela de marcos com snapshot integral/digest/hash do evento. A migração não reescreve registros antigos. Flashback verifica snapshot e vínculo ao diário; bifurcação copia o prefixo para outro banco e valida a cópia antes de trocar a linha ativa. Não se usa arquivo `world_snapshot.bin` separado. Diários completos são mantidos; poda segura requer futuro protocolo de âncoras e retenção histórica.
 - **JNI:** vértices32bytes (posição float3, quaternion float4, RGBA8); malhas e estados de cálculo usam DirectByteBuffer e validação de capacidades. Há upload CPU→GPU e cópias locais para alinhamento/validação; não se afirma ausência total de cópias.
 - **Renderer:** Filament1.56.0, PBR procedural e vidro separado, IBL com convolução difusa e prefiltragem GGX, sombras/SSAO/ACES/bloom/antialiasing. Passagem offscreen com acabamento próprio. Céu/clima são apresentação reprodutível, sem autoridade meteorológica sobre o mundo. Aparência, precisão do picking e ciclo de vida GPU ainda precisam de aparelho.
@@ -65,9 +65,9 @@ HNSW utiliza a opção upstream `HNSWLIB_USE_PREFETCH=0`. O caminho SSE de looka
 
 ## Pendências da especificação
 
-1. Recast/Detour, RVO2 completo, GPGOAP e navegação de múltiplos andares. Há implementação própria de A* e steering com colisores derivados da cena; sua execução não foi validada neste incremento.
-2. WFC/Earcut, distritos especializados, expansão urbana aberta e economia produtiva espacial. O núcleo ainda tem seis fundadores e teto de dez ambientes.
-3. Ciclo de vida reprodutivo, genealogia persistida, herança Big Five completa e mutação estrutural NEAT.
+1. Recast/Detour, RVO2 completo e navegação de múltiplos andares. Há A* e steering com colisores derivados da cena e, em regras6, planner GOAP/utility próprio de horizonte curto; GPGOAP não foi integrado como dependência.
+2. WFC ponderado em blocos17×17 com seis arquétipos de distrito, lotes em espiral e conectores cívicos nas bordas está integrado em regras6. Earcut/triangulação de polígonos urbanos, interiors em múltiplos andares e economia produtiva espacial permanecem pendentes. A geometria nativa ainda tem envelope de coordenadas e precisa de streaming por blocos para escala geográfica muito grande. O mundo começa com seis fundadores.
+3. Regras6 geram descendentes de pares com confiança recíproca, recombinam loci determinísticos, registram hash genético e árvore familiar no estado canônico e transmitem habilidades que já foram validadas como compartilháveis. Mortalidade, expectativa de vida, herança Big Five completa e mutação estrutural NEAT permanecem pendentes.
 4. Instituições/leis/comércio emergentes, linguagem com adoção social e geração GGUF livre validada.
 5. Reflexão neural e biblioteca de habilidades executáveis generalizáveis. Embeddings GGUF completos/HNSW da biblioteca foram integrados no incremento0.8; vetores de episódios continuam observacionais16D.
 6. RSI distrital/estrutural, treinamento LoRA e confirmação de um adaptador compatível real.
@@ -76,17 +76,56 @@ HNSW utiliza a opção upstream `HNSWLIB_USE_PREFETCH=0`. O caminho SSE de looka
 
 ## Física e pesquisa incorporadas após0.7
 
-- `physics/spatial.cpp`: grade de10cm, obstáculos construídos dos triângulos publicados da cidade, A*, verificação de segmentos, steering/reserva de espaço e circle-vs-AABB. Gravidade integra em1/60s,30subpassos por ciclo lógico. A dimensão da grade acompanha os limites da cena. Há cache por thread/revisão/seed e buffers JNI diretos.
-- `SpatialFrame`: entrada canônica5 vinculada ao hash do estado anterior, com caminho físico, apoio, velocidade vertical e intenção. O núcleo adota posições antes da arbitragem e a persistência continua precedendo a publicação. Campos vazios são omitidos dos estados e eventos anteriores.
+- `physics/spatial.cpp`: grade com resolução base de10cm e densidade adaptada para um orçamento de aproximadamente32MiB de índices, obstáculos construídos dos triângulos publicados da cidade, A*, verificação de segmentos, steering/reserva de espaço e circle-vs-AABB. Gravidade integra em1/60s,30subpassos por ciclo lógico. A dimensão da grade acompanha os limites da cena. Há cache por thread/revisão/seed e buffers JNI diretos.
+- `SpatialFrame`: entrada canônica5 no replay histórico e versão6 nas novas regras; ambos vinculam hash do estado anterior, caminho físico, apoio, velocidade vertical e intenção. O núcleo adota posições antes da arbitragem e a persistência continua precedendo a publicação. Campos vazios são omitidos dos estados e eventos anteriores.
 - `ContactShadows` e `contact_shadow.mat`: buffers compartilhados e instâncias por cidadão, transparência radial, escala/densidade moduladas pela distância ao apoio. Respiração preserva os pés; marcha depende da distância apresentada.
 - `research/` e banco schema4: currículo, aquisição HF imutável, quarentena, embeddings GGUF/HNSW, cache Range/mmap e estudo físico. Consulte `biblioteca.md`. O estudo aceita pontos de interação livres dentro da biblioteca no novo espaço físico, preservando a regra de proximidade nos estados legados.
 - Permanecem pendentes objetos soltos/empilhamento, andares arbitrários, resolução completa de impasses de multidão e os módulos dedicados Shizuku/DGM/OpenCL/treino LoRA.
 
 ## Validação e limites
 
-O pedido mais recente suspende testes, compilações e emulação nesta entrega. O workflow agora é manual e contém somente preparação e `assembleDebug`/`assembleRelease`; ele compila os materiais via matc56 fixado por SHA256. Os scripts de testes existentes foram mantidos para uso posterior, mas não executados. O estado de compilação e a correção em execução do código0.9 estão sem confirmação. A revisão desta alteração limitou-se à leitura de interfaces, contratos e diferenças de código.
+`.github/workflows/android-ci.yml` executa automaticamente em push/PR: toolchain Android/JDK/NDK fixada, compilação Filament1.56.0 por SHA256, `scripts/test-native.sh` (ASan/UBSan), `test` (suítes JVM de todos os módulos), `testDebugUnitTest`, `lintDebug`, `assembleDebug` e `assembleRelease`, com publicação dos APKs ARM64 em artefatos separados. A aprovação do workflow é a condição para afirmar sucesso da compilação; a existência do workflow ou de testes adicionados não é evidência de aprovação. O workflow manual `.github/workflows/android.yml` continua disponível. Não se inicia emulador. O Release do CI usa assinatura Android de desenvolvimento do runner e passa por apksigner verify; ela não substitui uma chave upload privada persistente para Play Store ou atualização de instalações anteriores.
 
 O host pode executar código de produção Kotlin/JNI para testar aprendizagem e Shadow-Replay sem Android. Isso não valida GPU, framework SQLite Android, SAF, AAudio/foco ou comportamento de aparelho. Instrumentação compilada não equivale a instrumentação executada. A meta60FPS não é uma medição. Os resultados exatos e hashes dos inputs/artefatos são mantidos no registro de validação do workspace, separado do repositório.
 
 
 <!-- /coderabbit-ai-generated:v1 -->
+
+## Formato GRS e áreas da interface
+
+- `GirassolRecordCodec` implementa .grs versão1 com header validado, SHA-256, Float32, INT8 delta-varint e ternário de2bits. `AdaptiveQuantizerEngine` seleciona por RMSE/bytes. O codec é puro e testado; migração da persistência SQLite/HNSW antiga e compressão Zstd não foram conectadas, portanto nenhum histórico é reescrito.
+- A navegação Compose organiza cinco áreas: Biosfera, Gênesis/Cidadãos, Pedidos/Biblioteca (intenções reais do diário), Hugging Face/Plugins (pesquisa atual) e Marcos/Laboratório/Sistema. A visualização da genealogia está na área Gênesis; o inbox exibe os pedidos de currículo que já existem no armazenamento.
+
+
+## Ingestão de documentos via Storage Access Framework
+
+O picker SAF permite selecionar TXT, Markdown, CSV, JSON e EPUB. A leitura ocorre no executor de pesquisa; EPUB é extraído de entradas XHTML/HTML com limite de expansão, e o texto é dividido em trechos compatíveis com o parser de datasets. Cada lote local é associado ao cidadão/ciclo, recebe SHA-256 e passa por `ResearchTables.acquire`, reutilizando o diário encadeado e a quarentena de duas revisões. A importação respeita o limite atual de2MiB por aquisição e até100 trechos; não reescreve snapshots nem eventos do mundo. PDF e áudio ainda não são aceitos, pois os extratores nativos pdftext/MediaExtractor+FFT da especificação ainda não foram implementados.
+
+
+## Ponte Shizuku (opt-in)
+
+O app usa o provider e a API Shizuku e um UserService AIDL dedicado. O app só solicita permissão depois do toque explícito do usuário; a conexão é independente do serviço principal. A implementação remota expõe apenas leitura de UID/PID, `/proc/meminfo`, `/sys/class/thermal/thermal_zone0/temp` e `/sys/block/zram0/mm_stat`. O Binder morto/desligado/negado limpa a conexão e mantém o fallback local. AIDL usa o transaction code reservado de `destroy()`. Não se usa `app_process` manual, root, escrita de `oom_score_adj`, MANAGE_EXTERNAL_STORAGE ou comandos shell arbitrários.
+
+## Anokhin, PAD, GNW e Kuramoto — evolução canônica v7
+
+### Fonte e estado persistente
+- cognitive/anokhin_gnw_core.hpp é um header C++20 puro e testável: HormonalState, AffectivePAD, AnokhinActionAcceptor, HumanSoulState e stepKuramotoEnsemble.
+- girassol_autonomy_jni.cpp exporta NativeAutonomy_advance. O contrato externo é um FloatArray com stride56/cidadão e IDs64bits únicos; não há layout Kotlin/C++ compartilhado. O JNI verifica dimensão1–4096, estado finito, faixas hormonais/PAD, dt e identidade duplicada antes da dinâmica.
+- SoulModel persiste em MindState e valida idade/saúde, apego, Big Five, cortisol/oxitocina/dopamina, PAD, previsão sensorial16D, erro, fase/frequência Kuramoto e ignição. Loci e estado somático são herdados com PRNG determinístico.
+- Observação sensorial inclui necessidades, saúde, coesão social, novidade, outcome, atividade/atuação, distância, vizinhança e sinais neuroquímicos. O aceitador recebe previsão criada a partir da ação escolhida; não é um modelo de mundo treinado ou um modelo fisiológico validado.
+
+### Ordem do tick
+1. NativeMind.evaluate prepara/inicializa o estado de cada cidadão e chama NativeAutonomy.evaluate.
+2. JNI compara previsão anterior com observação atual, calcula erro, avança EDOs em dt=1/60s, atualiza PAD e sigmoid de ignição, avança Kuramoto e retorna R e estado somático.
+3. LTC/Hebbian/Gumbel escolhe atividade com pequenos vieses de dopamina, oxitocina, prazer, cortisol e ignição. A decisão alimenta o próximo vetor sensorial esperado.
+4. CognitiveFrame.socialSynchrony carrega R; WorldActor valida e incorpora no mesmo evento espacial. Sob regras7, GNW/rituais e falas internas tornam-se artefatos determinísticos e dialogados, nunca mutações fora do escritor único.
+5. AAudio recebe R como parâmetro atômico e mistura as oito razões Trautonium com uma escala harmônica coletiva predefinida. O callback não bloqueia o tick nem conhece objetos de mundo.
+
+### Reflexão offline com GGUF
+Task::InnerSpeech é um modo separado de NativeCognition. Usa o mesmo lock de GGUF/LoRA, janela/timeout/cancelamento existentes, contexto CPU e GBNF de caracteres Unicode permitidos. A resposta é limitada no decoder a240 codepoints/512 bytes e64tokens. A chamada é assíncrona e de baixa prioridade; a reflexão só entra no frame/evento do tick posterior, com identidade do cidadão, e não pode chamar APIs ou comandos. Sem GGUF carregado, a reflexão não ocorre e LTC/GOAP seguem funcionando. É um único modelo residente sequencial, não dois modelos simultâneos.
+
+### Testabilidade e interpretação
+anokhin_gnw_core_test.cpp executa100.000 passos hormonais e40.000 passos de ensemble sob ASan/UBSan; testes Kotlin verificam estado herdado, limites de fala e replay de ritual v7. A fórmula de ignição é heurística; PAD é parametrização afetiva; R é sincronização de fase. Nenhuma quantidade mede consciência humana. O Ignition Index de sondas lineares de LLM em arXiv2608.05160 é outro constructo. Referências externas estão no README e são inspirações/hipóteses, não comprovação biológica.
+
+### Limites explícitos
+Não há TTS Kokoro/Piper empacotado, modelos de voz no APK, diarização multiparty, HRTF Steam Audio, occlusion/propagation ou medição de inteligibilidade/latência no dispositivo. O estéreo atual é panorama/síntese, não espacialização binaural real. A Steam Audio C API documenta Android ARM64 e efeitos binaurais por fonte com HRTF; ainda não foi incorporada como dependência. Também não há simulação hormonal clínica ou claim de consciência.

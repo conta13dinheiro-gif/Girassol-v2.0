@@ -47,17 +47,18 @@ import com.enhikyy.girassol.runtime.BiosphereUi
 import com.enhikyy.girassol.render.NativeProjection
 import com.enhikyy.girassol.render.FilamentWorldView
 import com.enhikyy.girassol.audio.AudioStatus
+import com.enhikyy.girassol.audio.NeuralSpeechEngine
 import com.enhikyy.girassol.cognition.CognitionStatus
 import java.util.Locale
 import kotlin.math.*
 
-private val Ink=Solar.Ink
-private val Muted=Solar.Muted
-private val Ground=Solar.Black
-private val Panel=Solar.Surface
-private val Gold=Solar.Amber
-private val Mint=Solar.Biosphere
-private val Line=Solar.Border
+private val Ink: Color get() = Solar.Ink
+private val Muted: Color get() = Solar.Muted
+private val Ground: Color get() = Solar.Black
+private val Panel: Color get() = Solar.Surface
+private val Gold: Color get() = Solar.Amber
+private val Mint: Color get() = Solar.Biosphere
+private val Line: Color get() = Solar.Border
 private fun percent(v: Double) = "${(v * 100).roundToInt()}%"
 private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%.2f", v)
 
@@ -65,7 +66,9 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 @Composable fun GirassolApp(ui: BiosphereUi, onToggle: () -> Unit, onSpeed: () -> Unit,
     sound: AudioStatus, onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
-    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit) {
+    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit,
+    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit,
+    onImportDocument: () -> Unit) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -76,8 +79,22 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     var economy by rememberSaveable { mutableStateOf(false) }
     var renderError by remember { mutableStateOf<String?>(null) }
     var historical by remember { mutableStateOf<WorldState?>(null) }
-    var systemSection by rememberSaveable { mutableIntStateOf(0) }
     var historySection by rememberSaveable { mutableIntStateOf(0) }
+    var architectureSection by rememberSaveable { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    var visualTheme by rememberSaveable {
+        mutableStateOf(runCatching {
+            GirassolVisualTheme.valueOf(
+                context.getSharedPreferences("girassol_visual", 0)
+                    .getString("theme", GirassolVisualTheme.OLED_KODAK_70MM.name)!!
+            )
+        }.getOrDefault(GirassolVisualTheme.OLED_KODAK_70MM))
+    }
+    val selectVisualTheme: (GirassolVisualTheme) -> Unit = { selectedTheme ->
+        visualTheme = selectedTheme
+        context.getSharedPreferences("girassol_visual", 0).edit()
+            .putString("theme", selectedTheme.name).apply()
+    }
     val research by com.enhikyy.girassol.research.ResearchHub.state.collectAsStateWithLifecycle()
     val world=historical ?: ui.world
     val selected=world?.agents?.firstOrNull { it.id==selectedId }
@@ -85,7 +102,57 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     androidx.activity.compose.BackHandler(cinema || tab!=0 || selectedId!=null) {
         when { selectedId!=null->selectedId=null; cinema->cinema=false; else->tab=0 }
     }
-    GirassolTheme {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+    GirassolTheme(theme = visualTheme) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = !cinema,
+            drawerContent = {
+                ModalDrawerSheet(drawerContainerColor = Solar.Surface) {
+                    Text("GIRASSOL", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 6.dp),
+                        color = Solar.Amber, style = MaterialTheme.typography.titleLarge)
+                    Text("NAVEGAÇÃO", Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                        color = Solar.Muted, style = MaterialTheme.typography.labelSmall)
+                    listOf("Biosfera", "Cidadãos", "Arquiteto", "Sistema").forEachIndexed { index, label ->
+                        NavigationDrawerItem(
+                            label = { Text(label) },
+                            selected = tab == index,
+                            onClick = {
+                                tab = index
+                                drawerScope.launch { drawerState.close() }
+                            },
+                            icon = {
+                                Icon(
+                                    when (index) {
+                                        0 -> Icons.Outlined.Public
+                                        1 -> Icons.Outlined.PeopleOutline
+                                        2 -> Icons.Outlined.AccountTree
+                                        else -> Icons.Outlined.Tune
+                                    }, null
+                                )
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                    Text("APARÊNCIA · 15 PALETAS", Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                        color = Solar.Muted, style = MaterialTheme.typography.labelSmall)
+                    GirassolVisualTheme.entries.forEach { option ->
+                        NavigationDrawerItem(
+                            label = { Text(option.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            selected = visualTheme == option,
+                            onClick = {
+                                selectVisualTheme(option)
+                                drawerScope.launch { drawerState.close() }
+                            },
+                            icon = { Icon(Icons.Outlined.Palette, null) },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    }
+                }
+            }
+        ) {
         Box(Modifier.fillMaxSize().background(Solar.Black)) {
             if(world!=null) {
                 if(!tactical && renderError==null) {
@@ -105,7 +172,13 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 if(!cinema) {
                     Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.verticalGradient(listOf(Solar.Black.copy(alpha=.94f),Color.Transparent))))
                     Box(Modifier.fillMaxWidth().height(180.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent,Solar.Black.copy(alpha=.94f)))))
-                    CompactHud(ui.copy(world=world,running=ui.running && historical==null),cognition,{ if(historical==null) onToggle() },{ if(historical==null) onSpeed() },Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal=14.dp,vertical=8.dp))
+                    CompactHud(
+                        ui.copy(world=world,running=ui.running && historical==null), cognition,
+                        { if(historical==null) onToggle() }, { if(historical==null) onSpeed() },
+                        onThemeSelected = selectVisualTheme,
+                        onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal=14.dp,vertical=8.dp)
+                    )
                     if(historical!=null) {
                         FilledTonalButton(onClick={ historical=null },modifier=Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top=154.dp,end=14.dp)) { Text("Flashback · voltar ao presente") }
                     }
@@ -129,33 +202,43 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     } else {
                         SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start=10.dp,end=10.dp,bottom=92.dp).fillMaxWidth().fillMaxHeight(.72f)) {
                             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                                Text(listOf("","Cidadãos & sociedade","História viva","Sistema & cognição")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
+                                Text(listOf("Biosfera","Cidadãos","Arquiteto","Sistema")[tab],style=MaterialTheme.typography.titleLarge,modifier=Modifier.weight(1f))
                                 IconButton(onClick={ tab=0 }) { Icon(Icons.Outlined.Close,"Voltar ao mundo") }
                             }
                             when(tab) {
-                                1->Citizens(world,Modifier.weight(1f)) { selectedId=it }
-                                2->{
-                                    TabRow(historySection,containerColor=Color.Transparent) {
-                                        listOf("Marcos","Cultura").forEachIndexed { i,label-> Tab(historySection==i,{ historySection=i },text={ Text(label) }) }
+                                1 -> Citizens(world, Modifier.weight(1f)) { selectedId = it }
+                                2 -> {
+                                    TabRow(architectureSection, containerColor = Color.Transparent) {
+                                        listOf("Pedidos", "Biblioteca", "Plugins").forEachIndexed { i, label ->
+                                            Tab(architectureSection == i, { architectureSection = i }, text = { Text(label) })
+                                        }
                                     }
-                                    if(historySection==0) Timeline(ui.world ?: world,Modifier.weight(1f)) { historical=it; selectedId=null; tab=0 }
-                                    else Culture(world,Modifier.weight(1f))
+                                    when (architectureSection) {
+                                        0 -> ResearchRequests(Modifier.weight(1f))
+                                        1 -> if (historical == null) ResearchLibrary(Modifier.weight(1f))
+                                            else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.", Modifier.padding(16.dp), color = Solar.Muted)
+                                        else -> PluginsPage(Modifier.weight(1f))
+                                    }
                                 }
-                                3->{
-                                    TabRow(systemSection,containerColor=Color.Transparent) {
-                                        listOf("Sistema & RSI","Biblioteca").forEachIndexed { i,label->Tab(systemSection==i,{ systemSection=i },text={ Text(label) }) }
+                                3 -> {
+                                    TabRow(historySection, containerColor = Color.Transparent) {
+                                        listOf("Marcos", "Cultura", "Sistema").forEachIndexed { i, label ->
+                                            Tab(historySection == i, { historySection = i }, text = { Text(label) })
+                                        }
                                     }
-                                    if(systemSection==0) SystemPage(ui,Modifier.weight(1f),sound,onSound,onVolume,cognition,onImportModel,onRemoveModel,onInfer,onCancelInference,onAutomaticInference,onImportAdapter,onRemoveAdapter)
-                                    else if(historical==null) ResearchLibrary(Modifier.weight(1f))
-                                    else Text("Biblioteca do presente indisponível durante o flashback. Volte ao presente para consultar a pesquisa.",Modifier.padding(16.dp),color=Solar.Muted)
+                                    when(historySection) {
+                                        0 -> Timeline(ui.world ?: world, Modifier.weight(1f)) { historical = it; selectedId = null; tab = 0 }
+                                        1 -> Culture(world, Modifier.weight(1f))
+                                        else -> SystemPage(ui, Modifier.weight(1f), sound, onSound, onVolume, cognition, onImportModel, onRemoveModel, onInfer, onCancelInference, onAutomaticInference, onImportAdapter, onRemoveAdapter, onImportReviewerModel, onRemoveReviewerModel, onImportDocument)
+                                    }
                                 }
                             }
                         }
                     }
                     SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
-                            listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
+                            val icons = listOf(Icons.Outlined.Public, Icons.Outlined.PeopleOutline, Icons.Outlined.AccountTree, Icons.Outlined.Tune)
+                            listOf("Biosfera", "Cidadãos", "Arquiteto", "Sistema").forEachIndexed { i,label->
                                 Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
                                     Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
@@ -220,9 +303,19 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         if(economy && world!=null) ModalBottomSheet(onDismissRequest={ economy=false },containerColor=Solar.Surface) {
             Economy(world,Modifier.fillMaxWidth().fillMaxHeight(.82f))
         }
+        }
     }
 }
-@Composable private fun CompactHud(ui: BiosphereUi,cognition: CognitionStatus,onToggle: ()->Unit,onSpeed: ()->Unit,modifier: Modifier) {
+@Composable private fun CompactHud(
+    ui: BiosphereUi,
+    cognition: CognitionStatus,
+    onToggle: () -> Unit,
+    onSpeed: () -> Unit,
+    onThemeSelected: (GirassolVisualTheme) -> Unit,
+    onOpenDrawer: () -> Unit,
+    modifier: Modifier
+) {
+    var paletteMenu by rememberSaveable { mutableStateOf(false) }
     val w=ui.world!!
     val metrics=remember(w.tick) { w.telemetry() }
     val minutes=(w.tick+461)%1440
@@ -239,6 +332,23 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             }
             Spacer(Modifier.width(10.dp))
             FilledIconButton(onClick=onToggle,modifier=Modifier.size(34.dp),shape=RoundedCornerShape(11.dp)) { Icon(if(ui.running) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,if(ui.running) "Pausar" else "Continuar",Modifier.size(20.dp)) }
+            Box {
+                IconButton(onClick = { paletteMenu = true }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Outlined.Palette, "Selecionar paleta", Modifier.size(19.dp), tint = Solar.Amber)
+                }
+                DropdownMenu(expanded = paletteMenu, onDismissRequest = { paletteMenu = false }) {
+                    GirassolVisualTheme.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.label) },
+                            leadingIcon = { Icon(Icons.Outlined.Palette, null) },
+                            onClick = { onThemeSelected(option); paletteMenu = false }
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = onOpenDrawer, modifier = Modifier.size(34.dp)) {
+                Icon(Icons.Outlined.Menu, "Abrir navegação", Modifier.size(19.dp), tint = Solar.Amber)
+            }
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
             Box(Modifier.size(5.dp).background(if(cognition.model!=null) Solar.Cognitive else Solar.Biosphere,CircleShape)); Spacer(Modifier.width(6.dp))
@@ -272,13 +382,69 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 
 @Composable private fun Citizens(world: WorldState, modifier: Modifier, select: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    NeuralSpeechEngine.initialize(context)
+    val speechStatus by NeuralSpeechEngine.state.collectAsStateWithLifecycle()
     val agents = world.agents.filter { it.name.contains(query, true) || it.lineage.contains(query, true) }
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item { PageHeading("INDIVÍDUOS, HISTÓRIAS E VÍNCULOS", "Quem habita este mundo", "Cada habitante tem necessidades, experiências e um perfil genético próprio.") }
         item { OutlinedTextField(query, { query = it }, label = { Text("Buscar nome ou linhagem") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), leadingIcon = { Icon(Icons.Outlined.Search, null) }) }
         if (agents.isEmpty()) item { Text("Nenhum habitante encontrado.", color = Muted) }
         items(agents, key = { it.id }) { a ->
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) { AgentRow(a, select); Spacer(Modifier.height(14.dp)); NeedsBars(a.needs); Spacer(Modifier.height(12.dp)); Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp) }
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp)) {
+                AgentRow(a, select)
+                Spacer(Modifier.height(14.dp))
+                NeedsBars(a.needs)
+                Spacer(Modifier.height(12.dp))
+                Text("${a.memories.size} memórias · geração ${a.genome.generation}", color = Muted, fontSize = 10.sp)
+                world.minds[a.id]?.psyche?.let { soul ->
+                    Text(
+                        "PAD ${"%.2f".format(soul.pleasure)} / ${"%.2f".format(soul.arousal)} / ${"%.2f".format(soul.dominance)} · cortisol ${"%.2f".format(soul.cortisol)} · oxitocina ${"%.2f".format(soul.oxytocin)}",
+                        color=Muted,fontSize=9.sp
+                    )
+                    Text(
+                        "GNW ${(soul.ignitionIndex*100).toInt()}% · erro ARD ${"%.2f".format(soul.lastPredictionError)} · vínculo ${soul.attachment.name.lowercase()}",
+                        color=if(soul.ignitionIndex>.65) Solar.Amber else Muted,fontSize=9.sp
+                    )
+                }
+                world.artifacts.lastOrNull { it.author==a.id && it.title=="Fala interna" }?.let { thought ->
+                    Column(verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                        Text("REFLEXÃO PRIVADA · ${thought.text}",color=Solar.Cognitive,fontSize=10.sp)
+                        OutlinedButton(
+                            enabled=speechStatus.installed && !speechStatus.busy,
+                            onClick={
+                                runCatching {
+                                    NeuralSpeechEngine.speak(
+                                        thought.text,
+                                        voiceId=speechStatus.voiceId,
+                                        pan=((a.x-a.z)/30.0).toFloat().coerceIn(-1f,1f)
+                                    )
+                                }.onFailure {
+                                    android.widget.Toast.makeText(context,it.message ?: "Falha na síntese de voz",android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        ) { Text("Ouvir reflexão") }
+                    }
+                }
+            }
+        }
+        if (world.genealogy.isNotEmpty()) {
+            item { SectionTitle("Genealogia", "${world.genealogy.size} nascimentos registrados") }
+            items(world.genealogy.asReversed(), key = { it.child }) { family ->
+                val child = world.agents.firstOrNull { it.id == family.child }
+                val parentOne = world.agents.firstOrNull { it.id == family.parentOne }
+                val parentTwo = world.agents.firstOrNull { it.id == family.parentTwo }
+                if (child != null && parentOne != null && parentTwo != null) {
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { select(child.id) }.padding(16.dp)
+                    ) {
+                        Text(child.name, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Text("${parentOne.name} + ${parentTwo.name}", color = Gold, fontSize = 12.sp)
+                        Text("Geração ${child.genome.generation} · ciclo ${family.tick}", color = Muted, fontSize = 10.sp)
+                        Text("Genoma SHA-256 · ${family.genomeHash.take(16)}…", color = Muted, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
         }
     }
 }
@@ -326,18 +492,38 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 @Composable private fun SystemPage(ui: BiosphereUi, modifier: Modifier, sound: AudioStatus,
     onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
-    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit) {
+    onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit,
+    onImportReviewerModel: ()->Unit,onRemoveReviewerModel: ()->Unit,
+    onImportDocument: () -> Unit) {
     val w=ui.world!!; val t=w.telemetry()
     val context=LocalContext.current.applicationContext
     val scope=rememberCoroutineScope()
+    var hardwareReport by remember { mutableStateOf<com.enhikyy.girassol.hardware.DeviceHardwareReport?>(null) }
+    LaunchedEffect(context) { hardwareReport = withContext(Dispatchers.IO) { com.enhikyy.girassol.hardware.HardwareAutoTuner.probe(context) } }
     var auditing by remember { mutableStateOf(false) }
     var auditResult by rememberSaveable { mutableStateOf<String?>(null) }
     LazyColumn(modifier.fillMaxSize(), contentPadding=PaddingValues(22.dp), verticalArrangement=Arrangement.spacedBy(22.dp)) {
         item { PageHeading("TRANSPARÊNCIA DO ECOSSISTEMA", "Por dentro da biosfera", "Estado real da simulação, integridade e recursos do dispositivo.") }
+        item { MeshSyncPanel(context) }
+        item {
+            SectionTitle("Biblioteca offline · TXT / EPUB / PDF / Parquet")
+            Text("Importe documentos locais para a memória de pesquisa dos cidadãos.", color=Muted, fontSize=11.sp)
+            OutlinedButton(onClick=onImportDocument) { Text("Importar documento") }
+        }
         item {
             SectionTitle("Cognição local · GGUF")
             Text(cognition.model ?: "Nenhum modelo instalado", color=Gold, fontSize=12.sp)
             Text(cognition.message, color=Muted, fontSize=11.sp)
+            Text(cognition.reviewerModel ?: "Verificador: usando o GGUF principal sequencialmente",
+                color=Solar.Cognitive, fontSize=11.sp)
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(enabled=!cognition.busy && cognition.model!=null, onClick=onImportReviewerModel) {
+                    Text("Importar GGUF revisor", fontSize=11.sp)
+                }
+                if(cognition.reviewerModel!=null) TextButton(enabled=!cognition.busy, onClick=onRemoveReviewerModel) {
+                    Text("Remover revisor", fontSize=11.sp)
+                }
+            }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled=!cognition.busy, onClick=onImportModel) { Text("Importar GGUF", fontSize=11.sp) }
                 if (cognition.model != null) TextButton(enabled=!cognition.busy, onClick=onRemoveModel) { Text("Remover", fontSize=11.sp) }
@@ -399,7 +585,26 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 }
             }
         }
+        item {
+            SectionTitle("Auto-detecção de hardware")
+            val report = hardwareReport
+            if (report == null) Text("Lendo SoC, ABI, RAM e renderer gráfico…", color=Muted, fontSize=11.sp)
+            else {
+                KeyValue("Fabricante / SoC", "${report.socVendor} · ${report.socModel}")
+                KeyValue("Dispositivo", "${report.manufacturer} ${report.model}")
+                KeyValue("Arquitetura / ABI", "${report.architecture} · ${report.primaryAbi}")
+                KeyValue("ABIs suportadas", report.supportedAbis.joinToString())
+                KeyValue("GPU / renderer", report.gpuRenderer)
+                KeyValue("RAM física / CPUs visíveis", String.format(Locale.ROOT, "%.1f GB · %d", report.totalRamGb, report.logicalCpuCount))
+                KeyValue("Biblioteca OpenCL", if (report.openClLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrada nos caminhos padrão")
+                KeyValue("Loader Vulkan", if (report.vulkanLibraryFileFound) "Arquivo presente (não carregado)" else "Não encontrado nos caminhos padrão")
+                KeyValue("Backend GGUF neste build", "CPU · llama.cpp")
+                Text("Diagnóstico informativo. Encontrar uma biblioteca não comprova driver funcional; este build ainda não ativa seleção dinâmica OpenCL/Vulkan nem KleidiAI.", color=Muted, fontSize=10.sp)
+            }
+        }
         item { SectionTitle("Dispositivo"); Spacer(Modifier.height(12.dp)); KeyValue("Memória disponível", "${ui.availableMb} MB"); KeyValue("Estado térmico", when { ui.thermal >= 3 -> "Carga reduzida"; ui.thermal > 0 -> "Aquecendo"; else -> "Normal" }); KeyValue("Operação", if(ui.running) "Serviço ativo" else "Pausada"); Text("O Android pode encerrar o processo. Cada ciclo concluído é salvo antes de aparecer na interface.", color=Muted, fontSize=11.sp) }
+        item { SectionTitle("Voz neural offline"); Spacer(Modifier.height(10.dp)); NeuralSpeechPanel() }
+        item { SectionTitle("Shizuku · telemetria de sistema"); Spacer(Modifier.height(10.dp)); ShizukuPanel() }
         item {
             SectionTitle("Recursos do mercado"); Spacer(Modifier.height(12.dp))
             w.initialTotals.forEach { (item, total) ->
@@ -410,6 +615,46 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         }
     }
 }
+@Composable private fun MeshSyncPanel(context: android.content.Context) {
+    val sync = remember(context) { com.enhikyy.girassol.runtime.MeshSyncLan(context) }
+    val peers by sync.peers.collectAsStateWithLifecycle()
+    val status by sync.status.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var passphrase by rememberSaveable { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    DisposableEffect(sync) { onDispose { sync.close() } }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle("MeshSync LAN · migração autenticada")
+        Text("Descobre aparelhos na mesma rede por NSD/UDP. Compartilha snapshots .grs com HMAC-SHA256; a importação valida o SQLite antes de ativar a nova linha de cidadãos.", color=Muted, fontSize=11.sp)
+        OutlinedTextField(value=passphrase,onValueChange={ passphrase=it },label={ Text("Chave compartilhada (mín. 12 bytes)") },
+            singleLine=true,modifier=Modifier.fillMaxWidth())
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Button(enabled=passphrase.toByteArray().size>=12 && !working,onClick={
+                runCatching { sync.start(passphrase) }.onFailure { /* status is shown below */ }
+            }) { Text("Ativar descoberta") }
+            OutlinedButton(onClick={ sync.stop() }) { Text("Desconectar") }
+        }
+        Text(status,color=Gold,fontSize=11.sp)
+        if(peers.isEmpty()) Text("Nenhum aparelho pareado encontrado ainda.",color=Muted,fontSize=11.sp)
+        peers.forEach { peer ->
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(peer.id,fontSize=12.sp,color=Ink)
+                    Text("${peer.host}:${peer.port}",fontSize=10.sp,color=Muted)
+                }
+                OutlinedButton(enabled=!working,onClick={
+                    working=true
+                    scope.launch {
+                        try { withContext(Dispatchers.IO) { sync.sendSnapshot(peer) } }
+                        catch (error: Exception) { /* status surface below reflects transport state */ }
+                        finally { working=false }
+                    }
+                }) { Text(if(working) "Enviando…" else "Migrar") }
+            }
+        }
+    }
+}
+
 @Composable private fun SoundControl(sound: AudioStatus, onSound: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(if (sound.enabled) Icons.AutoMirrored.Outlined.VolumeUp else Icons.AutoMirrored.Outlined.VolumeOff, null, tint = Gold, modifier = Modifier.size(23.dp))

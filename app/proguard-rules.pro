@@ -12,6 +12,10 @@
 -keepclasseswithmembernames class com.enhikyy.girassol.cognition.NativeCognition {
     native <methods>;
 }
+
+-keepclasseswithmembernames class com.enhikyy.girassol.cognition.NativeAutonomy {
+    native <methods>;
+}
 -keep class com.enhikyy.girassol.cognition.NativeMind { *; }
 
 -keep class com.enhikyy.girassol.cognition.NativeMemory { *; }
@@ -22,3 +26,7 @@
 -keep class com.enhikyy.girassol.research.NonRootSwapArena { *; }
 
 -keep class com.enhikyy.girassol.physics.NativeSpatial { *; }
+
+# Shizuku loads this service by class name from a separate shell/root process.
+-keep class com.enhikyy.girassol.privileged.TelemetryUserService { public <init>(); }
+-keep interface com.enhikyy.girassol.privileged.IShizukuTelemetry { *; }
