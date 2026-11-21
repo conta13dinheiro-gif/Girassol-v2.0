@@ -15,7 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.googlefonts.Font as DownloadableFont
 import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.googlefonts.GoogleFont.Provider
-import androidx.compose.ui.text.googlefonts.R as GoogleFontsR
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -88,7 +87,7 @@ object GirassolFontRegistry {
     private val provider = Provider(
         providerAuthority = "com.google.android.gms.fonts",
         providerPackage = "com.google.android.gms",
-        certificates = GoogleFontsR.array.com_google_android_gms_fonts_certs
+        certificates = R.array.com_google_android_gms_fonts_certs
     )
     fun family(name: String): FontFamily = embeddedFontResources[name]?.let { FontFamily(ResourceFont(it, weight = FontWeight.Normal)) } ?: FontFamily(DownloadableFont(googleFont = GoogleFont(name), fontProvider = provider))
     fun names(category: FontCategory): List<String> = categoryNames[category].orEmpty()
