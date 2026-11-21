@@ -6,7 +6,7 @@
 
 # Girassol v2.0
 
-Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão de distribuição deste incremento é **0.9.0**. A arquitetura ARM64 não exige conta, rede ou modelo para a simulação local. Este incremento de física ainda não foi compilado ou executado, por orientação do usuário.
+Simulação local para **Android 13+ (API 33)**, pacote `com.enhikyy.girassol`. Interface Jetpack Compose, apresentação Google Filament e componentes nativos C++/JNI. A versão-alvo desta refatoração é **3.1.0**. A arquitetura ARM64 não exige conta, rede ou modelo para a simulação local. Este incremento de física ainda não foi compilado ou executado, por orientação do usuário.
 
 ## Compilação manual
 
@@ -28,6 +28,13 @@ As suítes JVM/nativas/instrumentadas permanecem no código para execução futu
 - Toque no habitante ou edifício para inspeção; arraste para orbitar, pinça para zoom e gesto de dois dedos para translação. A câmera tem amortecimento, inércia e acompanhamento de habitantes.
 - Economia mostra saldos efetivos, contas de consumo/arquivo/estruturas e distribuição das atividades; não inventa séries históricas.
 - Marcos surgem de construções, práticas comprovadas, primeira obra, crises, início da cognição, políticas promovidas e dias concluídos. Flashback carrega o estado integral verificado; bifurcação copia o prefixo do diário para um banco independente. Sistema permite voltar à linha original.
+
+## Design system Liquid Glass · Tipografia 3.1.0
+
+- `GirassolFontRegistry` registra mais de 320 famílias pesquisáveis, seis presets IA e sete categorias; 32 arquivos TTF com licenças OFL são empacotados em `app/src/main/res/font/` para a primeira inicialização offline.
+- Preferências de Interface, Chat, Editorial, Telemetria, escala, entrelinha, números tabulares e tema são persistidas pelo DataStore. O seletor apresenta cada fonte com amostra tipográfica; fontes fora do conjunto local são resolvidas pelo provedor Google Fonts e dependem da disponibilidade do provedor/rede no primeiro uso.
+- Quinze paletas OLED usam o padrão Kodak 70mm como identidade; testes unitários verificam contraste de texto, acentos e telemetria.
+- `LiquidGlassSurface` aplica camadas translúcidas, gradiente especular e borda fina. Limite conhecido: o Compose padrão não oferece amostragem de backdrop da cena Filament; este componente não finge produzir refração óptica nem blur real do conteúdo 3D atrás do painel.
 
 ## Apresentação nativa
 
