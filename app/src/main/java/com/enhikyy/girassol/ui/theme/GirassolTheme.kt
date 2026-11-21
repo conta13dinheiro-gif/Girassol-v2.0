@@ -13,6 +13,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +28,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.enhikyy.girassol.ui.typography.GirassolFontRegistry
@@ -102,13 +105,16 @@ fun GirassolTheme(
     }
     val scale = fontScale.coerceIn(.85f,1.30f)
     val line = lineHeightScale.coerceIn(1.2f,1.8f)
+    val baseDensity = LocalDensity.current
+    val scaledDensity = remember(baseDensity, scale) { Density(baseDensity.density, baseDensity.fontScale * scale) }
     val typography = Typography(
-        headlineLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 30.sp * scale, lineHeight = 30.sp * scale * line, fontWeight = FontWeight.SemiBold, letterSpacing = (-.8).sp),
-        titleLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 21.sp * scale, lineHeight = 21.sp * scale * line, fontWeight = FontWeight.SemiBold),
-        bodyLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 15.sp * scale, lineHeight = 15.sp * scale * line),
-        bodyMedium = TextStyle(fontFamily = interfaceFamily, fontSize = 14.sp * scale, lineHeight = 14.sp * scale * line),
-        labelMedium = TextStyle(fontFamily = metricFamily, fontSize = 12.sp * scale, lineHeight = 12.sp * scale * line, fontFeatureSettings = if(tabularNumbers) "tnum" else "")
+        headlineLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 30.sp, lineHeight = 30.sp * line, fontWeight = FontWeight.SemiBold, letterSpacing = (-.8).sp),
+        titleLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 21.sp, lineHeight = 21.sp * line, fontWeight = FontWeight.SemiBold),
+        bodyLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 15.sp, lineHeight = 15.sp * line),
+        bodyMedium = TextStyle(fontFamily = interfaceFamily, fontSize = 14.sp, lineHeight = 14.sp * line),
+        labelMedium = TextStyle(fontFamily = metricFamily, fontSize = 12.sp, lineHeight = 12.sp * line, fontFeatureSettings = if(tabularNumbers) "tnum" else "")
     )
+    CompositionLocalProvider(LocalDensity provides scaledDensity) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = palette.amber, onPrimary = palette.background, secondary = palette.biosphere,
@@ -119,6 +125,7 @@ fun GirassolTheme(
         typography = typography,
         content = content
     )
+    }
 }
 
 /** Frosted layered surface; Android RenderEffect blur is intentionally not applied to child content as a substitute for backdrop blur. */
