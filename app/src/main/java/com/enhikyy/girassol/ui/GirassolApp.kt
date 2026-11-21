@@ -57,13 +57,13 @@ import com.enhikyy.girassol.cognition.CognitionStatus
 import java.util.Locale
 import kotlin.math.*
 
-private val Ink=Solar.Ink
-private val Muted=Solar.Muted
-private val Ground=Solar.Black
-private val Panel=Solar.Surface
-private val Gold=Solar.Amber
-private val Mint=Solar.Biosphere
-private val Line=Solar.Border
+private val Ink get() = Solar.Ink
+private val Muted get() = Solar.Muted
+private val Ground get() = Solar.Black
+private val Panel get() = Solar.Surface
+private val Gold get() = Solar.Amber
+private val Mint get() = Solar.Biosphere
+private val Line get() = Solar.Border
 private fun percent(v: Double) = "${(v * 100).roundToInt()}%"
 private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%.2f", v)
 
