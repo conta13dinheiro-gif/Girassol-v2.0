@@ -37,6 +37,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +54,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
     var query by rememberSaveable { mutableStateOf("") }
     var categoryTab by rememberSaveable { mutableIntStateOf(0) }
     var scope by rememberSaveable { mutableStateOf(FontScope.INTERFACE) }
+    val haptics = LocalHapticFeedback.current
     val categories = GirassolFontRegistry.categories
     val visibleFonts = remember(categoryTab, query) {
         val source = if (categoryTab == 0) emptyList() else GirassolFontRegistry.catalog.filter { it.category == categories[categoryTab - 1] }
@@ -70,14 +75,14 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
             }
             Text("PRESETS DE IA", color = Color(0xFFE89B48), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                GirassolFontRegistry.presets.take(3).forEach { preset -> AssistChip(onClick = { onSettingsChange(settings.applyPreset(preset)) }, label = { Text(preset.label, fontSize = 10.sp) }) }
+                GirassolFontRegistry.presets.take(3).forEach { preset -> AssistChip(onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.applyPreset(preset)) }, label = { Text(preset.label, fontSize = 10.sp) }) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 GirassolFontRegistry.presets.drop(3).forEach { preset -> AssistChip(onClick = { onSettingsChange(settings.applyPreset(preset)) }, label = { Text(preset.label, fontSize = 10.sp) }) }
             }
             Text("TEMAS OLED · 15", color = Color(0xFFE89B48), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 7.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                GirassolThemePalette.all.forEach { palette -> FilterChip(selected = settings.themeIndex == palette.index, onClick = { onSettingsChange(settings.copy(themeIndex = palette.index)) }, label = { Text(palette.name, fontSize = 10.sp) }) }
+                GirassolThemePalette.all.forEach { palette -> FilterChip(selected = settings.themeIndex == palette.index, onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.copy(themeIndex = palette.index)) }, label = { Text(palette.name, fontSize = 10.sp) }) }
             }
             OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true, label = { Text("Buscar fonte por nome") }, placeholder = { Text("Newsreader, Inter, JetBrains Mono…") })
             TabRow(selectedTabIndex = categoryTab, containerColor = Color.Transparent, edgePadding = 0.dp) {
@@ -99,6 +104,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
                                 FontScope.EDITORIAL -> settings.copy(editorialFont = entry.name)
                                 FontScope.TELEMETRY -> settings.copy(telemetryFont = entry.name)
                             }
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSettingsChange(updated)
                         }.background(if (active == entry.name) Color(0xFF17232B) else Color.Transparent, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -118,7 +124,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
             Slider(value = settings.lineHeightScale, onValueChange = { onSettingsChange(settings.copy(lineHeightScale = it)) }, valueRange = 1.2f..1.8f)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text("Números tabulares", color = Color(0xFFF5F2EC), fontSize = 13.sp); Text("tnum · relógios, coordenadas e telemetria", color = Color(0xFFA8B3BF), fontSize = 10.sp) }
-                Switch(checked = settings.tabularNumbers, onCheckedChange = { onSettingsChange(settings.copy(tabularNumbers = it)) })
+                Switch(checked = settings.tabularNumbers, onCheckedChange = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.copy(tabularNumbers = it)) }, modifier = Modifier.semantics { contentDescription = "Ativar números tabulares para métricas" })
             }
             Spacer(Modifier.height(24.dp))
         }
