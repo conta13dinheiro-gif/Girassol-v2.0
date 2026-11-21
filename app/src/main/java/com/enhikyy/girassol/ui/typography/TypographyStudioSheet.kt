@@ -25,7 +25,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -86,7 +86,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
                 GirassolThemePalette.all.forEach { palette -> FilterChip(selected = settings.themeIndex == palette.index, onClick = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.copy(themeIndex = palette.index)) }, label = { Text(palette.name, fontSize = 10.sp) }) }
             }
             OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true, label = { Text("Buscar fonte por nome") }, placeholder = { Text("Newsreader, Inter, JetBrains Mono…") })
-            TabRow(selectedTabIndex = categoryTab, containerColor = Color.Transparent, edgePadding = 0.dp) {
+            ScrollableTabRow(selectedTabIndex = categoryTab, containerColor = Color.Transparent, edgePadding = 0.dp) {
                 Tab(selected = categoryTab == 0, onClick = { categoryTab = 0 }, text = { Text("Presets", fontSize = 10.sp) })
                 categories.forEachIndexed { index, category -> Tab(selected = categoryTab == index + 1, onClick = { categoryTab = index + 1 }, text = { Text(category.title, fontSize = 9.sp, maxLines = 1) }) }
             }
