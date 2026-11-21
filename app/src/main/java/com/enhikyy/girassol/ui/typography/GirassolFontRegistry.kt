@@ -1,5 +1,7 @@
 package com.enhikyy.girassol.ui.typography
 
+import com.enhikyy.girassol.R
+
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -46,12 +48,48 @@ object GirassolFontRegistry {
         AiFontPreset("kimi", "Kimi", "Urbanist", "Atkinson Hyperlegible", "Space Mono")
     )
     val categories = FontCategory.entries
+    val embeddedFontResources: Map<String, Int> = mapOf(
+        "Inter" to R.font.inter,
+        "Plus Jakarta Sans" to R.font.plus_jakarta_sans,
+        "DM Sans" to R.font.dm_sans,
+        "Work Sans" to R.font.work_sans,
+        "Newsreader" to R.font.newsreader,
+        "Lora" to R.font.lora,
+        "Instrument Serif" to R.font.instrument_serif,
+        "Fraunces" to R.font.fraunces,
+        "Space Grotesk" to R.font.space_grotesk,
+        "Schibsted Grotesk" to R.font.schibsted_grotesk,
+        "Libre Baskerville" to R.font.libre_baskerville,
+        "Spectral" to R.font.spectral,
+        "Archivo" to R.font.archivo,
+        "Outfit" to R.font.outfit,
+        "Manrope" to R.font.manrope,
+        "Figtree" to R.font.figtree,
+        "Rubik" to R.font.rubik,
+        "Quicksand" to R.font.quicksand,
+        "Nunito Sans" to R.font.nunito_sans,
+        "IBM Plex Sans" to R.font.ibm_plex_sans,
+        "IBM Plex Mono" to R.font.ibm_plex_mono,
+        "Fira Code" to R.font.fira_code,
+        "Roboto Mono" to R.font.roboto_mono,
+        "Urbanist" to R.font.urbanist,
+        "Sora" to R.font.sora,
+        "Syne" to R.font.syne,
+        "Lexend" to R.font.lexend,
+        "Atkinson Hyperlegible" to R.font.atkinson_hyperlegible,
+        "Red Hat Display" to R.font.red_hat_display,
+        "JetBrains Mono" to R.font.jetbrains_mono,
+        "Roboto" to R.font.roboto,
+        "Noto Sans Arabic" to R.font.noto_sans_arabic
+    )
+    val embeddedFontCount: Int get() = embeddedFontResources.size
+    fun isEmbedded(name: String): Boolean = embeddedFontResources.containsKey(name)
     private val provider = Provider(
         providerAuthority = "com.google.android.gms.fonts",
         providerPackage = "com.google.android.gms",
         certificates = GoogleFontsR.array.com_google_android_gms_fonts_certs
     )
-    fun family(name: String): FontFamily = FontFamily(Font(googleFont = GoogleFont(name), fontProvider = provider))
+    fun family(name: String): FontFamily = embeddedFontResources[name]?.let { FontFamily(Font(it, weight = FontWeight.Normal)) } ?: FontFamily(Font(googleFont = GoogleFont(name), fontProvider = provider))
     fun names(category: FontCategory): List<String> = categoryNames[category].orEmpty()
     fun preset(id: String): AiFontPreset? = presets.firstOrNull { it.id == id }
     fun isCatalogValid(): Boolean = catalog.size >= 320 && presets.size == 6
