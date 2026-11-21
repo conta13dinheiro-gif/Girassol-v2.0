@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -62,7 +64,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
         source.filter { it.name.contains(query, ignoreCase = true) }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF090C10), scrimColor = Color.Black.copy(alpha = .72f)) {
-        Column(Modifier.fillMaxWidth().imePadding().padding(horizontal = 18.dp)) {
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Typography Studio", style = MaterialTheme.typography.headlineSmall, color = Color(0xFFF6F1E8))
