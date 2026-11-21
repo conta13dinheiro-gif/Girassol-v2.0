@@ -1,6 +1,9 @@
 package com.enhikyy.girassol.ui
 
 import com.enhikyy.girassol.ui.theme.*
+import com.enhikyy.girassol.ui.typography.FontSettings
+import com.enhikyy.girassol.ui.typography.TypographyPreferences
+import com.enhikyy.girassol.ui.typography.TypographyStudioSheet
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.platform.LocalContext
 import com.enhikyy.girassol.data.WorldStore
@@ -12,6 +15,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -34,6 +38,8 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,13 +57,13 @@ import com.enhikyy.girassol.cognition.CognitionStatus
 import java.util.Locale
 import kotlin.math.*
 
-private val Ink=Solar.Ink
-private val Muted=Solar.Muted
-private val Ground=Solar.Black
-private val Panel=Solar.Surface
-private val Gold=Solar.Amber
-private val Mint=Solar.Biosphere
-private val Line=Solar.Border
+private val Ink get() = Solar.Ink
+private val Muted get() = Solar.Muted
+private val Ground get() = Solar.Black
+private val Panel get() = Solar.Surface
+private val Gold get() = Solar.Amber
+private val Mint get() = Solar.Biosphere
+private val Line get() = Solar.Border
 private fun percent(v: Double) = "${(v * 100).roundToInt()}%"
 private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%.2f", v)
 
@@ -66,6 +72,13 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     sound: AudioStatus, onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
     onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit) {
+    val context = LocalContext.current
+    val typographyScope = rememberCoroutineScope()
+    val fontSettings by remember(context) { TypographyPreferences.observe(context) }.collectAsStateWithLifecycle(initialValue = FontSettings())
+    var typographyStudio by rememberSaveable { mutableStateOf(false) }
+    var styleMenuExpanded by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
+    val updateTypography: (FontSettings) -> Unit = { next -> typographyScope.launch { TypographyPreferences.update(context) { next } } }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -85,7 +98,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     androidx.activity.compose.BackHandler(cinema || tab!=0 || selectedId!=null) {
         when { selectedId!=null->selectedId=null; cinema->cinema=false; else->tab=0 }
     }
-    GirassolTheme {
+    GirassolTheme(themeIndex = fontSettings.themeIndex, interfaceFont = fontSettings.interfaceFont, telemetryFont = fontSettings.telemetryFont, editorialFont = fontSettings.editorialFont, chatFont = fontSettings.chatFont, fontScale = fontSettings.scale, lineHeightScale = fontSettings.lineHeightScale, tabularNumbers = fontSettings.tabularNumbers) {
         Box(Modifier.fillMaxSize().background(Solar.Black)) {
             if(world!=null) {
                 if(!tactical && renderError==null) {
@@ -106,6 +119,15 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.verticalGradient(listOf(Solar.Black.copy(alpha=.94f),Color.Transparent))))
                     Box(Modifier.fillMaxWidth().height(180.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent,Solar.Black.copy(alpha=.94f)))))
                     CompactHud(ui.copy(world=world,running=ui.running && historical==null),cognition,{ if(historical==null) onToggle() },{ if(historical==null) onSpeed() },Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal=14.dp,vertical=8.dp))
+                    Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp, top = 76.dp)) {
+                        IconButton(onClick = { styleMenuExpanded = true }, modifier = Modifier.size(48.dp).background(Solar.Surface.copy(alpha = .82f), CircleShape).semantics { contentDescription = "Abrir temas e estúdio tipográfico" }) {
+                            Icon(Icons.Outlined.Palette, contentDescription = "Temas e tipografia", tint = Solar.Amber)
+                        }
+                        DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("Estúdio de 320+ fontes") }, onClick = { styleMenuExpanded = false; typographyStudio = true })
+                            DropdownMenuItem(text = { Text("Temas OLED · ${GirassolThemePalette.all.size}") }, onClick = { styleMenuExpanded = false; typographyStudio = true })
+                        }
+                    }
                     if(historical!=null) {
                         FilledTonalButton(onClick={ historical=null },modifier=Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top=154.dp,end=14.dp)) { Text("Flashback · voltar ao presente") }
                     }
@@ -153,12 +175,21 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         }
                     }
                     SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
-                            listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
-                                Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
-                                    Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val itemWidth = maxWidth / 4
+                            val indicatorOffset by animateDpAsState(
+                                targetValue = itemWidth * tab,
+                                animationSpec = spring(dampingRatio = .82f, stiffness = 380f),
+                                label = "floating-dock-indicator"
+                            )
+                            Box(Modifier.offset(x = indicatorOffset).width(itemWidth).height(48.dp).clip(RoundedCornerShape(14.dp)).background(Solar.Amber.copy(alpha = .12f)))
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
+                                val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
+                                listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
+                                    Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).selectable(selected = tab == i, role = androidx.compose.ui.semantics.Role.Tab) { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); tab=i }.semantics { contentDescription = label }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                        Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
+                                        Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
+                                    }
                                 }
                             }
                         }
@@ -220,6 +251,11 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         if(economy && world!=null) ModalBottomSheet(onDismissRequest={ economy=false },containerColor=Solar.Surface) {
             Economy(world,Modifier.fillMaxWidth().fillMaxHeight(.82f))
         }
+        if (typographyStudio) TypographyStudioSheet(
+            settings = fontSettings,
+            onSettingsChange = updateTypography,
+            onDismiss = { typographyStudio = false }
+        )
     }
 }
 @Composable private fun CompactHud(ui: BiosphereUi,cognition: CognitionStatus,onToggle: ()->Unit,onSpeed: ()->Unit,modifier: Modifier) {
@@ -284,7 +320,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 }
 @Composable private fun NeedsBars(needs: Needs) {
     listOf("Energia" to needs.energy, "Hidratação" to needs.hydration, "Alimentação" to needs.glucose, "Social" to needs.social, "Curiosidade" to needs.curiosity).forEach { (label,v) ->
-        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.width(88.dp), color = Muted, fontSize = 11.sp); LinearProgressIndicator(progress = { v.toFloat() }, Modifier.weight(1f).height(3.dp).clip(CircleShape), color = if (v < .4) Gold else Mint, trackColor = Line); Text(percent(v), Modifier.width(42.dp), fontSize = 10.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.End) }
+        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.width(88.dp), color = Muted, fontSize = 11.sp); LinearProgressIndicator(progress = { v.toFloat() }, Modifier.weight(1f).height(3.dp).clip(CircleShape), color = if (v < .4) Gold else Mint, trackColor = Line); Text(percent(v), Modifier.width(42.dp), style = Solar.Metric.copy(fontSize = 10.sp), color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.End) }
     }
 }
 @Composable private fun Culture(world: WorldState, modifier: Modifier) {
@@ -300,8 +336,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 items(world.dialogues.reversed()) { d ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(16.dp)) {
                         Text("${d.speaker} → ${d.listener}", color=Gold, fontSize=11.sp); Spacer(Modifier.height(10.dp))
-                        if (language != 2) Text(d.native, fontWeight=FontWeight.Medium, fontSize=22.sp)
-                        if (language != 1) Text(d.portuguese, color=Muted, fontSize=12.sp)
+                        if (language != 2) Text(d.native, fontWeight=FontWeight.Medium, fontSize=22.sp, fontFamily = Solar.Editorial)
+                        if (language != 1) Text(d.portuguese, color=Muted, fontSize=12.sp, fontFamily = Solar.Editorial)
                         Text("CICLO ${d.tick}", Modifier.padding(top=10.dp), fontSize=8.sp, color=Muted, letterSpacing=1.sp)
                     }
                 }
@@ -316,7 +352,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             2 -> {
                 if (world.artifacts.isEmpty()) item { EmptyCard("A biblioteca aguarda suas histórias", "Habitantes curiosos procuram a escrivaninha para registrar suas experiências.") }
                 items(world.artifacts.reversed()) { a ->
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(20.dp)) { Eyebrow("ARQUIVO · EVENTO #${a.sourceEventId}"); Spacer(Modifier.height(12.dp)); Text(a.title, fontSize=24.sp, fontWeight=FontWeight.Medium); Spacer(Modifier.height(12.dp)); Text(a.text, color=Muted); Spacer(Modifier.height(12.dp)); Text("${a.author} · ciclo ${a.tick}", fontSize=10.sp, color=Gold) }
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(20.dp)) { Eyebrow("ARQUIVO · EVENTO #${a.sourceEventId}"); Spacer(Modifier.height(12.dp)); Text(a.title, fontSize=24.sp, fontWeight=FontWeight.Medium, fontFamily = Solar.Editorial); Spacer(Modifier.height(12.dp)); Text(a.text, color=Muted); Spacer(Modifier.height(12.dp)); Text("${a.author} · ciclo ${a.tick}", fontSize=10.sp, color=Gold) }
                 }
             }
         }
@@ -359,7 +395,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 OutlinedButton(onClick=onImportAdapter,enabled=!cognition.busy && cognition.model!=null) { Text("Importar LoRA") }
                 if(cognition.adapter!=null) TextButton(onClick=onRemoveAdapter,enabled=!cognition.busy) { Text("Remover LoRA") }
             }
-            Text(ui.neuralResult, color=Mint, fontSize=11.sp)
+            Text(ui.neuralResult, color=Mint, fontSize=11.sp, fontFamily = Solar.Chat)
             Text("Modelo de instruções compatível com a RAM e o armazenamento disponíveis. Inferência CPU em 64 bits, contexto de 512 tokens, duas threads e limite de 30 s com cancelamento cooperativo. Modo automático a cada 15 s apenas com o app aberto; é desligado ao sair. O modelo não acompanha o APK. Necessidades urgentes têm prioridade e propostas aceitas ficam no diário.", color=Muted, fontSize=10.sp)
         }
         item { EvolutionPanel(w) }
@@ -418,4 +454,4 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         Switch(checked = sound.enabled, onCheckedChange = onSound, modifier = Modifier.semantics { contentDescription = "Ativar sons da biosfera" })
     }
 }
-@Composable private fun KeyValue(label:String,value:String) { Row(Modifier.fillMaxWidth().padding(vertical=8.dp)) { Text(label, color=Muted, modifier=Modifier.weight(1f),fontSize=12.sp); Text(value,color=Ink,fontSize=12.sp) }; HorizontalDivider(color=Line.copy(alpha=.5f)) }
+@Composable private fun KeyValue(label:String,value:String) { Row(Modifier.fillMaxWidth().padding(vertical=8.dp)) { Text(label, color=Muted, modifier=Modifier.weight(1f),fontSize=12.sp); Text(value,color=Ink,style=Solar.Metric.copy(fontSize=12.sp)) }; HorizontalDivider(color=Line.copy(alpha=.5f)) }

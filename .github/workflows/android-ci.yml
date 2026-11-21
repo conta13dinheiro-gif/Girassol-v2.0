@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: girassol-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build and test Android
@@ -27,11 +31,24 @@ jobs:
           cache: gradle
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools emulator
 
       - name: Install Android SDK packages
         run: |
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Prepare Filament 1.56.0 material compiler
+        run: |
+          curl --fail --location --retry 3 --connect-timeout 20 --max-time 180 https://github.com/google/filament/releases/download/v1.56.0/filament-v1.56.0-linux.tgz -o "$RUNNER_TEMP/filament.tgz"
+          echo '393dcc066987345282f4b5c3f525ab053d9c21087141cdc8015f403cddf455f0  '"$RUNNER_TEMP/filament.tgz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/filament"
+          tar -xzf "$RUNNER_TEMP/filament.tgz" --strip-components=1 -C "$RUNNER_TEMP/filament"
+          echo "FILAMENT_TOOLS_DIR=$RUNNER_TEMP/filament" >> "$GITHUB_ENV"
+
+      - name: Compile Filament materials
+        run: scripts/compile-materials.sh
 
       - name: Grant Gradle permission
         run: chmod +x gradlew
@@ -48,6 +65,23 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
+      - name: Run instrumented tests on API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            ./gradlew connectedDebugAndroidTest
+            mkdir -p app/build/screenshots
+            adb pull /sdcard/Android/data/com.enhikyy.girassol/files/screenshots/typography-studio.png app/build/screenshots/typography-studio.png
+            adb shell pm grant com.enhikyy.girassol android.permission.POST_NOTIFICATIONS || true
+            adb shell am start -n com.enhikyy.girassol/.MainActivity
+            sleep 20
+            adb exec-out screencap -p > app/build/screenshots/main-screen.png
+
       - name: Build release APK
         run: ./gradlew assembleRelease
 
@@ -58,5 +92,6 @@ jobs:
           name: Girassol-APK
           path: |
             app/build/outputs/apk/**/*.apk
+            app/build/screenshots/**/*.png
           if-no-files-found: warn
           retention-days: 14
