@@ -20,6 +20,13 @@ class GirassolFontRegistryTest {
         assertTrue(GirassolFontRegistry.names(FontCategory.ACCESSIBLE).size >= 25)
     }
 
+    @Test fun thirtyTwoCoreFamiliesAreEmbeddedForOfflineBoot() {
+        assertEquals(32, GirassolFontRegistry.embeddedFontCount)
+        assertTrue(GirassolFontRegistry.isEmbedded("Inter"))
+        assertTrue(GirassolFontRegistry.isEmbedded("JetBrains Mono"))
+        assertTrue(GirassolFontRegistry.isEmbedded("Atkinson Hyperlegible"))
+    }
+
     @Test fun allSixAiPresetsAreAvailable() {
         assertEquals(setOf("chatgpt", "claude", "perplexity", "gemini", "deepseek", "kimi"), GirassolFontRegistry.presets.map { it.id }.toSet())
     }
