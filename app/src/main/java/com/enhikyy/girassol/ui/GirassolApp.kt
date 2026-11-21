@@ -175,12 +175,21 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         }
                     }
                     SurfaceGlass(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
-                            val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
-                            listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
-                                Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); tab=i }.semantics { contentDescription = label; role = Role.Tab; selected = tab == i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
-                                    Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
-                                    Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val itemWidth = maxWidth / 4
+                            val indicatorOffset by animateDpAsState(
+                                targetValue = itemWidth * tab,
+                                animationSpec = spring(dampingRatio = .82f, stiffness = 380f),
+                                label = "floating-dock-indicator"
+                            )
+                            Box(Modifier.offset(x = indicatorOffset).width(itemWidth).height(48.dp).clip(RoundedCornerShape(14.dp)).background(Solar.Amber.copy(alpha = .12f)))
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
+                                val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
+                                listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
+                                    Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).clickable { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); tab=i }.semantics { contentDescription = label; role = Role.Tab; selected = tab == i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                        Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
+                                        Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
+                                    }
                                 }
                             }
                         }
