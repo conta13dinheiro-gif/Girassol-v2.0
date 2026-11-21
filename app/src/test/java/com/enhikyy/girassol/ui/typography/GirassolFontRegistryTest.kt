@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import androidx.compose.ui.graphics.Color
+import com.enhikyy.girassol.ui.theme.GirassolThemePalette
 import kotlin.math.pow
 
 class GirassolFontRegistryTest {
