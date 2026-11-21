@@ -1,6 +1,9 @@
 package com.enhikyy.girassol.ui
 
 import com.enhikyy.girassol.ui.theme.*
+import com.enhikyy.girassol.ui.typography.FontSettings
+import com.enhikyy.girassol.ui.typography.TypographyPreferences
+import com.enhikyy.girassol.ui.typography.TypographyStudioSheet
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.platform.LocalContext
 import com.enhikyy.girassol.data.WorldStore
@@ -34,6 +37,9 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,6 +72,13 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     sound: AudioStatus, onSound: (Boolean) -> Unit, onVolume: (Float) -> Unit,
     cognition: CognitionStatus, onImportModel: () -> Unit, onRemoveModel: () -> Unit,
     onInfer: () -> Unit, onCancelInference: () -> Unit, onAutomaticInference: (Boolean) -> Unit, onImportAdapter: ()->Unit,onRemoveAdapter: ()->Unit) {
+    val context = LocalContext.current
+    val typographyScope = rememberCoroutineScope()
+    val fontSettings by remember(context) { TypographyPreferences.observe(context) }.collectAsStateWithLifecycle(initialValue = FontSettings())
+    var typographyStudio by rememberSaveable { mutableStateOf(false) }
+    var styleMenuExpanded by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
+    val updateTypography: (FontSettings) -> Unit = { next -> typographyScope.launch { TypographyPreferences.update(context) { next } } }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var focusId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -85,7 +98,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     androidx.activity.compose.BackHandler(cinema || tab!=0 || selectedId!=null) {
         when { selectedId!=null->selectedId=null; cinema->cinema=false; else->tab=0 }
     }
-    GirassolTheme {
+    GirassolTheme(themeIndex = fontSettings.themeIndex, interfaceFont = fontSettings.interfaceFont, telemetryFont = fontSettings.telemetryFont, fontScale = fontSettings.scale, lineHeightScale = fontSettings.lineHeightScale, tabularNumbers = fontSettings.tabularNumbers) {
         Box(Modifier.fillMaxSize().background(Solar.Black)) {
             if(world!=null) {
                 if(!tactical && renderError==null) {
@@ -106,6 +119,15 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                     Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.verticalGradient(listOf(Solar.Black.copy(alpha=.94f),Color.Transparent))))
                     Box(Modifier.fillMaxWidth().height(180.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent,Solar.Black.copy(alpha=.94f)))))
                     CompactHud(ui.copy(world=world,running=ui.running && historical==null),cognition,{ if(historical==null) onToggle() },{ if(historical==null) onSpeed() },Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal=14.dp,vertical=8.dp))
+                    Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 8.dp, top = 76.dp)) {
+                        IconButton(onClick = { styleMenuExpanded = true }, modifier = Modifier.size(48.dp).background(Solar.Surface.copy(alpha = .82f), CircleShape).semantics { contentDescription = "Abrir temas e estúdio tipográfico" }) {
+                            Icon(Icons.Outlined.Palette, contentDescription = "Temas e tipografia", tint = Solar.Amber)
+                        }
+                        DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("Estúdio de 320+ fontes") }, onClick = { styleMenuExpanded = false; typographyStudio = true })
+                            DropdownMenuItem(text = { Text("Temas OLED · ${GirassolThemePalette.all.size}") }, onClick = { styleMenuExpanded = false; typographyStudio = true })
+                        }
+                    }
                     if(historical!=null) {
                         FilledTonalButton(onClick={ historical=null },modifier=Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top=154.dp,end=14.dp)) { Text("Flashback · voltar ao presente") }
                     }
@@ -156,7 +178,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
                             val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
                             listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
-                                Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { tab=i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(if(tab==i) Solar.Amber.copy(alpha=.12f) else Color.Transparent).clickable { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); tab=i }.semantics { contentDescription = label; role = Role.Tab; selected = tab == i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                     Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
                                     Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
                                 }
@@ -220,6 +242,11 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         if(economy && world!=null) ModalBottomSheet(onDismissRequest={ economy=false },containerColor=Solar.Surface) {
             Economy(world,Modifier.fillMaxWidth().fillMaxHeight(.82f))
         }
+        if (typographyStudio) TypographyStudioSheet(
+            settings = fontSettings,
+            onSettingsChange = updateTypography,
+            onDismiss = { typographyStudio = false }
+        )
     }
 }
 @Composable private fun CompactHud(ui: BiosphereUi,cognition: CognitionStatus,onToggle: ()->Unit,onSpeed: ()->Unit,modifier: Modifier) {
