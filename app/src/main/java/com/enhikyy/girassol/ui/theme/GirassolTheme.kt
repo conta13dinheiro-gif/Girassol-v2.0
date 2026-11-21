@@ -64,9 +64,9 @@ object GirassolThemePalette {
 object Solar {
     var palette by mutableStateOf(GirassolThemePalette.all.first())
     var tabularNumbers by mutableStateOf(true)
-    var metricFamily by mutableStateOf(FontFamily.Monospace)
-    var editorialFamily by mutableStateOf(FontFamily.Serif)
-    var chatFamily by mutableStateOf(FontFamily.SansSerif)
+    var metricFamily by mutableStateOf<FontFamily>(FontFamily.Monospace)
+    var editorialFamily by mutableStateOf<FontFamily>(FontFamily.Serif)
+    var chatFamily by mutableStateOf<FontFamily>(FontFamily.SansSerif)
     val Black get() = palette.background
     val Surface get() = palette.surface
     val Ink get() = palette.ink
