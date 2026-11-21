@@ -311,7 +311,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
 }
 @Composable private fun NeedsBars(needs: Needs) {
     listOf("Energia" to needs.energy, "Hidratação" to needs.hydration, "Alimentação" to needs.glucose, "Social" to needs.social, "Curiosidade" to needs.curiosity).forEach { (label,v) ->
-        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.width(88.dp), color = Muted, fontSize = 11.sp); LinearProgressIndicator(progress = { v.toFloat() }, Modifier.weight(1f).height(3.dp).clip(CircleShape), color = if (v < .4) Gold else Mint, trackColor = Line); Text(percent(v), Modifier.width(42.dp), fontSize = 10.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.End) }
+        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text(label, Modifier.width(88.dp), color = Muted, fontSize = 11.sp); LinearProgressIndicator(progress = { v.toFloat() }, Modifier.weight(1f).height(3.dp).clip(CircleShape), color = if (v < .4) Gold else Mint, trackColor = Line); Text(percent(v), Modifier.width(42.dp), style = Solar.Metric.copy(fontSize = 10.sp), color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.End) }
     }
 }
 @Composable private fun Culture(world: WorldState, modifier: Modifier) {
@@ -445,4 +445,4 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
         Switch(checked = sound.enabled, onCheckedChange = onSound, modifier = Modifier.semantics { contentDescription = "Ativar sons da biosfera" })
     }
 }
-@Composable private fun KeyValue(label:String,value:String) { Row(Modifier.fillMaxWidth().padding(vertical=8.dp)) { Text(label, color=Muted, modifier=Modifier.weight(1f),fontSize=12.sp); Text(value,color=Ink,fontSize=12.sp) }; HorizontalDivider(color=Line.copy(alpha=.5f)) }
+@Composable private fun KeyValue(label:String,value:String) { Row(Modifier.fillMaxWidth().padding(vertical=8.dp)) { Text(label, color=Muted, modifier=Modifier.weight(1f),fontSize=12.sp); Text(value,color=Ink,style=Solar.Metric.copy(fontSize=12.sp)) }; HorizontalDivider(color=Line.copy(alpha=.5f)) }
