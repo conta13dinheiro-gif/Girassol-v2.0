@@ -386,7 +386,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 OutlinedButton(onClick=onImportAdapter,enabled=!cognition.busy && cognition.model!=null) { Text("Importar LoRA") }
                 if(cognition.adapter!=null) TextButton(onClick=onRemoveAdapter,enabled=!cognition.busy) { Text("Remover LoRA") }
             }
-            Text(ui.neuralResult, color=Mint, fontSize=11.sp)
+            Text(ui.neuralResult, color=Mint, fontSize=11.sp, fontFamily = Solar.Chat)
             Text("Modelo de instruções compatível com a RAM e o armazenamento disponíveis. Inferência CPU em 64 bits, contexto de 512 tokens, duas threads e limite de 30 s com cancelamento cooperativo. Modo automático a cada 15 s apenas com o app aberto; é desligado ao sair. O modelo não acompanha o APK. Necessidades urgentes têm prioridade e propostas aceitas ficam no diário.", color=Muted, fontSize=10.sp)
         }
         item { EvolutionPanel(w) }
