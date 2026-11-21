@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -110,7 +111,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
                             }
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSettingsChange(updated)
-                        }.background(if (active == entry.name) Color(0xFF17232B) else Color.Transparent, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp)) {
+                        }.semantics { role = Role.Button; contentDescription = "Selecionar fonte ${entry.name}" }.background(if (active == entry.name) Color(0xFF17232B) else Color.Transparent, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 9.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(entry.name, Modifier.weight(1f), color = Color(0xFFF5F2EC), fontFamily = family, fontSize = 17.sp)
                                 if (active == entry.name) Text("ATIVA", color = Color(0xFFE89B48), fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -123,9 +124,9 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
             }
             Spacer(Modifier.height(10.dp))
             Text("Escala ${"%.2f".format(settings.scale)}×", color = Color(0xFFF5F2EC), fontSize = 12.sp)
-            Slider(value = settings.scale, onValueChange = { onSettingsChange(settings.copy(scale = it)) }, valueRange = .85f..1.30f)
+            Slider(value = settings.scale, onValueChange = { onSettingsChange(settings.copy(scale = it)) }, valueRange = .85f..1.30f, modifier = Modifier.semantics { contentDescription = "Escala tipográfica de 0.85 a 1.30" })
             Text("Altura de linha ${"%.2f".format(settings.lineHeightScale)}×", color = Color(0xFFF5F2EC), fontSize = 12.sp)
-            Slider(value = settings.lineHeightScale, onValueChange = { onSettingsChange(settings.copy(lineHeightScale = it)) }, valueRange = 1.2f..1.8f)
+            Slider(value = settings.lineHeightScale, onValueChange = { onSettingsChange(settings.copy(lineHeightScale = it)) }, valueRange = 1.2f..1.8f, modifier = Modifier.semantics { contentDescription = "Altura de linha de 1.2 a 1.8" })
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Text("Números tabulares", color = Color(0xFFF5F2EC), fontSize = 13.sp); Text("tnum · relógios, coordenadas e telemetria", color = Color(0xFFA8B3BF), fontSize = 10.sp) }
                 Switch(checked = settings.tabularNumbers, onCheckedChange = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSettingsChange(settings.copy(tabularNumbers = it)) }, modifier = Modifier.semantics { contentDescription = "Ativar números tabulares para métricas" })
