@@ -3,6 +3,8 @@ package com.enhikyy.girassol.ui.typography
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.graphics.Color
+import kotlin.math.pow
 
 class GirassolFontRegistryTest {
     @Test fun catalogContainsAtLeast320UniqueFamilies() {
@@ -25,6 +27,22 @@ class GirassolFontRegistryTest {
         assertTrue(GirassolFontRegistry.isEmbedded("Inter"))
         assertTrue(GirassolFontRegistry.isEmbedded("JetBrains Mono"))
         assertTrue(GirassolFontRegistry.isEmbedded("Atkinson Hyperlegible"))
+    }
+
+    @Test fun allFifteenOledPalettesMeetTextContrastTargets() {
+        GirassolThemePalette.all.forEach { palette ->
+            assertTrue("${palette.name}: ink contrast below AAA", contrast(palette.ink, palette.background) >= 7.0)
+            assertTrue("${palette.name}: muted contrast below AA", contrast(palette.muted, palette.background) >= 4.5)
+            assertTrue("${palette.name}: amber contrast below AA", contrast(palette.amber, palette.background) >= 4.5)
+            assertTrue("${palette.name}: telemetry contrast below AA", contrast(palette.telemetry, palette.background) >= 4.5)
+        }
+    }
+
+    private fun contrast(foreground: Color, background: Color): Double {
+        fun channel(value: Float): Double = if (value <= 0.04045f) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)
+        fun luminance(color: Color) = 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+        val a = luminance(foreground); val b = luminance(background)
+        return (maxOf(a,b) + 0.05) / (minOf(a,b) + 0.05)
     }
 
     @Test fun allSixAiPresetsAreAvailable() {
