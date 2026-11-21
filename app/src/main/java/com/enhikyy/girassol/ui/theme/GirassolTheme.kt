@@ -103,9 +103,9 @@ fun GirassolTheme(
     val scale = fontScale.coerceIn(.85f,1.30f)
     val line = lineHeightScale.coerceIn(1.2f,1.8f)
     val typography = Typography(
-        headlineLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 30.sp * scale, lineHeight = 36.sp * scale * line, fontWeight = FontWeight.SemiBold, letterSpacing = (-.8).sp),
-        titleLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 21.sp * scale, lineHeight = 27.sp * scale * line, fontWeight = FontWeight.SemiBold),
-        bodyLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 15.sp * scale, lineHeight = 22.sp * scale * line),
+        headlineLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 30.sp * scale, lineHeight = 30.sp * scale * line, fontWeight = FontWeight.SemiBold, letterSpacing = (-.8).sp),
+        titleLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 21.sp * scale, lineHeight = 21.sp * scale * line, fontWeight = FontWeight.SemiBold),
+        bodyLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 15.sp * scale, lineHeight = 15.sp * scale * line),
         bodyMedium = TextStyle(fontFamily = interfaceFamily, fontSize = 14.sp * scale, lineHeight = 21.sp * scale * line),
         labelMedium = TextStyle(fontFamily = metricFamily, fontSize = 12.sp * scale, lineHeight = 16.sp * scale * line, fontFeatureSettings = if(tabularNumbers) "tnum" else "")
     )
