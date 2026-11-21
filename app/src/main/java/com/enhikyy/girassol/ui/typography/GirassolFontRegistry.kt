@@ -9,9 +9,10 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.compose.ui.text.font.Font as ResourceFont
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.Font as DownloadableFont
 import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.googlefonts.GoogleFont.Provider
 import androidx.compose.ui.text.googlefonts.R as GoogleFontsR
@@ -89,7 +90,7 @@ object GirassolFontRegistry {
         providerPackage = "com.google.android.gms",
         certificates = GoogleFontsR.array.com_google_android_gms_fonts_certs
     )
-    fun family(name: String): FontFamily = embeddedFontResources[name]?.let { FontFamily(Font(it, weight = FontWeight.Normal)) } ?: FontFamily(Font(googleFont = GoogleFont(name), fontProvider = provider))
+    fun family(name: String): FontFamily = embeddedFontResources[name]?.let { FontFamily(ResourceFont(it, weight = FontWeight.Normal)) } ?: FontFamily(DownloadableFont(googleFont = GoogleFont(name), fontProvider = provider))
     fun names(category: FontCategory): List<String> = categoryNames[category].orEmpty()
     fun preset(id: String): AiFontPreset? = presets.firstOrNull { it.id == id }
     fun isCatalogValid(): Boolean = catalog.size >= 320 && presets.size == 6
