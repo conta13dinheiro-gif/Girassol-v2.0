@@ -15,6 +15,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -37,9 +38,6 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
@@ -188,7 +186,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly) {
                                 val icons=listOf(Icons.Outlined.Public,Icons.Outlined.PeopleOutline,Icons.Outlined.History,Icons.Outlined.Tune)
                                 listOf("Biosfera","Cidadãos","Marcos","Sistema").forEachIndexed { i,label->
-                                    Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).clickable { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); tab=i }.semantics { contentDescription = label; role = Role.Tab; selected = tab == i }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                                    Column(Modifier.weight(1f).heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).selectable(selected = tab == i, role = androidx.compose.ui.semantics.Role.Tab) { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); tab=i }.semantics { contentDescription = label }.padding(vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                                         Icon(icons[i],label,Modifier.size(21.dp),tint=if(tab==i) Solar.Amber else Solar.Muted)
                                         Text(label,fontSize=10.sp,color=if(tab==i) Solar.Amber else Solar.Muted)
                                     }
