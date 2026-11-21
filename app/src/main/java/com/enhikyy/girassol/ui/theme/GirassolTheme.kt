@@ -106,8 +106,8 @@ fun GirassolTheme(
         headlineLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 30.sp * scale, lineHeight = 30.sp * scale * line, fontWeight = FontWeight.SemiBold, letterSpacing = (-.8).sp),
         titleLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 21.sp * scale, lineHeight = 21.sp * scale * line, fontWeight = FontWeight.SemiBold),
         bodyLarge = TextStyle(fontFamily = interfaceFamily, fontSize = 15.sp * scale, lineHeight = 15.sp * scale * line),
-        bodyMedium = TextStyle(fontFamily = interfaceFamily, fontSize = 14.sp * scale, lineHeight = 21.sp * scale * line),
-        labelMedium = TextStyle(fontFamily = metricFamily, fontSize = 12.sp * scale, lineHeight = 16.sp * scale * line, fontFeatureSettings = if(tabularNumbers) "tnum" else "")
+        bodyMedium = TextStyle(fontFamily = interfaceFamily, fontSize = 14.sp * scale, lineHeight = 14.sp * scale * line),
+        labelMedium = TextStyle(fontFamily = metricFamily, fontSize = 12.sp * scale, lineHeight = 12.sp * scale * line, fontFeatureSettings = if(tabularNumbers) "tnum" else "")
     )
     MaterialTheme(
         colorScheme = darkColorScheme(
