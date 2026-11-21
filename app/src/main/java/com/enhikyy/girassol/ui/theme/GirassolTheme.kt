@@ -60,6 +60,9 @@ object GirassolThemePalette {
 object Solar {
     var palette by mutableStateOf(GirassolThemePalette.all.first())
     var tabularNumbers by mutableStateOf(true)
+    var metricFamily by mutableStateOf(FontFamily.Monospace)
+    var editorialFamily by mutableStateOf(FontFamily.Serif)
+    var chatFamily by mutableStateOf(FontFamily.SansSerif)
     val Black get() = palette.background
     val Surface get() = palette.surface
     val Ink get() = palette.ink
@@ -68,7 +71,9 @@ object Solar {
     val Biosphere get() = palette.biosphere
     val Cognitive get() = palette.telemetry
     val Border get() = palette.border
-    val Metric get() = TextStyle(fontFeatureSettings = if (tabularNumbers) "tnum" else "", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
+    val Metric get() = TextStyle(fontFeatureSettings = if (tabularNumbers) "tnum" else "", fontFamily = metricFamily, fontWeight = FontWeight.Medium)
+    val Editorial get() = editorialFamily
+    val Chat get() = chatFamily
 }
 
 @Composable
@@ -76,6 +81,8 @@ fun GirassolTheme(
     themeIndex: Int = 0,
     interfaceFont: String = "Inter",
     telemetryFont: String = "JetBrains Mono",
+    editorialFont: String = "Newsreader",
+    chatFont: String = "Inter",
     fontScale: Float = 1f,
     lineHeightScale: Float = 1.45f,
     tabularNumbers: Boolean = true,
@@ -84,9 +91,14 @@ fun GirassolTheme(
     val palette = GirassolThemePalette.all.getOrElse(themeIndex.coerceIn(0,14)) { GirassolThemePalette.all.first() }
     val interfaceFamily = remember(interfaceFont) { GirassolFontRegistry.family(interfaceFont) }
     val metricFamily = remember(telemetryFont) { GirassolFontRegistry.family(telemetryFont) }
+    val editorialFamily = remember(editorialFont) { GirassolFontRegistry.family(editorialFont) }
+    val chatFamily = remember(chatFont) { GirassolFontRegistry.family(chatFont) }
     SideEffect {
         Solar.palette = palette
         Solar.tabularNumbers = tabularNumbers
+        Solar.metricFamily = metricFamily
+        Solar.editorialFamily = editorialFamily
+        Solar.chatFamily = chatFamily
     }
     val scale = fontScale.coerceIn(.85f,1.30f)
     val line = lineHeightScale.coerceIn(1.2f,1.8f)
