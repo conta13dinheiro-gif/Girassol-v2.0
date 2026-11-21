@@ -100,7 +100,7 @@ fun TypographyStudioSheet(settings: FontSettings, onSettingsChange: (FontSetting
                     items(visibleFonts, key = { it.name }) { entry ->
                         val family = remember(entry.name) { GirassolFontRegistry.family(entry.name) }
                         val active = when (scope) { FontScope.INTERFACE -> settings.interfaceFont; FontScope.CHAT -> settings.chatFont; FontScope.EDITORIAL -> settings.editorialFont; FontScope.TELEMETRY -> settings.telemetryFont }
-                        Column(Modifier.fillMaxWidth().clickable {
+                        Column(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable {
                             val updated = when (scope) {
                                 FontScope.INTERFACE -> settings.copy(interfaceFont = entry.name)
                                 FontScope.CHAT -> settings.copy(chatFont = entry.name)
