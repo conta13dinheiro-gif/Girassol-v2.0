@@ -98,7 +98,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
     androidx.activity.compose.BackHandler(cinema || tab!=0 || selectedId!=null) {
         when { selectedId!=null->selectedId=null; cinema->cinema=false; else->tab=0 }
     }
-    GirassolTheme(themeIndex = fontSettings.themeIndex, interfaceFont = fontSettings.interfaceFont, telemetryFont = fontSettings.telemetryFont, fontScale = fontSettings.scale, lineHeightScale = fontSettings.lineHeightScale, tabularNumbers = fontSettings.tabularNumbers) {
+    GirassolTheme(themeIndex = fontSettings.themeIndex, interfaceFont = fontSettings.interfaceFont, telemetryFont = fontSettings.telemetryFont, editorialFont = fontSettings.editorialFont, chatFont = fontSettings.chatFont, fontScale = fontSettings.scale, lineHeightScale = fontSettings.lineHeightScale, tabularNumbers = fontSettings.tabularNumbers) {
         Box(Modifier.fillMaxSize().background(Solar.Black)) {
             if(world!=null) {
                 if(!tactical && renderError==null) {
@@ -327,8 +327,8 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
                 items(world.dialogues.reversed()) { d ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(16.dp)) {
                         Text("${d.speaker} → ${d.listener}", color=Gold, fontSize=11.sp); Spacer(Modifier.height(10.dp))
-                        if (language != 2) Text(d.native, fontWeight=FontWeight.Medium, fontSize=22.sp)
-                        if (language != 1) Text(d.portuguese, color=Muted, fontSize=12.sp)
+                        if (language != 2) Text(d.native, fontWeight=FontWeight.Medium, fontSize=22.sp, fontFamily = Solar.Editorial)
+                        if (language != 1) Text(d.portuguese, color=Muted, fontSize=12.sp, fontFamily = Solar.Editorial)
                         Text("CICLO ${d.tick}", Modifier.padding(top=10.dp), fontSize=8.sp, color=Muted, letterSpacing=1.sp)
                     }
                 }
@@ -343,7 +343,7 @@ private fun number(v: Double) = String.format(Locale.forLanguageTag("pt-BR"), "%
             2 -> {
                 if (world.artifacts.isEmpty()) item { EmptyCard("A biblioteca aguarda suas histórias", "Habitantes curiosos procuram a escrivaninha para registrar suas experiências.") }
                 items(world.artifacts.reversed()) { a ->
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(20.dp)) { Eyebrow("ARQUIVO · EVENTO #${a.sourceEventId}"); Spacer(Modifier.height(12.dp)); Text(a.title, fontSize=24.sp, fontWeight=FontWeight.Medium); Spacer(Modifier.height(12.dp)); Text(a.text, color=Muted); Spacer(Modifier.height(12.dp)); Text("${a.author} · ciclo ${a.tick}", fontSize=10.sp, color=Gold) }
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(20.dp)) { Eyebrow("ARQUIVO · EVENTO #${a.sourceEventId}"); Spacer(Modifier.height(12.dp)); Text(a.title, fontSize=24.sp, fontWeight=FontWeight.Medium, fontFamily = Solar.Editorial); Spacer(Modifier.height(12.dp)); Text(a.text, color=Muted); Spacer(Modifier.height(12.dp)); Text("${a.author} · ciclo ${a.tick}", fontSize=10.sp, color=Gold) }
                 }
             }
         }
