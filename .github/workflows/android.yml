@@ -43,7 +43,7 @@ jobs:
       - name: APK Release ARM64 assinado para desenvolvimento
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: girassol-arm64-release-unsigned
+          name: girassol-arm64-release-dev-signed
           path: app/build/outputs/apk/release/app-arm64-v8a-release.apk
           if-no-files-found: error
       - name: Materiais compilados
