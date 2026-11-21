@@ -243,7 +243,24 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -no-metrics -no-snapshot -wipe-data -gpu swiftshader_indirect
           script: |
+            set -Eeuo pipefail
+            dump_emulator_crash_logcat() {
+              echo "===== emulator crash logcat (AndroidRuntime / DEBUG / libc) =====" >&2
+              adb logcat -d -s AndroidRuntime:E DEBUG:F libc:F >&2 || true
+              echo "===== emulator state =====" >&2
+              adb shell getprop sys.boot_completed >&2 || true
+              adb shell getprop ro.build.version.sdk >&2 || true
+            }
+            trap dump_emulator_crash_logcat ERR
+            adb wait-for-device
+            adb logcat -c || true
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
             ./gradlew :app:connectedDebugAndroidTest -Pgirassol.testX86=true --no-daemon
+
+      - name: Capture emulator crash logcat
+        if: failure()
+        shell: bash
+        run: |
+          adb logcat -d -s AndroidRuntime:E DEBUG:F libc:F || true
